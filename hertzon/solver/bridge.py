@@ -123,6 +123,11 @@ class Bridge:
 
     # ----------------------------------------------------------------------------------------
     def run(self) -> None:
+        try:
+            import psutil
+            info(f"Solver start: Python process running for {time.time() - psutil.Process().create_time():.1f} s")
+        except Exception:  # noqa: BLE001
+            pass
         t = time.time()
         import emerge as em  # heavy import, keep inside the worker
         info(f"Solver start: EMerge loaded in {time.time() - t:.1f} s")
