@@ -20,6 +20,8 @@ results are streamed back into the GUI while it keeps working.
 
 ## Install
 
+Download the installers from the [Releases page](https://github.com/c8501024/Hertzon/releases/latest).
+
 **Windows installer:** run **`Hertzon-Setup-<version>.exe`**. It installs Hertzon for your user
 (no administrator rights) into `%LOCALAPPDATA%\Programs\Hertzon`, adds it to the start menu, the
 desktop and Settings > Apps (uninstall there), opens `.hzn` projects with Hertzon and sets up the
@@ -30,7 +32,8 @@ into `~/.local/share/hertzon`, adds Hertzon to the application menu, the command
 `.hzn` file type. Run `install.sh` of a newer package to update, `~/.local/share/hertzon/uninstall.sh`
 to remove it.
 
-Both are built with `packaging/build_installer.sh` (needs NSIS for the Windows installer).
+Both are built with `packaging/build_installer.sh` (needs NSIS for the Windows installer); GitHub Actions
+builds them and publishes a release for every version (`.github/workflows/release.yml`).
 
 **Windows, without installing:** unzip and double-click **`Hertzon.exe`**. On the first start it installs
 everything it needs into a `.venv` folder next to it (Python 3.13 via winget if missing, then
