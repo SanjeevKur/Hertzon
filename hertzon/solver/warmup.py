@@ -17,7 +17,19 @@ import tempfile
 import time
 from pathlib import Path
 
-EXAMPLE = Path(__file__).resolve().parents[2] / "examples" / "PatchAntenna.hzn"
+EXAMPLES = Path(__file__).resolve().parents[2] / "examples"
+EXAMPLE = EXAMPLES / "PatchAntenna.hzn"
+# curved elements, plane wave and RCS: kernels the patch antenna does not use (NATO sphere, two passes)
+CURVED = EXAMPLES / "NATO-Sphere.hzn"
+
+
+def _curved_project(dst: Path) -> tuple[str, str]:
+    d = json.loads(CURVED.read_text(encoding="utf-8"))
+    des = d["designs"][0]
+    st = des["setups"][0]
+    st["props"].update(MaximumPasses="2", MinimumPasses="2", MaximumDeltaEnergy="1e-12", SaveFields="True")
+    dst.write_text(json.dumps(d, indent=1), encoding="utf-8")
+    return des["name"], st["name"]
 
 
 def _project(dst: Path) -> tuple[str, str]:
@@ -36,15 +48,23 @@ def _project(dst: Path) -> tuple[str, str]:
 
 
 def run(log=print, timeout: float = 3600, background: bool = False) -> bool:
-    """Solve the warm-up project in a solver process. True when it finished."""
+    """Solve the warm-up projects in solver processes. True when both finished."""
     if not EXAMPLE.exists():
         log(f"Warm-up example missing: {EXAMPLE}")
         return False
-    tmp = Path(tempfile.mkdtemp(prefix="hertzon_warmup_"))
     t0 = time.time()
+    ok = _solve(_project, "Warmup", log, timeout, background, t0)
+    if CURVED.exists():
+        ok = _solve(_curved_project, "WarmupCurved", log, timeout, background, t0) and ok
+    log(f"Solver kernels {'ready' if ok else 'NOT ready'} after {time.time() - t0:.0f} s")
+    return ok
+
+
+def _solve(make, name: str, log, timeout: float, background: bool, t0: float) -> bool:
+    tmp = Path(tempfile.mkdtemp(prefix="hertzon_warmup_"))
     try:
-        proj = tmp / "Warmup.hzn"
-        design, setup = _project(proj)
+        proj = tmp / f"{name}.hzn"
+        design, setup = make(proj)
         env = dict(os.environ, PYTHONIOENCODING="utf-8")
         extra = {}
         if background:   # started by the GUI: a solve of the user keeps the priority
@@ -72,9 +92,7 @@ def run(log=print, timeout: float = 3600, background: bool = False) -> bool:
                 p.kill()
                 log("  stopped: took too long")
                 return False
-        ok = p.wait() == 0
-        log(f"Solver kernels {'ready' if ok else 'NOT ready'} after {time.time() - t0:.0f} s")
-        return ok
+        return p.wait() == 0
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 

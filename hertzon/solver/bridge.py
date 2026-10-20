@@ -2054,11 +2054,14 @@ def _error_kernel_cached() -> bool:
 
 
 def kernel_tag() -> str:
-    """Versions the compiled numba kernels depend on (a new EMerge or numba compiles them again)."""
+    """Versions the compiled numba kernels depend on (a new EMerge or numba compiles them again). The
+    Hertzon version is part of it: an update rewrites the source files, which makes numba's disk cache of
+    Hertzon's kernels stale on Windows, so the setup's warm-up compiles them again after every update."""
     from importlib.metadata import version
+    from .. import __version__
     try:
         return (f"emerge {version('emerge')}, numba {version('numba')}, python {sys.version.split()[0]}, "
-                f"hertzon kernels {KERNELS_VERSION}")
+                f"hertzon kernels {KERNELS_VERSION}, hertzon {__version__}")
     except Exception:  # noqa: BLE001
         return "1"
 
