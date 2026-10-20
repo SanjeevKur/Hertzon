@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import os
-import sys
 from pathlib import Path
 
 from PySide6.QtCore import Qt, QProcess, QProcessEnvironment, QStandardPaths
@@ -14,6 +13,7 @@ from PySide6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QFormLayout, Q
 
 from ..solver.benchmark import CASES, CASES_DIR, default_cores, machine
 from ..solver.results import _safe
+from .solve import solver_python
 
 TAG = "@@HZN "
 COLUMNS = ["Run", "Cores", "Sweep processes", "Total (s)", "Initial mesh (s)", "Adaptive passes (s)", "Sweep (s)",
@@ -268,7 +268,7 @@ class BenchmarkDialog(QDialog):
         self.bar.setValue(0)
         self.status.setText("Starting")
         self.win.msgs.add("info", f"Solver benchmark started: {self.case.currentText()}")
-        p.start(sys.executable, args)
+        p.start(solver_python(), args)
 
     def _read(self) -> None:
         self._buf += bytes(self.proc.readAllStandardOutput())

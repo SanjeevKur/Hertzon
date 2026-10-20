@@ -5,13 +5,20 @@ import json
 import os
 import shutil
 import time
-import sys
 from dataclasses import dataclass
 from pathlib import Path
 
 from PySide6.QtCore import QObject, Signal, QProcess, QProcessEnvironment
 
 from ..solver.results import results_dir
+
+
+def solver_python() -> str:
+    """python.exe, not pythonw.exe: Qt starts a console program from this window without a visible
+    console (CREATE_NO_WINDOW), and the solver's own worker processes share that hidden console instead
+    of each opening a terminal window on Windows."""
+    from ..mcp.clients import python_exe
+    return python_exe()
 
 TAG = "@@HZN "
 
@@ -156,13 +163,13 @@ class SolveManager(QObject):
         self.progress.emit(job.key, 0, "Starting solver")
         self.message.emit("info", f"{job.key}: solving with {n} core(s)")
         if job.parametric:
-            p.start(sys.executable, ["-m", "hertzon.solver.parametric", job.project_path, job.design, job.parametric,
+            p.start(solver_python(), ["-m", "hertzon.solver.parametric", job.project_path, job.design, job.parametric,
                                      str(out)])
         elif job.optimization:
-            p.start(sys.executable, ["-m", "hertzon.solver.optimize", job.project_path, job.design, job.optimization,
+            p.start(solver_python(), ["-m", "hertzon.solver.optimize", job.project_path, job.design, job.optimization,
                                      str(out)])
         else:
-            p.start(sys.executable, ["-m", "hertzon.solver.run", job.project_path, job.design, job.setup, str(out)])
+            p.start(solver_python(), ["-m", "hertzon.solver.run", job.project_path, job.design, job.setup, str(out)])
 
     def abort(self) -> None:
         if self.proc is None or self.job is None:
