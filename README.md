@@ -138,3 +138,4 @@ pip install pytest && python -m pytest tests
 ## License
 
 GPL-2.0-or-later, the same as EMerge, which Hertzon links against.
+All Python packages Hertzon uses and their licences are listed in [docs/THIRD_PARTY.md](docs/THIRD_PARTY.md).
