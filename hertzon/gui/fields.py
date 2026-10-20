@@ -22,8 +22,8 @@ _cache: dict[str, pv.UnstructuredGrid] = {}
 
 
 def _bar(quantity: str, unit: str) -> dict:
-    return {"title": f"{quantity} [{unit}]\n", "vertical": True, "position_x": 0.86, "position_y": 0.25,
-            "width": 0.05, "height": 0.6, "fmt": "%.3g", "title_font_size": 14, "label_font_size": 12}
+    return {"title": f"{quantity} [{unit}]\n", "vertical": True, "position_x": 0.86, "position_y": 0.12,
+            "width": 0.05, "height": 0.55, "fmt": "%.3g", "title_font_size": 14, "label_font_size": 12}
 
 
 def _volume_points(work: pv.UnstructuredGrid, surf: pv.PolyData, nmax: int = 3000, h: float = 0.0) -> pv.PolyData:

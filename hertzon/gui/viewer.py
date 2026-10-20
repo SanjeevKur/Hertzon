@@ -1412,7 +1412,7 @@ class ModelerView(QWidget):
                 if bar is None:
                     continue
                 try:
-                    bar.SetPosition(max(0.0, 0.86 - 0.13 * i), 0.25)
+                    bar.SetPosition(max(0.0, 0.86 - 0.13 * i), 0.12)   # below the view cube
                 except Exception:  # noqa: BLE001
                     pass
                 i += 1

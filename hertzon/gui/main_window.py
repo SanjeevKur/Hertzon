@@ -3151,7 +3151,7 @@ class MainWindow(QMainWindow):
         grid.point_data[name] = vv.ravel(order="F")
         op = 1.0 - float(props.get("transparency", "0.3"))
         meshes = [(grid, dict(scalars=name, cmap="jet", opacity=op, clim=[vmax - rng, vmax],
-                              show_scalar_bar=True, scalar_bar_args={"title": name}))]
+                              show_scalar_bar=True, scalar_bar_args=F._bar(quantity, "dB") | {"fmt": "%.1f"}))]
         return meshes, f"3D pattern of {sph}: max {name} = {vmax:.2f} dB ({rng:g} dB range shown)"
 
     def add_sphere(self) -> None:
