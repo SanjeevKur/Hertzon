@@ -43,7 +43,16 @@ def _splash(app):
     width = min(960.0, 0.5 * screen.availableGeometry().width()) if screen else 800.0
     pm = pm.scaledToWidth(int(width * dpr), Qt.SmoothTransformation)
     pm.setDevicePixelRatio(dpr)
-    sp = QSplashScreen(pm)             # not on top: it must never hide a question or another Hertzon window
+    class Splash(QSplashScreen):
+        """Clicks do nothing: Qt's splash screen would hide on a click while loading goes on behind it."""
+
+        def mousePressEvent(self, ev):
+            ev.accept()
+
+        def mouseDoubleClickEvent(self, ev):
+            ev.accept()
+
+    sp = Splash(pm)                    # not on top: it must never hide a question or another Hertzon window
     sp.show()
     app.processEvents()
     return sp
@@ -55,6 +64,33 @@ def _status(sp, app, text: str) -> None:
         from PySide6.QtGui import QColor
         sp.showMessage(text + "  ", Qt.AlignRight | Qt.AlignBottom, QColor(200, 215, 240))
         app.processEvents()
+
+
+def _load_in_background(app, work):
+    """Run the slow imports in a thread while the window system keeps getting answers, so Windows never
+    marks the starting Hertzon as not responding (clicks on the loading screen then made it hang)."""
+    import threading
+    box: dict = {}
+
+    def run():
+        try:
+            box["value"] = work()
+        except BaseException as e:  # noqa: BLE001
+            box["error"] = e
+    t = threading.Thread(target=run, name="hertzon-startup", daemon=True)
+    t.start()
+    while t.is_alive():
+        app.processEvents()
+        t.join(0.02)
+    if "error" in box:
+        raise box["error"]
+    return box.get("value")
+
+
+def _heavy_imports():
+    import pyvista as pv
+    pv.global_theme.allow_empty_mesh = True
+    from . import main_window  # noqa: F401   (VTK, solver interface, dialogs)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -79,10 +115,9 @@ def main(argv: list[str] | None = None) -> int:
     if ico.exists():
         app.setWindowIcon(QIcon(str(ico)))
     sp = _splash(app)
-    _status(sp, app, "Loading 3D viewer ...")
-    import pyvista as pv
-    pv.global_theme.allow_empty_mesh = True
-    _status(sp, app, "Loading modeler and solver interface ...")
+    _status(sp, app, "Loading 3D viewer, modeler and solver interface ...")
+    _load_in_background(app, _heavy_imports)
+    _status(sp, app, "Opening the main window ...")
     from .main_window import MainWindow
     win = MainWindow()
     files = [a for a in argv[1:] if a.lower().endswith(".hzn")]
