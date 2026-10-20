@@ -6,6 +6,8 @@ $Host.UI.RawUI.WindowTitle = 'Hertzon setup'
 
 function Find-Python {
     try { $p = & py -3.13 -c "import sys; print(sys.executable)" 2>$null; if ($LASTEXITCODE -eq 0 -and $p) { return $p.Trim() } } catch {}
+    # a Python 3.13 on PATH (for example one installed without the py launcher)
+    try { $p = & python -c "import sys; print(sys.executable if sys.version_info[:2] == (3, 13) else '')" 2>$null; if ($LASTEXITCODE -eq 0 -and $p) { return $p.Trim() } } catch {}
     foreach ($c in @("$env:LOCALAPPDATA\Programs\Python\Python313\python.exe", "$env:ProgramFiles\Python313\python.exe")) {
         if (Test-Path -LiteralPath $c) { return $c }
     }
@@ -44,6 +46,6 @@ try {
 } catch {
     Write-Host ''
     Write-Host "ERROR: $_" -ForegroundColor Red
-    Read-Host 'Press Enter to close'
+    if (-not $env:CI) { Read-Host 'Press Enter to close' }   # the release check runs it unattended
     exit 1
 }

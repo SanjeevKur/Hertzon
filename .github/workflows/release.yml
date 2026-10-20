@@ -1,4 +1,6 @@
-# Builds the Windows installer and the Linux package and attaches them to a GitHub release.
+# Builds the Windows installer and the Linux package, installs the Windows one on a clean Windows
+# machine with Python 3.13 (the full setup a user gets, packages included) and only then attaches
+# both to a GitHub release.
 # Runs when a version tag (v0.1.0, ...) is pushed, or by hand from the Actions tab (Run workflow):
 # then the release is named after the version in pyproject.toml.
 name: Release
@@ -20,6 +22,49 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y nsis
       - name: Build installers
         run: bash packaging/build_installer.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: |
+            dist/Hertzon-Setup-*.exe
+            dist/Hertzon-*-linux.tar.gz
+
+  install-windows:
+    needs: build
+    runs-on: windows-latest
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
+      - name: Run the installer silently (it runs setup.ps1 like on a user's machine)
+        shell: pwsh
+        run: |
+          $exe = (Get-ChildItem dist\Hertzon-Setup-*.exe).FullName
+          $dir = "$env:RUNNER_TEMP\Hertzon"
+          Start-Process -FilePath $exe -ArgumentList '/S', "/D=$dir" -Wait
+          if (-not (Test-Path "$dir\.venv\hertzon_installed.txt")) { throw 'setup.ps1 did not finish: the package installation failed' }
+      - name: Start check (imports of the main window and the solver)
+        shell: pwsh
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          $py = "$env:RUNNER_TEMP\Hertzon\.venv\Scripts\python.exe"
+          & $py -c "import hertzon, hertzon.gui.main_window, hertzon.solver.run, emerge, hfsynpy; print('Hertzon', hertzon.__version__, 'imports ok')"
+          if ($LASTEXITCODE -ne 0) { throw 'import check failed' }
+
+  publish:
+    needs: [build, install-windows]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
       - name: Version
         id: ver
         run: |
