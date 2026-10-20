@@ -1,0 +1,29 @@
+# Builds the Windows installer and the Linux package and attaches them to a GitHub release.
+# Runs when a version tag (v0.1.0, v0.2.0, ...) is pushed, or by hand from the Actions tab.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install NSIS
+        run: sudo apt-get update && sudo apt-get install -y nsis
+      - name: Build installers
+        run: bash packaging/build_installer.sh
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_type == 'tag' && github.ref_name || format('v{0}', 'latest') }}
+          name: Hertzon ${{ github.ref_name }}
+          files: |
+            dist/Hertzon-Setup-*.exe
+            dist/Hertzon-*-linux.tar.gz
