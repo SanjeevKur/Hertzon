@@ -1,0 +1,312 @@
+"""Fast unit tests (no FEM solve). Run: python -m pytest tests"""
+import json
+import sys
+from pathlib import Path
+
+import numpy as np
+import pytest
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+
+from hertzon.model.design import Project, Command  # noqa: E402
+from hertzon.model.expr import Evaluator, ExprError  # noqa: E402
+from hertzon.model.validate import validate  # noqa: E402
+from hertzon.kernel import occ as K  # noqa: E402
+from hertzon.solver import bridge as B  # noqa: E402
+from hertzon.solver.script import design_to_script  # noqa: E402
+
+EX = ROOT / "examples"
+
+
+def test_expressions_and_units():
+    ev = Evaluator({"w": "2mm", "h": "w/2"}, "mm")
+    assert ev.length("w+1mm") == pytest.approx(3e-3)
+    assert ev.length("3") == pytest.approx(3e-3)       # bare numbers are model units
+    assert ev.length("h") == pytest.approx(1e-3)
+    assert ev.freq("2.45") == pytest.approx(2.45e9)
+    assert ev.freq("100MHz") == pytest.approx(1e8)
+    assert ev.angle("90") == pytest.approx(np.pi / 2)
+    assert ev.point("1,2,w") == pytest.approx((1e-3, 2e-3, 2e-3))
+    with pytest.raises(ExprError):
+        ev.length("undefined_var")
+
+
+def test_project_roundtrip(tmp_path):
+    p = Project.load(EX / "Microstrip.hzn")
+    out = tmp_path / "copy.hzn"
+    p.save(out)
+    q = Project.load(out)
+    assert json.dumps(p.to_dict(), sort_keys=True) == json.dumps(q.to_dict(), sort_keys=True)
+
+
+@pytest.mark.parametrize("name", ["WaveguidePost", "Microstrip", "PatchAntenna"])
+def test_examples_build_and_validate(name):
+    p = Project.load(EX / f"{name}.hzn")
+    d = p.designs[0]
+    K.ensure_gmsh("test_" + name)
+    ctx = K.build_design(d, d.evaluator(p))
+    assert not ctx.errors
+    tess = K.tessellate(ctx)
+    assert all(len(t.tris) for t in tess.values())
+    checks = validate(p, d, tess, ctx.errors)
+    assert not [c for c in checks if c.level == "error"], checks
+
+
+def test_booleans_keep_top_dimension():
+    p = Project()
+    d = p.designs[0]
+    d.add_object("CreateSphere", CenterPosition="0,0,0", Radius="2")
+    d.add_object("CreateCone", CenterPosition="10,0,0", Axis="Z", LowerRadius="2", UpperRadius="1", Height="4")
+    d.obj("Cone1").consumed_by = "Sphere1"
+    d.obj("Sphere1").history.append(Command.new("Unite", Tools="Cone1", KeepOriginals="False"))
+    K.ensure_gmsh("test_bool")
+    ctx = K.build_design(d, d.evaluator(p))
+    assert {dim for dim, _ in ctx.built["Sphere1"]} == {3}
+    assert len(ctx.built["Sphere1"]) == 2
+
+
+def test_sweep_frequencies():
+    ev = Evaluator({}, "mm")
+    f = B.sweep_frequencies({"Distribution": "Linear Step", "Start": "1GHz", "Stop": "2GHz", "Step": "0.25GHz"}, ev)
+    assert np.allclose(f, [1e9, 1.25e9, 1.5e9, 1.75e9, 2e9])
+    f = B.sweep_frequencies({"Distribution": "Linear Count", "Start": "1GHz", "Stop": "2GHz", "Count": "11"}, ev)
+    assert len(f) == 11
+    f = B.sweep_frequencies({"Distribution": "Log Scale", "Start": "1GHz", "Stop": "100GHz",
+                             "SamplesPerDecade": "10"}, ev)
+    assert f[0] == pytest.approx(1e9) and f[-1] == pytest.approx(1e11) and len(f) == 21
+
+
+def test_aligned_delta_ignores_port_sign_flip():
+    S = np.array([[0.1 + 0.2j, 0.9j], [0.9j, 0.1 - 0.2j]])
+    flip = np.diag([1, -1])
+    d, *_ = B.aligned_delta(S, flip @ S @ flip)
+    assert d == pytest.approx(0, abs=1e-12)
+
+
+def test_renormalization_matches_z_matrix():
+    S = np.array([[[0.2 + 0.1j, 0.7], [0.7, 0.1 - 0.3j]]])
+    ports = [{"number": 1, "renorm_ohm": 75.0}, {"number": 2, "renorm_ohm": 75.0}]
+    S2, z = B.postprocess_ports([1e9], S, [50, 50], ports)
+    back, _ = B.postprocess_ports([1e9], S2, z, [{"number": 1, "renorm_ohm": 50.0}, {"number": 2, "renorm_ohm": 50.0}])
+    assert np.allclose(back, S)
+    # one-port check: open-circuit-like load keeps |S|=1
+    S1 = np.array([[[1j]]])
+    S1r, _ = B.postprocess_ports([1e9], S1, [50], [{"number": 1, "renorm_ohm": 20.0}])
+    assert abs(S1r[0, 0, 0]) == pytest.approx(1)
+
+
+def test_script_export_compiles():
+    p = Project.load(EX / "WaveguidePost.hzn")
+    src = design_to_script(p, p.designs[0].name)
+    compile(src, "exported.py", "exec")
+    assert "bridge.prepare(m)" in src
+
+
+def test_rectangle_sizes_named_by_axis():
+    """CreateRectangle takes XSize/YSize/ZSize (the two in the sheet plane); old Width/Height still load."""
+    from hertzon.model import schema
+    for axis, (a, b) in schema.RECT_SIZES.items():
+        old = Command("CreateRectangle", {"Position": "0,0,0", "Axis": axis, "Width": "2", "Height": "5"})
+        assert "Width" not in old.props and old.props[a] == "2" and old.props[b] == "5"
+        vis = [p.name for p in schema.GEOMETRY["CreateRectangle"] if schema.is_visible(p, old.props)]
+        assert [n for n in vis if n.endswith("Size")] == sorted([a, b])
+    pr = Project()
+    d = pr.designs[0]
+    d.add_object("CreateRectangle", name="R", Position="0,0,0", Axis="Y", Width="2", Height="5")
+    assert d.obj("R").history[0].props["ZSize"] == "2" and d.obj("R").history[0].props["XSize"] == "5"
+    tess = K.tessellate(K.build_design(d, d.evaluator(pr)))
+    P = np.asarray(tess["R"].points)
+    assert np.ptp(P, axis=0) == pytest.approx([5e-3, 0, 2e-3], abs=1e-9)
+
+
+def test_antenna_report_expressions():
+    """Antenna parameters: dB() of a gain or power is 10 log10, of the axial ratio 20 log10."""
+    from hertzon.gui.reports import eval_expr
+    data = {"freq": np.array([1.0, 2.0]), "xaxis": "Pass",
+            "antenna": {"PeakGain": np.array([2.0, 4.0]), "AxialRatioAtMax": np.array([2.0, 1.0])}}
+    assert eval_expr(data, "dB(PeakGain)") == pytest.approx(10 * np.log10([2.0, 4.0]))
+    assert eval_expr(data, "dB(AxialRatioAtMax)") == pytest.approx(20 * np.log10([2.0, 1.0]))
+    assert eval_expr(data, "PeakGain*2") == pytest.approx([4.0, 8.0])
+
+
+def test_refinement_method_renamed():
+    """Old setups keep their refinement method under the new names, and their solutions stay valid."""
+    from hertzon.model.design import Setup
+    from hertzon.model import schema
+    from hertzon.solver.keys import setup_key
+    assert schema.upgrade_values({"RefinementMethod": "Remesh"})["RefinementMethod"] == "Remesh (slow)"
+    a, b = Setup("S"), Setup("S")
+    a.props["RefinementMethod"] = "Local (Delaunay, experimental)"
+    b.props["RefinementMethod"] = "Local (Delaunay)"
+    assert setup_key(a) == setup_key(b)
+    assert schema.defaults(schema.SETUP)["RefinementMethod"] == "Local (Delaunay)"
+
+
+def test_far_field_follows_edit_sources(tmp_path):
+    """Gain patterns and antenna parameters use the excitation of Edit Sources, not always port 1."""
+    import json as _json
+    import types
+    from hertzon.solver.results import ResultStore
+    from hertzon.solver.ffquant import excited_quantities, farfield_quantities
+    st = ResultStore(tmp_path)
+    ports = [{"name": "P1", "number": 1, "kind": "Lumped Port"}, {"name": "P2", "number": 2, "kind": "Lumped Port"}]
+    st.write_json("ports.json", ports)
+    S = np.array([[[0.3 + 0.1j, 0.05], [0.05, 0.2j]]])
+    st.save_sparams("LastAdaptive", np.array([1e9]), S, np.array([50.0, 50.0]), ports)
+    th, ph = np.linspace(0, np.pi, 19), np.linspace(0, 2 * np.pi, 37)
+    T, P = np.meshgrid(th, ph, indexing="ij")
+    E1 = np.array([np.cos(T), 0 * T, -np.sin(T)]).astype(complex)          # broadside to +x/-x
+    E2 = np.array([0 * T, np.cos(T) + 0.5, 0 * T]).astype(complex)
+    ff = {"theta": th, "phi": ph, "E_0_1": E1, "E_0_2": E2, "freq_0": np.array([1e9]),
+          "Prad_0_1": np.array([0.5]), "Prad_0_2": np.array([0.4])}
+    des = types.SimpleNamespace(settings={}, excitations=[],
+                                ports=lambda: [types.SimpleNamespace(name="P1"), types.SimpleNamespace(name="P2")])
+    q0 = excited_quantities(st, des, ff, "LastAdaptive", 0)
+    assert q0["GainTotal"] == pytest.approx(farfield_quantities(ff, 1, 0, pacc=1 - 0.1 - 0.05 ** 2)["GainTotal"])
+    des.settings["Sources"] = _json.dumps({"P1": {"mag": 0, "phase": 0}, "P2": {"mag": 1, "phase": 0}})
+    q2 = excited_quantities(st, des, ff, "LastAdaptive", 0)
+    assert q2["GainTotal"] == pytest.approx(farfield_quantities(ff, 2, 0, pacc=1 - 0.04 - 0.05 ** 2)["GainTotal"])
+    des.settings["Sources"] = _json.dumps({"P1": {"mag": 2, "phase": 0}, "P2": {"mag": 2, "phase": 90}})
+    q12 = excited_quantities(st, des, ff, "LastAdaptive", 0)
+    a = np.sqrt(2) * np.array([1, 1j])
+    assert q12["_Pinc"][0] == pytest.approx(4.0)
+    assert q12["_Pacc"][0] == pytest.approx(4.0 - np.linalg.norm(S[0] @ a) ** 2)
+    assert q12["rETotal"] == pytest.approx(np.sqrt(np.abs(farfield_quantities(
+        {**ff, "E_0_9": a[0] * E1 + a[1] * E2, "Prad_0_9": np.array([1.0])}, 9, 0)["rETotal"]) ** 2))
+
+
+def test_parallel_error_kernel_source():
+    """The parallel error estimate is generated from EMerge's kernel: the tet loop must become a prange
+    without exits (else numba runs it serially), everything else unchanged."""
+    from hertzon.solver import fast_error
+    src = fast_error._source()
+    assert src is not None
+    assert "for itet in prange(N_TETS):" in src and "parallel=True" in src
+    assert "adj_tets = [" not in src and "raise ValueError" not in src
+    compile(src, "error_estimate.py", "exec")
+
+
+def test_edit_sources_apply_keeps_dialog_open():
+    import os
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    from PySide6.QtWidgets import QApplication, QDialogButtonBox
+    from hertzon.gui.dialogs import EditSourcesDialog
+    from hertzon.model import sources as SRC
+    app = QApplication.instance() or QApplication([])  # noqa: F841
+    proj = Project.load(EX / "PatchAntenna.hzn")
+    des = proj.designs[0]
+    got = []
+    dlg = EditSourcesDialog(None, des, on_apply=lambda s, f: got.append((s, f)))
+    name = dlg.names[0]
+    dlg.mag[name].setValue(2.5)
+    dlg.findChild(QDialogButtonBox).button(QDialogButtonBox.Apply).click()
+    assert got and got[0][0][name]["mag"] == 2.5 and not dlg.result()
+    assert SRC.defaults(des)
+
+
+def test_fast_assembly_patches_and_sparse_helpers():
+    """The faster assembly replaces EMerge's code by source patterns; they must still match, and the
+    sparse helpers must give scipy's results."""
+    import scipy.sparse as sp
+    from hertzon.solver import fast_assembly as FA
+    from emerge._emerge.physics.microwave.assembly import assembler
+    from emerge._emerge import solver
+    n = sum(FA._patched(assembler.Assembler.assemble_freq_matrix, FA._ASSEMBLER_SUBS)[1:])
+    assert n == 5
+    assert FA._patched(solver.SolveRoutine.solve, [(FA.re.compile(r"Asel = A\[:, solve_ids\]\[solve_ids, :\]"),
+                                                    "x")])[1] == 1
+    rng = np.random.default_rng(0)
+    M = sp.random(300, 300, density=0.05, random_state=1) + 1j * sp.random(300, 300, density=0.05, random_state=2)
+    A = (M + M.T + sp.identity(300)).tocsc()
+    A.sort_indices()
+    ids = np.sort(rng.choice(300, 250, replace=False))
+    S0, S1 = A[:, ids][ids, :], FA.submatrix(A, ids)
+    S0.sort_indices()
+    assert np.array_equal(S0.indptr, S1.indptr) and np.array_equal(S0.indices, S1.indices)
+    assert np.array_equal(S0.data, S1.data)
+    U = FA.upper_symmetric(A)
+    assert U is not None and abs(U - sp.triu(A)).max() == 0
+    assert FA.upper_symmetric((A + sp.random(300, 300, density=0.01, random_state=3)).tocsc()) is None
+    assert np.array_equal(FA.free_ids(10, {3, 7, 0}), [1, 2, 4, 5, 6, 8, 9])
+
+
+def test_thin_conductor_keeps_the_assembled_dof_numbering():
+    """EMerge assembles with get_tet_to_field() (the numbering before the thin conductor split); plots, far
+    fields and the error estimate read tet_to_field, which the patch keeps equal to it."""
+    import inspect
+    from hertzon.solver import emerge_patches as EP
+    from emerge._emerge.elements.nedelec2 import Nedelec2
+    assert "_tet_to_field_orig" in inspect.getsource(Nedelec2.get_tet_to_field)
+    EP.apply_thin_conductor()
+    b = object.__new__(Nedelec2)
+    b._partitioned = True                     # EMerge's own split returns at once
+    b._tet_to_field_orig = np.arange(12).reshape(3, 4)
+    b.tet_to_field = b._tet_to_field_orig + 100
+    Nedelec2.partition_dof(b, [[1]])
+    assert np.array_equal(b.tet_to_field, b._tet_to_field_orig) and b.get_tet_to_field() is b._tet_to_field_orig
+
+
+def test_finite_conductivity_thickness_without_two_sided():
+    """Older files: a thickness meant the two-sided thin conductor; loading keeps that and the result key."""
+    from hertzon.model.design import project_from_dict
+    from hertzon.solver.keys import model_key
+    p = Project.load(EX / "Microstrip.hzn")
+    d = p.to_dict()
+    for b in d["designs"][0]["boundaries"]:
+        b["props"].pop("TwoSided", None)
+    old = project_from_dict(json.loads(json.dumps(d)))
+    des = old.designs[0]
+    cu = next(b for b in des.boundaries if b.kind == "Finite Conductivity")
+    assert cu.props["UseThickness"] == "True" and cu.props["TwoSided"] == "True"
+    key = model_key(old, des, des.setups[0])
+    cu.props.pop("TwoSided")
+    assert model_key(old, des, des.setups[0]) == key
+    # one-sided with thickness is a different problem
+    cu.props.update(TwoSided="False")
+    assert model_key(old, des, des.setups[0]) != key
+
+
+def test_object_colours_in_other_notations_are_read():
+    from hertzon.model.materials import parse_color
+    from hertzon.model.design import project_from_dict
+    assert parse_color("0,128,96") == parse_color("(0 128 96)") == parse_color("#008060") == "#008060"
+    assert parse_color("#abc") == "#aabbcc" and parse_color("nonsense") is None
+    p = Project.load(EX / next(f.name for f in EX.glob("*.hzn")))
+    d = p.to_dict()
+    d["designs"][0]["objects"][0]["color"] = "0,128,96"
+    d["materials"] = [{"name": "M", "color": "(10 20 30)"}]
+    q = project_from_dict(d)
+    assert q.designs[0].objects[0].color == "#008060"
+    assert q.materials[0].color == "#0a141e"
+
+
+@pytest.mark.parametrize("boxes", [0, 10])
+def test_circles_in_flat_faces_are_drawn_round(boxes):
+    # thin ring (rat race): without curvature sizing its circles had a dozen segments and a zigzag outline
+    p = Project()
+    d = p.designs[0]
+    d.add_object("CreateCircle", name="Ring", CenterPosition="0,0,0", Axis="Z", Radius="18")
+    d.add_object("CreateCircle", name="Hole", CenterPosition="0,0,0", Axis="Z", Radius="17")
+    d.obj("Hole").consumed_by = "Ring"
+    d.obj("Ring").history.append(Command.new("Subtract", Tools="Hole", KeepOriginals="False"))
+    for i in range(boxes):      # many flat faces and a cylinder: the two pass display mesh
+        d.add_object("CreateBox", Position=f"{30 + 3 * i},0,0", XSize="1", YSize="1", ZSize="1")
+    if boxes:
+        d.add_object("CreateCylinder", CenterPosition="-40,0,0", Axis="Z", Radius="3", Height="2")
+    K.ensure_gmsh("test_ring")
+    ctx = K.build_design(d, d.evaluator(p))
+    tess = K.tessellate(ctx)
+    circles = [e for e in tess["Ring"].edges if len(e) > 2]
+    assert len(circles) == 2 and all(len(e) >= 60 for e in circles)
+    if boxes:
+        assert len(tess["Cylinder1"].tris) < 400
+
+
+def test_results_dir_stays_inside_results_folder():
+    from hertzon.solver.results import results_dir
+    proj = Path("/work/demo/filter.hzn")
+    base = proj.with_suffix(".hznresults").resolve()
+    for design, setup in [("..", ".."), (".", ".."), ("", ""), ("../..", "x"), ("a/../..", "...")]:
+        d = results_dir(proj, design, setup).resolve()
+        assert d.parent.parent == base, (design, setup, d)
