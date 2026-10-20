@@ -123,9 +123,13 @@ class Bridge:
 
     # ----------------------------------------------------------------------------------------
     def run(self) -> None:
+        t = time.time()
         import emerge as em  # heavy import, keep inside the worker
+        info(f"Solver start: EMerge loaded in {time.time() - t:.1f} s")
+        t = time.time()
         from .emerge_patches import apply as _patch_emerge
         _patch_emerge()
+        info(f"Solver start: patches applied in {time.time() - t:.1f} s")
         # fingerprints before anything (auto open etc.) touches the design in memory
         self.keys = {"model_key": model_key(self.project, self.design, self.setup), "setup_key": setup_key(self.setup)}
         try:
@@ -134,7 +138,9 @@ class Bridge:
             pass
         self.store.write_json("status.json", {"state": "running", "started": time.time()})
         emit("progress", value=1, text="Starting EMerge")
+        t = time.time()
         with em.Simulation(f"hertzon_{os.getpid()}", save_file=False) as m:
+            info(f"Solver start: EMerge simulation ready in {time.time() - t:.1f} s")
             self.prepare(m)
             only = os.environ.get("HERTZON_ONLY_SWEEP", "")
             if only:
