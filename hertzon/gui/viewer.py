@@ -319,6 +319,7 @@ class ModelerView(QWidget):
     cursorMoved = Signal(object)                # np.ndarray | None (snapped working point)
     drawPhaseChanged = Signal(str)
     tabPressed = Signal()
+    navModeChanged = Signal(str)                # "rotate" / "pan" while a View button holds the left mouse, "" off
     hoverInfo = Signal(str)                       # Tab while drawing: jump to the coordinate fields
 
     def __init__(self, doc: Document, parent=None):
@@ -373,6 +374,7 @@ class ModelerView(QWidget):
         self._snap_marker = None
         self._press_pos = None
         self._navigating = set()        # mouse buttons currently moving the camera (also while drawing)
+        self.nav_mode = ""              # "rotate" / "pan": the left mouse moves the camera until switched off
         self._rpress_pos = None
         self._first_fit = True
         self._setup_style()
@@ -636,6 +638,15 @@ class ModelerView(QWidget):
             return
         iren = self.plotter.iren.interactor
         self._rot_last = None
+        if self.nav_mode == "rotate":
+            self._navigating.add("left")
+            self._rot_last = self._press_pos
+            return
+        if self.nav_mode == "pan":
+            self._navigating.add("left")
+            self._panning = True
+            self.style.OnMiddleButtonDown()
+            return
         if iren.GetAltKey() and iren.GetShiftKey():
             self._start_dolly()
             self._dolly = True
@@ -666,6 +677,9 @@ class ModelerView(QWidget):
             self._panning = False
             self.style.OnMiddleButtonUp()
         self._rot_last = None
+        if self.nav_mode:
+            self._navigating.discard("left")
+            return                              # Rotate / Pan mode: the left mouse does not select
         if not moved:
             add = bool(self.plotter.iren.interactor.GetControlKey())
             self.picked.emit(self.pick(pos), add)
@@ -1521,7 +1535,23 @@ class ModelerView(QWidget):
     # ------------------------------------------------------------------------------------------
     _identity = (np.zeros(3), np.eye(3))
 
+    def set_nav_mode(self, mode: str) -> None:
+        """Rotate / Pan button: the left mouse rotates or pans until Escape or the same button again."""
+        mode = "" if mode == self.nav_mode else mode
+        if mode and self.draw is not None:
+            self.cancel_draw()
+        self.reset_interaction()
+        self.nav_mode = mode
+        if mode:
+            self.plotter.interactor.setCursor(Qt.SizeAllCursor if mode == "pan" else Qt.OpenHandCursor)
+            self._clear_hover()
+        else:
+            self.plotter.interactor.unsetCursor()
+        self.navModeChanged.emit(mode)
+
     def start_draw(self, kind: str) -> None:
+        if self.nav_mode:
+            self.set_nav_mode("")
         self.cancel_draw()
         # primitives are drawn in the working CS; measuring and move/mirror stay global
         local = not kind.startswith("Measure") and kind not in OP_KINDS

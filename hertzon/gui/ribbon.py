@@ -102,8 +102,9 @@ class Group(QFrame):
         self.row.addWidget(b)
         return b
 
-    def small(self, text: str, ic: str | None, slot=None, menu=None, tip: str | None = None) -> QToolButton:
-        b = self._button(text, ic, slot, menu, False, tip)
+    def small(self, text: str, ic: str | None, slot=None, menu=None, tip: str | None = None,
+              checkable: bool = False) -> QToolButton:
+        b = self._button(text, ic, slot, menu, False, tip, checkable)
         self.widget(b)
         return b
 

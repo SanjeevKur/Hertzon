@@ -542,9 +542,12 @@ class MainWindow(QMainWindow):
         g = pg.group("View")
         g.large("Zoom", "zoom", lambda: self._cam_zoom(1.25),
                 menu=[("Zoom In", lambda: self._cam_zoom(1.25)), ("Zoom Out", lambda: self._cam_zoom(0.8))])
-        g.small("Pan", "pan", menu=[("Left", lambda: self._cam_pan(-1, 0)), ("Right", lambda: self._cam_pan(1, 0)),
+        self._nav_btns = {}
+        self._nav_btns["pan"] = g.small("Pan", "pan", lambda: self.view.set_nav_mode("pan"), checkable=True,
+                tip="Pan with the left mouse (Escape or Pan again ends it)", menu=[("Left", lambda: self._cam_pan(-1, 0)), ("Right", lambda: self._cam_pan(1, 0)),
                                     ("Up", lambda: self._cam_pan(0, 1)), ("Down", lambda: self._cam_pan(0, -1))])
-        g.small("Rotate", "orbit", menu=[("Left 15°", lambda: self._cam_rot(-15, 0)),
+        self._nav_btns["rotate"] = g.small("Rotate", "orbit", lambda: self.view.set_nav_mode("rotate"),
+                checkable=True, tip="Rotate with the left mouse (Escape or Rotate again ends it)", menu=[("Left 15°", lambda: self._cam_rot(-15, 0)),
                                           ("Right 15°", lambda: self._cam_rot(15, 0)),
                                           ("Up 15°", lambda: self._cam_rot(0, 15)),
                                           ("Down 15°", lambda: self._cam_rot(0, -15))])
@@ -744,6 +747,7 @@ class MainWindow(QMainWindow):
         self.view.contextMenuRequested.connect(self._view_context)
         self.view.drawFinished.connect(self._draw_finished)
         self.view.drawPhaseChanged.connect(lambda t: self.hint.setText(t or "Ready"))
+        self.view.navModeChanged.connect(self._on_nav_mode)
         self.view.cursorMoved.connect(self._cursor_moved)
         self.view.tabPressed.connect(self._coord_tab)
         self.msgs.messageActivated.connect(self.goto_message)
@@ -1181,7 +1185,16 @@ class MainWindow(QMainWindow):
     def _materials(self) -> list[str]:
         return [m.name for m in self.doc.project.all_materials()]
 
+    def _on_nav_mode(self, mode: str) -> None:
+        for k, b in getattr(self, "_nav_btns", {}).items():
+            b.setChecked(k == mode)
+        self.hint.setText({"rotate": "Rotate: drag with the left mouse, Escape ends",
+                           "pan": "Pan: drag with the left mouse, Escape ends"}.get(mode, "Ready"))
+
     def _escape(self) -> None:
+        if self.view.nav_mode:
+            self.view.set_nav_mode("")
+            return
         self.view.reset_interaction()
         if self.view.draw is not None:
             self.view.cancel_draw()
