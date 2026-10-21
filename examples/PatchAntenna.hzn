@@ -258,7 +258,7 @@
       "PercentRefinement": "30",
       "MaximumRefinement": "1000000",
       "MinimumPasses": "2",
-      "MinimumConvergedPasses": "2",
+      "MinimumConvergedPasses": "1",
       "BasisOrder": "Second Order",
       "CurvedElements": "True",
       "Solver": "Auto",

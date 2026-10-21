@@ -116,7 +116,8 @@ def patch_antenna() -> Project:
     boundary(d, "Perfect E", "PerfE_Ground", objects=[gnd.name])
     boundary(d, "Perfect E", "PerfE_Patch", objects=[patch.name])
     excitation(d, "Lumped Port", "1", objects=[port.name], PortNumber=1, IntegrationLine="0,-Ls/2,0;0,-Ls/2,h")
-    s = setup(d, Frequency="2.45GHz", MaximumPasses=5, MaximumDeltaS=0.02, MaximumRefinement=100000)
+    s = setup(d, Frequency="2.45GHz", MaximumPasses=5, MaximumDeltaS=0.02, MaximumRefinement=100000,
+              MinimumConvergedPasses=1)
     sweep(s, "Sweep", SweepType="Interpolating", Distribution="Linear Count", Start="2.2GHz", Stop="2.7GHz", Count=201)
     d.spheres.append(InfiniteSphere("Infinite Sphere1"))
     return p

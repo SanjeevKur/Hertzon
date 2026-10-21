@@ -3,8 +3,8 @@ from __future__ import annotations
 
 from PySide6.QtCore import QSize, Qt
 from PySide6.QtGui import QAction
-from PySide6.QtWidgets import (QFrame, QHBoxLayout, QLabel, QMenu, QSizePolicy, QTabWidget, QToolButton,
-                               QVBoxLayout, QWidget)
+from PySide6.QtWidgets import (QFrame, QHBoxLayout, QLabel, QMenu, QScrollArea, QSizePolicy, QTabWidget,
+                               QToolButton, QVBoxLayout, QWidget)
 
 from .icons import icon
 
@@ -30,6 +30,10 @@ QToolButton#RibbonPrimary { border: 1px solid #b8862a; border-radius: 5px; paddi
 QToolButton#RibbonPrimary:hover { background: #d6a43e; }
 QToolButton#RibbonPrimary:pressed { background: #b8862a; }
 QToolButton#RibbonLarge::menu-indicator, QToolButton#RibbonSmall::menu-indicator { subcontrol-position: bottom right; }
+QScrollArea#RibbonScroll { border: none; background: #ffffff; }
+QScrollArea#RibbonScroll QScrollBar:horizontal { height: 6px; background: #ffffff; }
+QScrollArea#RibbonScroll QScrollBar::handle:horizontal { background: #c8cdd6; border-radius: 3px; min-width: 30px; }
+QScrollArea#RibbonScroll QScrollBar::add-line, QScrollArea#RibbonScroll QScrollBar::sub-line { width: 0px; }
 """
 
 
@@ -137,6 +141,11 @@ class Page(QWidget):
         self.lay.setContentsMargins(2, 2, 2, 2)
         self.lay.setSpacing(2)
         self.lay.addStretch(1)
+        # the height follows the ribbon (the buttons squeeze a little as before), only the width scrolls
+        self.lay.setSizeConstraint(QHBoxLayout.SetNoConstraint)
+
+    def minimumSizeHint(self) -> QSize:
+        return QSize(self.lay.minimumSize().width(), 0)
 
     def group(self, title: str) -> Group:
         if self.lay.count() > 1:
@@ -155,10 +164,19 @@ class Ribbon(QTabWidget):
         self.setObjectName("Ribbon")
         self.setDocumentMode(False)
         self.setStyleSheet(STYLE)
-        self.setFixedHeight(112)
+        self.setFixedHeight(118)                # room for the thin scroll bar of a page on a narrow screen
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
 
     def page(self, title: str) -> Page:
         p = Page()
-        self.addTab(p, title)
+        # in a scroll area: on a narrow screen the page scrolls sideways instead of making the main window
+        # wider than the screen (a maximized window was cut off on the right)
+        sc = QScrollArea()
+        sc.setObjectName("RibbonScroll")
+        sc.setWidgetResizable(True)
+        sc.setFrameShape(QFrame.NoFrame)
+        sc.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        sc.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        sc.setWidget(p)
+        self.addTab(sc, title)
         return p

@@ -4,7 +4,7 @@ type: software
 title: "Hertzon: a graphical 3D full-wave electromagnetic simulator built on EMerge"
 authors:
   - name: "The Hertzon contributors"
-version: "0.1.9"
+version: "0.1.10"
 date-released: "2026-10-21"
 license: GPL-2.0-or-later
 repository-code: "https://github.com/c8501024/Hertzon"
@@ -21,5 +21,6 @@ references:
     authors:
       - family-names: "Fennis"
         given-names: "Robert"
+      - name: "Emerge Numerics B.V."
     repository-code: "https://github.com/FennisRobert/EMerge"
     license: GPL-2.0-or-later

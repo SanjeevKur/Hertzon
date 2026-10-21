@@ -76,6 +76,11 @@ jobs:
           tag_name: ${{ github.ref_type == 'tag' && github.ref_name || steps.ver.outputs.tag }}
           name: Hertzon ${{ github.ref_type == 'tag' && github.ref_name || steps.ver.outputs.tag }}
           target_commitish: ${{ github.sha }}
+          body: |
+            Windows installer (`Hertzon-Setup-*.exe`) and Linux package (`Hertzon-*-linux.tar.gz`).
+
+            Hertzon is built on [EMerge](https://github.com/FennisRobert/EMerge), the open-source FEM solver by
+            Robert Fennis / Emerge Numerics B.V., which does all electromagnetic computation.
           files: |
             dist/Hertzon-Setup-*.exe
             dist/Hertzon-*-linux.tar.gz

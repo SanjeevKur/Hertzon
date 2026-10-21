@@ -20,6 +20,11 @@ draw the model, assign boundaries and excitations, add an analysis setup with
 and radiation patterns. The finite-element solver underneath is
 [EMerge](https://github.com/FennisRobert/EMerge) (2nd-order Nédélec FEM, gmsh/OpenCASCADE geometry).
 
+> **Built on EMerge.** All electromagnetic computation in Hertzon is done by
+> [EMerge](https://github.com/FennisRobert/EMerge), the open-source FEM solver developed by
+> **Robert Fennis / Emerge Numerics B.V.** Hertzon adds the graphical workflow around it. Many thanks to
+> Robert Fennis for making EMerge available under the GPL.
+
 Hertzon is a desktop application (Qt + VTK) built for responsiveness with large models:
 geometry is tessellated incrementally per object, the solver runs in its own process, and
 results are streamed back into the GUI while it keeps working.
@@ -152,7 +157,8 @@ pip install pytest && python -m pytest tests
 If you use Hertzon in a publication, please cite it. GitHub shows a ready-made reference under
 **Cite this repository** on the repository page (from `CITATION.cff`), as APA or BibTeX. Every release
 is archived on Zenodo with its own DOI; the badge at the top links to the latest one. Please also cite
-[EMerge](https://github.com/FennisRobert/EMerge), the solver Hertzon is built on.
+[EMerge](https://github.com/FennisRobert/EMerge) by Robert Fennis / Emerge Numerics B.V., the solver Hertzon is
+built on.
 
 ## License
 
