@@ -57,7 +57,7 @@ Solution Data...** shows the convergence table, the mesh statistics and the matr
 ## 1. Waveguide with wave ports
 
 **Goal:** S11 and S21 of a WR-90 rectangular waveguide (22.86 × 10.16 mm) with a metal post in the
-middle, from 8 to 12 GHz. The finished project is `examples/WaveguidePost.hzn`.
+middle, from 8 to 12 GHz. A finished version is `examples/WaveguidePost.hzn` (its sweep starts at 5 GHz).
 
 ### 1.1 New design and variables
 
@@ -122,7 +122,7 @@ with a 2D eigenmode solve and feeds the 3D problem with it.
 
 **Goal:** a 20 mm long 50 Ω coax line with PTFE filling, from 1 to 10 GHz. It should be nearly perfectly
 matched: |S11| far below −30 dB and |S21| ≈ 0 dB, with the phase of S21 falling linearly with
-frequency.
+frequency. The finished project is `examples/Coax.hzn`.
 
 For a coax with inner radius *a*, outer radius *b* and permittivity εr:
 Z0 = 60 Ω / √εr · ln(b/a). With εr = 2.1 (Teflon) and *a* = 0.5 mm, 50 Ω needs *b* = 1.675 mm.
@@ -175,7 +175,7 @@ Z0 = 60 Ω / √εr · ln(b/a). With εr = 2.1 (Teflon) and *a* = 0.5 mm, 50 Ω 
 
 **Goal:** a dipole for 1 GHz, made of two PEC rods with a small feed gap, fed by a lumped port.
 Results are the input impedance (about 73 Ω at resonance), S11, the radiation pattern and the gain
-(about 2.15 dBi).
+(about 2.15 dBi). The finished project is `examples/Dipole.hzn`.
 
 ### 3.1 Design with an open region
 
@@ -241,7 +241,8 @@ Optimization...** find the length for S11 < −20 dB at 1 GHz.
 
 **Goal:** the monostatic and bistatic RCS of a perfectly conducting sphere of radius 100 mm at 1 GHz,
 lit by a plane wave. For a sphere the exact answer is known (Mie series), so this is the classic way
-to check an RCS setup. The 250 mm sphere in `examples/NATO-Sphere.hzn` is set up the same way.
+to check an RCS setup. The finished project is `examples/SphereRCS.hzn`, and the 250 mm sphere in
+`examples/NATO-Sphere.hzn` is set up the same way.
 
 ### 4.1 Design
 
@@ -359,7 +360,7 @@ the README's *No warranty* section.
 
 ## Where to go next
 
-* `examples/` has nine finished projects, from a microstrip line to a Rotman lens. See the table in the
+* `examples/` has twelve finished projects, from a microstrip line to a Rotman lens. See the table in the
   [README](../README.md#examples).
 * **Tools > Antenna Design > Rectangular Patch...** and **Tools > Filter Design > Tapped Hairpin...** create
   complete, parametrized designs with setup, sweep and optimization from a few specifications.

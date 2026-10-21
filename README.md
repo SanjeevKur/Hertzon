@@ -20,6 +20,11 @@ draw the model, assign boundaries and excitations, add an analysis setup with
 and radiation patterns. The finite-element solver underneath is
 [EMerge](https://github.com/FennisRobert/EMerge) (2nd-order Nédélec FEM, gmsh/OpenCASCADE geometry).
 
+> 📘 **New to Hertzon? Start with the [step-by-step tutorial](docs/TUTORIAL.md):** a waveguide with wave
+> ports, a coaxial cable, a half-wave dipole and the RCS of a sphere, each from the empty window to the
+> result, plus how to let an AI assistant (Claude Code, Codex, VS Code) build and run simulations for you
+> through Hertzon's **MCP server**.
+
 > **Built on EMerge.** The finite-element core of Hertzon (Nédélec formulation, element matrices, ports,
 > boundary conditions, solver interface) is [EMerge](https://github.com/FennisRobert/EMerge), the open-source
 > FEM solver developed by **Robert Fennis**. Many thanks to Robert Fennis for making
@@ -109,6 +114,9 @@ Delaunay mesher, curved elements and benchmark results.
 | `examples/PlaneWave.hzn` | Incident plane wave on a PEC sphere in a radiation box, and the same plane wave in an empty box |
 | `examples/NATO-Sphere.hzn` | RCS of a PEC sphere (radius 250 mm) at 1 GHz, plane wave, PML, curved second-order elements |
 | `examples/DroneRCS.hzn` | RCS of an imported drone STL model (`Delta_Composites_Demo_3_Layers/`) at 1 GHz, plane wave |
+| `examples/Coax.hzn` | 20 mm, 50 Ω PTFE coax with TEM wave ports, sweep 1-10 GHz ([tutorial](docs/TUTORIAL.md#2-coaxial-cable-with-wave-ports)) |
+| `examples/Dipole.hzn` | Half-wave dipole for 1 GHz with a lumped port, **Auto Open**, far field and gain ([tutorial](docs/TUTORIAL.md#3-half-wave-dipole)) |
+| `examples/SphereRCS.hzn` | RCS of a 100 mm PEC sphere at 1 GHz, plane wave, PML, checked against the Mie series ([tutorial](docs/TUTORIAL.md#4-radar-cross-section-of-a-sphere)) |
 
 `examples/benchmark/` holds the validation and timing cases (patch antenna, waveguide post against a reference,
 sphere RCS against the Mie series, scaling from small to large models) with their scripts.
@@ -124,6 +132,8 @@ The first four examples are regenerated with `python examples/make_examples.py`.
   (`sparams_*.npz`, Touchstone `*.sNp`, `fields_*.npz`, `farfield_*.npz`, `convergence.json`).
 
 ## AI assistants (MCP)
+
+The [tutorial](docs/TUTORIAL.md#5-let-an-ai-assistant-build-and-run-it-mcp) shows the setup and example prompts.
 
 Hertzon ships an MCP server, so Claude Code, Codex or VS Code (Copilot agent mode) can build and run
 simulations: "build a 2.45 GHz patch on FR4 with a lumped port, solve it and give me S11 and the gain".
