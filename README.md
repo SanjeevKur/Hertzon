@@ -138,6 +138,12 @@ hertzon/mcp      MCP server for AI assistants, live link to the window, client r
 pip install pytest && python -m pytest tests
 ```
 
+## Citing Hertzon
+
+If you use Hertzon in a publication, please cite it. GitHub shows a ready-made reference under
+**Cite this repository** on the repository page (from `CITATION.cff`), as APA or BibTeX. Please also cite
+[EMerge](https://github.com/FennisRobert/EMerge), the solver Hertzon is built on.
+
 ## License
 
 GPL-2.0-or-later, the same as EMerge, which Hertzon links against.
