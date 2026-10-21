@@ -565,7 +565,9 @@ class Bridge:
             return w, h, tuple(d)
         ext = hi - lo
         order = np.argsort(ext)          # smallest extent = normal of a planar sheet
-        dims = [i for i in order if ext[i] > 1e-12 * max(ext.max(), 1e-30)]
+        # gmsh pads the bounding box of a flat face by its tolerance (about 1e-7 m), so the normal of a sheet
+        # has a tiny but nonzero extent: count anything below 0.1 % of the sheet size as flat
+        dims = [i for i in order if ext[i] > 1e-3 * max(ext.max(), 1e-30)]
         if len(dims) < 2:
             raise RuntimeError(f"{a.name}: cannot derive port size; please define an integration line")
         hdir, wdir = dims[0], dims[1]
