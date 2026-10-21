@@ -22,7 +22,7 @@ and radiation patterns. The finite-element solver underneath is
 
 > **Built on EMerge.** The finite-element core of Hertzon (Nédélec formulation, element matrices, ports,
 > boundary conditions, solver interface) is [EMerge](https://github.com/FennisRobert/EMerge), the open-source
-> FEM solver developed by **Robert Fennis / Emerge Numerics B.V.** Many thanks to Robert Fennis for making
+> FEM solver developed by **Robert Fennis** Many thanks to Robert Fennis for making
 > EMerge available under the GPL. Hertzon adds the graphical workflow and its own solver extensions on top:
 > the hzmesh mesher, adaptive refinement (local Delaunay, bisection, Mmg), a fast error estimator, faster
 > assembly kernels, curved elements, far-field and RCS post-processing, and fixes for large models.
@@ -159,7 +159,7 @@ pip install pytest && python -m pytest tests
 If you use Hertzon in a publication, please cite it. GitHub shows a ready-made reference under
 **Cite this repository** on the repository page (from `CITATION.cff`), as APA or BibTeX. Every release
 is archived on Zenodo with its own DOI; the badge at the top links to the latest one. Please also cite
-[EMerge](https://github.com/FennisRobert/EMerge) by Robert Fennis / Emerge Numerics B.V., the solver Hertzon is
+[EMerge](https://github.com/FennisRobert/EMerge) by Robert Fennis, the solver Hertzon is
 built on: DOI [10.5281/zenodo.17025518](https://doi.org/10.5281/zenodo.17025518).
 
 ## License
