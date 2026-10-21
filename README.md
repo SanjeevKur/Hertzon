@@ -1,6 +1,13 @@
 # Hertzon
 
 [![DOI](https://zenodo.org/badge/1427567849.svg)](https://zenodo.org/badge/latestdoi/1427567849)
+[![Release](https://img.shields.io/github/v/release/c8501024/Hertzon)](https://github.com/c8501024/Hertzon/releases/latest)
+[![Release build](https://github.com/c8501024/Hertzon/actions/workflows/release.yml/badge.svg)](https://github.com/c8501024/Hertzon/actions/workflows/release.yml)
+[![Downloads](https://img.shields.io/github/downloads/c8501024/Hertzon/total)](https://github.com/c8501024/Hertzon/releases)
+[![License: GPL v2+](https://img.shields.io/badge/license-GPL--2.0--or--later-blue)](LICENSE)
+[![Python 3.13](https://img.shields.io/badge/python-3.13-blue)](https://www.python.org/)
+[![Platforms](https://img.shields.io/badge/platform-Windows%20%7C%20Linux-lightgrey)](https://github.com/c8501024/Hertzon/releases/latest)
+[![Solver: EMerge](https://img.shields.io/badge/solver-EMerge-orange)](https://github.com/FennisRobert/EMerge)
 
 ![Hertzon](hertzon/gui/splash.jpg)
 
