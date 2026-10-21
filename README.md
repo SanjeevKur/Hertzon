@@ -1,5 +1,7 @@
 # Hertzon
 
+[![DOI](https://zenodo.org/badge/1427567849.svg)](https://zenodo.org/badge/latestdoi/1427567849)
+
 ![Hertzon](hertzon/gui/splash.jpg)
 
 > ⚠️ **Hertzon is under active development. It can still contain bugs, which are being fixed step by step.
@@ -141,7 +143,8 @@ pip install pytest && python -m pytest tests
 ## Citing Hertzon
 
 If you use Hertzon in a publication, please cite it. GitHub shows a ready-made reference under
-**Cite this repository** on the repository page (from `CITATION.cff`), as APA or BibTeX. Please also cite
+**Cite this repository** on the repository page (from `CITATION.cff`), as APA or BibTeX. Every release
+is archived on Zenodo with its own DOI; the badge at the top links to the latest one. Please also cite
 [EMerge](https://github.com/FennisRobert/EMerge), the solver Hertzon is built on.
 
 ## License
