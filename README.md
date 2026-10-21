@@ -100,11 +100,19 @@ Delaunay mesher, curved elements and benchmark results.
 
 | File | What it shows |
 |---|---|
-| `examples/WaveguidePost.hzn` | WR-90 waveguide with an inductive post, wave ports, interpolating sweep 8-12 GHz |
-| `examples/Microstrip.hzn` | 50 Ω microstrip on FR4, lumped ports, thin-conductor trace, **Auto Open - Filter** |
-| `examples/PatchAntenna.hzn` | 2.45 GHz inset-fed patch, **Auto Open** (PML), far field, gain pattern |
+| `examples/WaveguidePost.hzn` | WR-90 waveguide with an inductive PEC post, wave ports, interpolating sweep 5-12 GHz |
+| `examples/Microstrip.hzn` | 50 Ω microstrip on FR4, lumped ports, thin-conductor trace, **Auto Open - Filter**, sweep 1-6 GHz |
+| `examples/PatchAntenna.hzn` | 2.45 GHz inset-fed patch on FR4, **Auto Open** (radiation boundary), far field, gain pattern |
+| `examples/HairpinFilter.hzn` | Third-order hairpin band-pass filter at 2.45 GHz on RO4350B, copper losses, sweep 2-2.9 GHz and an optimization |
+| `examples/GPS_L1_RHCP.hzn` | 1.575 GHz GPS L1 ceramic patch (εr 20) with probe feed and stub on a feed board, circular polarization (RHCP) far field |
+| `examples/RotmanLens_24GHz.hzn` | 24 GHz Rotman lens beamformer on RO4350B in three designs: the lens with beam, array and dummy ports, the single array patch, and lens plus patch array with beam far fields |
+| `examples/PlaneWave.hzn` | Incident plane wave on a PEC sphere in a radiation box, and the same plane wave in an empty box |
+| `examples/NATO-Sphere.hzn` | RCS of a PEC sphere (radius 250 mm) at 1 GHz, plane wave, PML, curved second-order elements |
+| `examples/DroneRCS.hzn` | RCS of an imported drone STL model (`Delta_Composites_Demo_3_Layers/`) at 1 GHz, plane wave |
 
-Regenerate them with `python examples/make_examples.py`.
+`examples/benchmark/` holds the validation and timing cases (patch antenna, waveguide post against a reference,
+sphere RCS against the Mie series, scaling from small to large models) with their scripts.
+The first four examples are regenerated with `python examples/make_examples.py`.
 
 ## Scripting
 
@@ -166,3 +174,9 @@ built on: DOI [10.5281/zenodo.17025518](https://doi.org/10.5281/zenodo.17025518)
 
 GPL-2.0-or-later, the same as EMerge, which Hertzon links against.
 All Python packages Hertzon uses and their licences are listed in [docs/THIRD_PARTY.md](docs/THIRD_PARTY.md).
+
+## No warranty
+
+Hertzon is provided "as is", without any warranty and without liability for damages, as set out in
+sections 11 and 12 of the GPL. Simulation results can be wrong. Check them yourself (measurements,
+analytical estimates or a second tool) before you rely on them for a design, a product or a decision.

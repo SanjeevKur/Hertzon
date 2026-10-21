@@ -4624,7 +4624,8 @@ class MainWindow(QMainWindow):
                           "Built on <a href='https://github.com/FennisRobert/EMerge'>EMerge</a>, the open-source FEM "
                           "solver by Robert Fennis (GPL v2+), which provides the "
                           "finite-element core.<br>Geometry: gmsh/OpenCASCADE, display: VTK/PyVista.<br><br>"
-                          "Licensed under the GNU GPL v2 or later.")
+                          "Licensed under the GNU GPL v2 or later. Provided without any warranty: check simulation "
+                          "results yourself before relying on them.")
 
     def show_help(self) -> None:
         from .helpwin import HelpDialog, context_title
