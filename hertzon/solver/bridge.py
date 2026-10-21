@@ -6,6 +6,8 @@ written into the setup's results folder.
 """
 from __future__ import annotations
 
+import inspect
+
 import json
 import math
 import os
@@ -20,11 +22,12 @@ import numpy as np
 
 from ..model.design import Project, Design, Setup, Assignment, FaceRef
 from ..model.expr import Evaluator
-from ..model.materials import is_conductor
+from ..model.materials import EMERGE_DISPERSION, is_conductor
 from ..model import schema
 from ..kernel import occ as K
 from . import facematch
 from .results import ResultStore
+from .emerge_compat import amr as _amr
 
 C0 = 299792458.0
 TAG = "@@HZN "
@@ -249,6 +252,15 @@ class Bridge:
         if mtand:
             ur = complex(ur) * complex(1, -mtand)
         disp = getattr(mat, "dispersion", "None") or "None"
+        if disp == EMERGE_DISPERSION:
+            # frequency dependent material of EMerge's library: its own property functions
+            from ..model.materials import emerge_object
+            src = emerge_object(getattr(mat, "emsutil_key", ""))
+            if src is not None:
+                info(f"Material '{mat.name}': frequency dependent data of EMerge's material library")
+                return em.Material(er=src.er, ur=src.ur, tand=src.tand, cond=src.cond, color=mat.color, name=mat.name)
+            warn(f"Material '{mat.name}': EMerge library data not found; using the values shown")
+            disp = "None"
         if getattr(mat, "anisotropic", False):
             # anisotropic material: diagonal tensors, loss tangent per axis
             def diag(text, default):
@@ -535,7 +547,11 @@ class Bridge:
         k, e, origin = planewave.vectors(p, ev)
         th, ph, psi = planewave.incidence_angles(k, e)
         cs = self.em.CoordinateSystem((1, 0, 0), (0, 1, 0), (0, 0, 1), np.asarray(origin, float))
-        bc = mw.bc.ScatteredField(sel, cs=cs)                # cs origin = zero phase position
+        kw = {}
+        from emerge._emerge.physics.microwave.bcs.boundary_conditions import ScatteredField
+        if "definition" in inspect.signature(ScatteredField).parameters:
+            kw["definition"] = "EA"                     # EMerge 3 defaults to 'SPH'; the angles below are EA
+        bc = mw.bc.ScatteredField(sel, cs=cs, **kw)          # cs origin = zero phase position
         bc.E0 = float(abs(ev.value(p.get("EMagnitude", "1") or "1")))
         # k = -r(theta, phi), E = cos(psi) theta^ + sin(psi) phi^  ->  EMerge elevation/azimuth angles
         bc.set_excitations(90.0 - th, ph + 180.0, psi + 180.0)
@@ -811,7 +827,7 @@ class Bridge:
     def plane_wave_adaptive(self, fa: list[float]) -> dict:
         """Adaptive passes for the incident plane wave (Maximum Delta Energy). The refinement
         uses the same element error estimate as the port driven passes."""
-        from emerge._emerge.physics.microwave.adaptive_mesh import select_refinement_indices, tet_to_node
+        from .emerge_compat import select_refinement_indices, tet_to_node
         from emerge._emerge.physics.microwave.bcs.boundary_conditions import PEC
         m, p = self.m, self.setup.props
         maxp = max(1, int(p.get("MaximumPasses", "6")))
@@ -825,7 +841,7 @@ class Bridge:
         growth = float(p.get("GrowthRate", "1.6"))
         passes, prev, passed, converged = [], None, 0, False
         self._pw_fields = None
-        m.mesher._amrobj.reset()
+        _amr(m).reset()
         for step in range(1, maxp + 1):
             if (self.out / "ABORT").exists():
                 warn("Adaptive meshing aborted by user")
@@ -898,10 +914,10 @@ class Bridge:
                 grow = (m.mesh.n_tets / last_n - 1) * 100
             else:
                 for _ in range(5):
-                    m.mesher._amrobj.add_refinement_points(coords, sizes, ratio * np.ones_like(sizes)) if _ == 0 \
-                        else m.mesher._amrobj.set_ratio(ratio)
+                    _amr(m).add_refinement_points(coords, sizes, ratio * np.ones_like(sizes)) if _ == 0 \
+                        else _amr(m).set_ratio(ratio)
                     m._reset_mesh()
-                    m.mesher._amrobj.set_refinement_function(growth, 2.0)
+                    _amr(m).set_refinement_function(growth, 2.0)
                     m.generate_mesh(True)
                     grow = (m.mesh.n_tets / last_n - 1) * 100
                     if pct * 0.5 <= grow <= pct * 2.0:
@@ -1424,7 +1440,7 @@ def adaptive_loop(m, fa: list[float], p: dict, out: Path, on_pass=None, key: str
     between consecutive passes. The loop stops after `MinimumConvergedPasses` consecutive converged
     passes (but not before `MinimumPasses`), at `MaximumPasses`, or when the tetrahedra limit is hit.
     """
-    from emerge._emerge.physics.microwave.adaptive_mesh import select_refinement_indices, tet_to_node
+    from .emerge_compat import select_refinement_indices, tet_to_node
     maxp = max(1, int(p.get("MaximumPasses", "6")))
     max_ds = float(p.get("MaximumDeltaS", "0.02"))
     use_mat = p.get("UseMatrixConvergence") == "True"
@@ -1446,7 +1462,7 @@ def adaptive_loop(m, fa: list[float], p: dict, out: Path, on_pass=None, key: str
     ratio = ratio0
     last_n = m.mesh.n_tets
     m.state.stash()
-    m.mesher._amrobj.reset()
+    _amr(m).reset()
     m._local_mesh = None
     first = 1
     if resume and resume["passes"] and (len(resume["amr_sizes"]) or resume.get("mesh")) and len(resume["passes"]) <= maxp:
@@ -1507,7 +1523,7 @@ def adaptive_loop(m, fa: list[float], p: dict, out: Path, on_pass=None, key: str
         passes.append(row)
         _save_pass_results(out, fa, Ss, z0, passes, max_ds)
         if key:
-            _save_amr_state(out, key, m.mesher._amrobj, ratio, passes, fa, m)
+            _save_amr_state(out, key, _amr(m), ratio, passes, fa, m)
         emit("pass", **{k: v for k, v in row.items() if k != "S"})
         t_pass = time.time()
         if passed >= min_conv and step >= min_passes:
@@ -1566,9 +1582,9 @@ def adaptive_loop(m, fa: list[float], p: dict, out: Path, on_pass=None, key: str
             grow = _refine_stable(m, error, lengths, pct, growth, step, snap)
         else:
             # keep the ratio that hit the target in the previous pass (good first guess)
-            m.mesher._amrobj.add_refinement_points(coords, sizes, ratio * np.ones_like(sizes))
+            _amr(m).add_refinement_points(coords, sizes, ratio * np.ones_like(sizes))
             m._reset_mesh()
-            m.mesher._amrobj.set_refinement_function(growth, 2.0)
+            _amr(m).set_refinement_function(growth, 2.0)
             m.generate_mesh(True)
             grow = (m.mesh.n_tets / last_n - 1) * 100
             # enforce the requested refinement percentage: bisect the size ratio (smaller ratio = finer)
@@ -1586,9 +1602,9 @@ def adaptive_loop(m, fa: list[float], p: dict, out: Path, on_pass=None, key: str
                 # the bracket (plain bisection from 0.02..0.98 overshot and needed several re-meshes)
                 guess = ratio * (max(grow, 1.0) / pct) ** (1 / 3)
                 ratio = float(guess if lo_r < guess < hi_r else np.sqrt(lo_r * hi_r))
-                m.mesher._amrobj.set_ratio(ratio)
+                _amr(m).set_ratio(ratio)
                 m._reset_mesh()
-                m.mesher._amrobj.set_refinement_function(growth, 2.0)
+                _amr(m).set_refinement_function(growth, 2.0)
                 m.generate_mesh(True)
                 grow = (m.mesh.n_tets / last_n - 1) * 100
         info(f"Pass {step + 1}: mesh refined to {m.mesh.n_tets} tetrahedra (+{grow:.1f}%) "
@@ -1644,7 +1660,7 @@ def _refine_local(m, props, coords, sizes, ratio: float, growth: float, pct: flo
     try:
         if method == "Mmg" and error is not None and lengths is not None:
             from types import SimpleNamespace
-            from emerge._emerge.physics.microwave.adaptive_mesh import tet_to_node
+            from .emerge_compat import tet_to_node
             order = np.argsort(-np.asarray(error))
             nodes, tets = m.mesh.nodes, m.mesh.tets
 
@@ -1657,7 +1673,7 @@ def _refine_local(m, props, coords, sizes, ratio: float, growth: float, pct: flo
                 return lambda P: amr_size_at(pts, growth, 2.0, P)
             m._local_mesh = mmg_refine.refine_with_mmg(m, size_for, pct, growth)
             return True
-        amr = m.mesher._amrobj
+        amr = _amr(m)
         amr.add_refinement_points(coords, sizes, ratio * np.ones_like(sizes))
         size_at = lambda pts: amr_size_at(amr, growth, 2.0, pts)  # noqa: E731
         m._local_mesh = LR.refine_to_size(m, size_at, pct)
@@ -1742,7 +1758,7 @@ def _refine_stable(m, error, lengths, pct: float, growth: float, step: int, snap
     hnode = acc / np.maximum(cnt, 1)
     order = np.argsort(-np.asarray(error))
     frac = float(getattr(m, "_stable_frac", 0.0)) or pct / 100.0 / 5.0
-    amr = m.mesher._amrobj
+    amr = _amr(m)
     grow = 0.0
     for attempt in range(5):
         k = int(np.clip(round(frac * len(order)), 1, len(order)))
@@ -1801,7 +1817,7 @@ def restore_amr_mesh(m, resume: dict, growth: float) -> None:
         m._local_mesh = resume["mesh"]
         LR.load_mesh(m, resume["mesh"], what="stored adaptive mesh")
         return
-    amr = m.mesher._amrobj
+    amr = _amr(m)
     amr._amr_coords = np.asarray(resume["amr_coords"], float)
     amr._amr_sizes = np.asarray(resume["amr_sizes"], float)
     amr._amr_ratios = np.asarray(resume["amr_ratios"], float)

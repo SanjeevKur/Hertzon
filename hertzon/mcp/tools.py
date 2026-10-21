@@ -522,8 +522,8 @@ def t_list_materials(args):
         ctx = load(args)
         mats = ctx.proj.all_materials()
     except ToolError:
-        from ..model.materials import SYSTEM_BY_NAME
-        mats = list(SYSTEM_BY_NAME.values())
+        from ..model.materials import library_materials
+        mats = library_materials()
     flt = (args.get("filter") or "").lower()
     out = []
     for m in mats:

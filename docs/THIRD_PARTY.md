@@ -11,16 +11,16 @@ Versions are those of a current installation; `pyproject.toml` lists the require
 
 | Package | Version | Licence | Used for |
 |---|---|---|---|
-| [EMerge](https://github.com/FennisRobert/EMerge) | 2.8.9 | GPL-2.0-or-later (materials database `lib.py`: CC0) | FEM solver |
+| [EMerge](https://github.com/FennisRobert/EMerge) | 3.0.0a25 | GPL-2.0-or-later | FEM solver (its compiled core `emr` is part of the package) |
 | [PySide6](https://pyside.org) (with shiboken6, PySide6 Essentials/Addons) | 6.12.0 | LGPL-3.0 / GPL-2.0 / GPL-3.0 | Qt user interface |
 | [PyVista](https://github.com/pyvista/pyvista) | 0.49.1 | MIT | 3D display |
 | [pyvistaqt](https://github.com/pyvista/pyvistaqt) | 0.13.1 | MIT | 3D view inside the Qt window |
 | [VTK](https://vtk.org) | 9.7.1 | BSD-3-Clause | 3D rendering (through PyVista) |
-| [gmsh](https://gmsh.info) | 4.14.1 | GPL-2.0-or-later | Geometry (OpenCASCADE) and meshing (through EMerge) |
+| [gmsh](https://gmsh.info) | 4.15.2 | GPL-2.0-or-later | Geometry (OpenCASCADE) and meshing (through EMerge) |
 | [Matplotlib](https://matplotlib.org) | 3.11.2 | Matplotlib licence (PSF-based) | Reports and plots |
 | [NumPy](https://numpy.org) | 2.2.6 | BSD-3-Clause | Numerics |
 | [SciPy](https://scipy.org) | 1.18.1 | BSD-3-Clause | Numerics, sparse solvers |
-| [Numba](https://numba.pydata.org) (with llvmlite) | 0.68.0 | BSD-2-Clause (llvmlite: BSD-2-Clause and Apache-2.0 with LLVM exception) | Compiled solver kernels |
+| [Numba](https://numba.pydata.org) (with llvmlite) | 0.68.0 | BSD-2-Clause (llvmlite: BSD-2-Clause and Apache-2.0 with LLVM exception) | Hertzon's compiled kernels (curved elements, refinement size field) |
 | [pymmg](https://www.mmgtools.org/) | 1.0.0 | MIT wrapper, Mmg library LGPL-3.0-or-later | "Mmg" adaptive refinement |
 | [fast-simplification](https://github.com/pyvista/fast-simplification) | 0.2.0 | MIT | STL simplification on import |
 | [hfsynpy](https://github.com/GenerativeAntennaDesign/hfsynpy) | 0.1.3 | GPL-2.0-or-later | Microstrip synthesis in the filter and antenna design tools |
@@ -30,7 +30,7 @@ Versions are those of a current installation; `pyproject.toml` lists the require
 
 | Package | Version | Licence | Needed by |
 |---|---|---|---|
-| emsutil | 0.8.3 | from the EMerge author, no licence stated in the package | EMerge |
+| emsutil | 1.1.4 | GPL-2.0-or-later (material database `lib.py`: CC0) | EMerge; its material database is offered as the "EMerge Library" in Hertzon's material dialog |
 | joblib | 1.6.0 | BSD-3-Clause | EMerge |
 | loguru | 0.7.3 | MIT | EMerge |
 | msgpack | 1.2.3 | Apache-2.0 | EMerge |

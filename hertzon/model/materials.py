@@ -61,6 +61,8 @@ class Material:
     permittivity_tensor: str = ""
     permeability_tensor: str = ""
     loss_tangent_tensor: str = ""
+    # material of EMerge's library (emsutil.lib) this one was taken from, e.g. "DIEL_RO4350B"
+    emsutil_key: str = ""
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -184,6 +186,102 @@ SYSTEM_LIBRARY: list[Material] = [
 
 SYSTEM_BY_NAME = {m.name: m for m in SYSTEM_LIBRARY}
 
+# ------------------------------------------------------------------------------------------------
+# EMerge material library (emsutil.lib, CC0): about 270 metals, semiconductors, PCB laminates (Rogers,
+# Isola/Nelco, Taconic, Arlon, ...), solder masks and foams. Read from the installed emsutil on first
+# use (importing emsutil takes about a second), shown as library "EMerge".
+# ------------------------------------------------------------------------------------------------
+
+EMERGE_LIBRARY = "EMerge"
+EMERGE_DISPERSION = "EMerge library"        # frequency dependent data of an emsutil material
+_EMERGE_COLORS = {"EMERGE-DIEL": "#5f9f6f", "EMERGE-COPPER": "#b87333", "EMERGE-PEC": "#d6a45c",
+                  "EMERGE-AIR": "#e6f2ff"}
+_EMERGE_CACHE: dict[str, Material] | None = None
+_EMERGE_FREQ = 1e9          # scalar values shown for frequency dependent properties
+
+
+def _num(v) -> str:
+    v = complex(v)
+    x = v.real if abs(v.imag) <= 1e-12 * max(abs(v.real), 1.0) else v
+    return f"{x:.6g}" if isinstance(x, float) else str(x)
+
+
+def emerge_object(key: str):
+    """The emsutil Material for a library key (None when emsutil or the key is missing)."""
+    try:
+        import emsutil.lib as lib
+        from emsutil.material import Material as EMat
+    except Exception:  # noqa: BLE001
+        return None
+    obj = getattr(lib, key, None)
+    return obj if isinstance(obj, EMat) else None
+
+
+def _from_emsutil(key: str, m) -> Material | None:
+    name = (getattr(m, "name", "") or "").strip()
+    if not name or name.startswith("UnnamedMaterial"):
+        return None
+    props = {}
+    freq_dep = []
+    for attr in ("er", "ur", "tand", "cond"):
+        p = getattr(m, attr)
+        try:
+            if getattr(p, "_freq_dependent", False):
+                freq_dep.append(attr)
+            if getattr(p, "_coord_dependent", False):
+                return None         # coordinate dependent: no scalar equivalent
+            props[attr] = complex(p.scalar(_EMERGE_FREQ))
+        except Exception:  # noqa: BLE001
+            return None
+    pec = name.upper() == "PEC" or props["cond"].real >= 1e20
+    color = getattr(m, "color", "") or ""
+    color = _EMERGE_COLORS.get(color.upper(), color)
+    desc = "EMerge material library"
+    if freq_dep:
+        desc += f" (frequency dependent; values shown at {_EMERGE_FREQ / 1e9:g} GHz)"
+    return Material(name=name, permittivity=_num(props["er"]), permeability=_num(props["ur"]),
+                    conductivity="0" if pec else _num(props["cond"]), loss_tangent=_num(props["tand"]),
+                    color=normalize_color(color, "#8f9fa0"), pec=pec, library=EMERGE_LIBRARY, description=desc,
+                    dispersion=EMERGE_DISPERSION if freq_dep else "None", emsutil_key=key)
+
+
+def emerge_library() -> dict[str, Material]:
+    """EMerge's material library by name (empty when emsutil is not installed). Names already used by
+    Hertzon's own library (in any case: "copper", "air", "pec") keep the Hertzon material."""
+    global _EMERGE_CACHE
+    if _EMERGE_CACHE is not None:
+        return _EMERGE_CACHE
+    out: dict[str, Material] = {}
+    try:
+        import emsutil.lib as lib
+        from emsutil.material import Material as EMat
+        items = [(k, v) for k, v in vars(lib).items() if isinstance(v, EMat) and not k.startswith("_")]
+    except Exception:  # noqa: BLE001
+        items = []
+    taken = {n.lower() for n in SYSTEM_BY_NAME}
+    for key, obj in items:
+        try:
+            m = _from_emsutil(key, obj)
+        except Exception:  # noqa: BLE001
+            m = None
+        if m is not None and m.name.lower() not in taken:
+            taken.add(m.name.lower())
+            out[m.name] = m
+    _EMERGE_CACHE = dict(sorted(out.items(), key=lambda kv: kv[0].lower()))
+    return _EMERGE_CACHE
+
+
+def library_material(name: str) -> Material | None:
+    """A read-only material of Hertzon's system library or of EMerge's library."""
+    m = SYSTEM_BY_NAME.get(name)
+    if m is not None:
+        return m
+    return emerge_library().get(name)
+
+
+def library_materials() -> list[Material]:
+    return list(SYSTEM_BY_NAME.values()) + list(emerge_library().values())
+
 
 def is_conductor(mat: Material, threshold: float = 1e5) -> bool:
     """Solve-inside is off by default for good conductors, as in the reference tool."""
@@ -196,7 +294,7 @@ def is_conductor(mat: Material, threshold: float = 1e5) -> bool:
 
 
 def default_color(name: str) -> str:
-    m = SYSTEM_BY_NAME.get(name)
+    m = library_material(name)
     return m.color if m else "#bebebe"
 
 
