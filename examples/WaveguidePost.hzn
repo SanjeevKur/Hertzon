@@ -215,7 +215,7 @@
         "Enabled": "True",
         "SweepType": "Interpolating",
         "Distribution": "Linear Count",
-        "Start": "5GHz",
+        "Start": "8GHz",
         "Stop": "12GHz",
         "Step": "0.1GHz",
         "Count": "201",

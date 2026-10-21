@@ -105,7 +105,7 @@ Delaunay mesher, curved elements and benchmark results.
 
 | File | What it shows |
 |---|---|
-| `examples/WaveguidePost.hzn` | WR-90 waveguide with an inductive PEC post, wave ports, interpolating sweep 5-12 GHz |
+| `examples/WaveguidePost.hzn` | WR-90 waveguide with an inductive PEC post, wave ports, interpolating sweep 8-12 GHz |
 | `examples/Microstrip.hzn` | 50 Ω microstrip on FR4, lumped ports, thin-conductor trace, **Auto Open - Filter**, sweep 1-6 GHz |
 | `examples/PatchAntenna.hzn` | 2.45 GHz inset-fed patch on FR4, **Auto Open** (radiation boundary), far field, gain pattern |
 | `examples/HairpinFilter.hzn` | Third-order hairpin band-pass filter at 2.45 GHz on RO4350B, copper losses, sweep 2-2.9 GHz and an optimization |

@@ -21,10 +21,13 @@ Every step below uses menu names as they appear in Hertzon. Most commands are on
 
 ## 0. The basics in two minutes
 
-**The window.** On the left, the **Project Manager** shows the project tree (designs, Model, Boundaries,
-Excitations, Analysis, Radiation, Results). Below it is the **Properties** panel of whatever is
-selected. The middle shows the 3D model, and the bottom has the **Message Manager** and the
-**Progress** of running analyses.
+![The Hertzon window](tutorial/window.png)
+*The Hertzon window with the dipole of section 3: ribbon on top, Project Manager and Properties on the left, 3D Modeler tree and 3D view in the middle, messages and progress at the bottom.*
+
+**The window.** On the left, the **Project Manager** shows the project tree (designs, Boundaries,
+Excitations, Analysis, Results, Field Overlays, Radiation). Below it is the **Properties** panel of whatever
+is selected. In the middle, the **3D Modeler** tree lists the objects (solids by material, sheets, lines)
+next to the 3D view. At the bottom are the **Message Manager** and the **Progress** of running analyses.
 
 **Selecting.** Press **O** to select whole objects and **F** to select single faces (E for edges, V for
 vertices). Click to select, Ctrl+click to add. **Edit > Select by Name** finds an object in a large model.
@@ -37,8 +40,9 @@ everything into view.
 
 **Drawing with exact values.** You can draw by clicking on the grid, or type a coordinate into the
 X/Y/Z fields of the status bar and press Enter. For the tutorials it is easiest to draw roughly and then
-type the exact values: select the object, open its creation entry (for example *CreateBox*) in the
-Project Manager and edit Position, sizes and so on in the Properties panel. **Draw > Create Primitive by
+type the exact values: in the **3D Modeler** tree next to the view, expand the object and click its
+creation entry (for example *CreateBox*), then edit Position, sizes and so on in the **Properties** panel.
+Clicking the object itself shows its name, material and display attributes. **Draw > Create Primitive by
 Dialog...** asks for all values at once instead.
 
 **Variables.** Every number accepts expressions with units, such as `a/2`, `lambda0/4` or `2.5mm+t`. Define
@@ -57,7 +61,7 @@ Solution Data...** shows the convergence table, the mesh statistics and the matr
 ## 1. Waveguide with wave ports
 
 **Goal:** S11 and S21 of a WR-90 rectangular waveguide (22.86 × 10.16 mm) with a metal post in the
-middle, from 8 to 12 GHz. A finished version is `examples/WaveguidePost.hzn` (its sweep starts at 5 GHz).
+middle, from 8 to 12 GHz. The finished project is `examples/WaveguidePost.hzn`.
 
 ### 1.1 New design and variables
 
@@ -81,6 +85,9 @@ middle, from 8 to 12 GHz. A finished version is `examples/WaveguidePost.hzn` (it
    `Post` and set **Material** to **pec**.
 3. Select `Waveguide` first, then Ctrl+click `Post`, and choose **Modeler > Boolean > Subtract**. The post
    is cut out of the air box. Its surface becomes a perfect conductor automatically, like the outer walls.
+
+![WR-90 waveguide with post](tutorial/wg_model.png)
+*The air box of the waveguide with the post cut out of it. The two end faces (blue) carry the wave ports.*
 
 ### 1.3 Wave ports
 
@@ -116,6 +123,12 @@ with a 2D eigenmode solve and feeds the 3D problem with it.
    the phase so you can see the wave travel and the post reflect it.
 5. **File > Export Touchstone...** writes `WR90_Post.s2p` for other tools.
 
+![S-parameters of the waveguide post](tutorial/wg_sparams.png)
+*S11 and S21 from 8 to 12 GHz. The thin post acts as a shunt inductance and reflects most of the power, less at higher frequencies.*
+
+![Electric field in the waveguide](tutorial/wg_field.png)
+*Mag E on the plane halfway up the guide (z = b/2) at 10 GHz, seen from the top. The wave comes from port 1 at the bottom, forms a standing wave in front of the post and leaks past it.*
+
 ---
 
 ## 2. Coaxial cable with wave ports
@@ -144,6 +157,9 @@ Z0 = 60 Ω / √εr · ln(b/a). With εr = 2.1 (Teflon) and *a* = 0.5 mm, 50 Ω 
    operation** if you want to keep the inner conductor as a visible PEC object. Without it, the hole's
    surface is a perfect conductor anyway, which gives the same result.
 
+![Coax model](tutorial/coax_model.png)
+*The PTFE cylinder with the PEC inner conductor. The end face (blue) is one of the circular port sheets.*
+
 ### 2.3 Wave ports on the annular end faces
 
 1. **Draw > Circle**: CenterPosition `0,0,0`, Radius `b`, Axis `Z`. Name `Port1`.
@@ -164,7 +180,16 @@ Z0 = 60 Ω / √εr · ln(b/a). With εr = 2.1 (Teflon) and *a* = 0.5 mm, 50 Ω 
 4. Plot `dB(S(1,1))`, `dB(S(2,1))` and `ang_deg(S(2,1))`. A deep S11 over the whole band shows that the
    line is matched to the port, which means its impedance is the 50 Ω you designed.
 
-> **What you should get** (this model solved with Hertzon 0.1.13: 2 adaptive passes, 8 939 tetrahedra,
+![S-parameters of the coax](tutorial/coax_sparams.png)
+*S11 stays below −35 dB from 1 to 10 GHz, S21 is at 0 dB.*
+
+![Vector E in the coax cross-section](tutorial/coax_field.png)
+***Vector E** on the cross-section halfway along the line (plane XY at z = L/2): the radial TEM field between inner and outer conductor, strongest at the inner conductor.*
+
+![Mag E along the coax](tutorial/coax_field2.png)
+***Mag E** on the plane XZ through the axis: a travelling wave without standing-wave pattern, because the line is matched.*
+
+> **What you should get** (this model solved with Hertzon 0.1.15: 2 adaptive passes, 8 939 tetrahedra,
 > about half a minute): S11 stays below −35 dB from 1 to 10 GHz, and S21 is better than −0.03 dB.
 > The phase of S21 falls by 34.9° per GHz. The theoretical value for 20 mm of PTFE line is
 > 360° · √2.1 · 20 mm / c0 = 34.8° per GHz.
@@ -209,7 +234,8 @@ Results are the input impedance (about 73 Ω at resonance), S11, the radiation p
 ### 3.4 Far field, setup and sweep
 
 1. **Simulation > Radiation > Insert Far Field Setup > Infinite Sphere...** (ribbon: **Far Field**):
-   keep θ 0..180°, φ 0..360° in 2° steps. This tells Hertzon where to evaluate the radiation.
+   θ 0..180° and φ 0..360°. Set both steps from the default 10° to `2deg` for smooth pattern plots.
+   This tells Hertzon where to evaluate the radiation.
 2. **Add Solution Setup...**: Frequency `1GHz`, Maximum passes `10`, Maximum Delta S `0.02`.
 3. **Add Frequency Sweep...**: **Interpolating**, Linear Count, `0.7GHz` to `1.3GHz`, Count `121`.
 4. **Validation Check**, **Analyze All**.
@@ -227,7 +253,19 @@ Results are the input impedance (about 73 Ω at resonance), S11, the radiation p
 5. **Results > Mag E** on a cut plane through the dipole, then **Animate**: you can watch the waves
    leave the antenna.
 
-> **What you should get** (this model solved with Hertzon 0.1.13: 3 adaptive passes, 42 152 tetrahedra,
+![S11 of the dipole](tutorial/dipole_s11.png)
+*S11 against the 73 Ω port: resonance at 0.98 GHz with −41 dB.*
+
+![Radiation pattern of the dipole](tutorial/dipole_pattern.png)
+***Radiation Pattern**, dB(GainTotal) over θ at φ = 0°: the figure eight with 2.2 dBi at θ = 90° and deep nulls along the dipole axis.*
+
+![3D pattern on the dipole](tutorial/dipole_3d.png)
+***Overlay 3D Pattern on Model**: the doughnut-shaped gain pattern around the dipole.*
+
+![Field of the dipole](tutorial/dipole_field.png)
+***Mag E** on the XZ plane with a logarithmic scale (Field plot **Attributes**: Log, limits 3 to 3000 V/m). The field is strongest at the rod ends and in the feed gap and falls off with distance, slowest broadside.*
+
+> **What you should get** (this model solved with Hertzon 0.1.15: 3 adaptive passes, 42 152 tetrahedra,
 > about four minutes): the input impedance is 71.7 Ω, almost purely real, at 0.975 GHz. Against the
 > 73 Ω port the deepest S11 is −41 dB at 0.98 GHz. The peak gain is 1.66, that is 2.21 dBi, at θ = 90°.
 > A thin half-wave dipole has 73 Ω and 2.15 dBi in theory.
@@ -267,7 +305,7 @@ That is the whole model: the air region and the PML come from Auto Open.
 
 ### 4.4 Far field and setup
 
-1. **Insert Far Field Setup > Infinite Sphere...**: θ 0..180°, φ 0..360°, 2° steps. RCS is computed
+1. **Insert Far Field Setup > Infinite Sphere...**: θ 0..180°, φ 0..360°, both steps `2deg`. RCS is computed
    on this sphere.
 2. **Add Solution Setup...**:
    * Frequency `1GHz`, Maximum passes `8`.
@@ -289,7 +327,16 @@ That is the whole model: the air region and the PML come from Auto Open.
    standing wave in front of it. In **Simulation > Excitations > Edit Sources...** choose whether the plot
    shows the **Total**, the **Scattered** or the **Incident** field.
 
-> **What you should get** (this model solved with Hertzon 0.1.13: 6 adaptive passes, 7 728 curved
+![Field around the sphere](tutorial/sphere_field.png)
+*Total **Mag E** on the XZ plane. The wave comes from below (k = +z, E along x): a standing wave in front of the sphere, the shadow behind it.*
+
+![Bistatic RCS of the sphere](tutorial/sphere_bistatic.png)
+*Bistatic RCS in dBsm over θ at φ = 0°. The forward scatter at θ = 0° is strongest. θ = 180° is the backscatter, the monostatic RCS.*
+
+![Monostatic RCS over the passes](tutorial/sphere_mono.png)
+***Monostatic RCS** over the adaptive passes: it settles at −13.43 dBsm. The Mie series gives −13.48 dBsm.*
+
+> **What you should get** (this model solved with Hertzon 0.1.15: 6 adaptive passes, 7 728 curved
 > second-order tetrahedra, about half a minute): a monostatic RCS of 0.0455 m² (−13.43 dBsm). The Mie
 > series gives 0.0448 m² (−13.48 dBsm), so the difference is 1.3 % or 0.05 dB.
 > `examples/benchmark/sphere_rcs/mie_pec.py` computes the Mie value for any radius and frequency.
@@ -325,6 +372,9 @@ goal is met.
    solve queue with the normal progress display. Without the live link the assistant works on `.hzn`
    files and solves in the background.
 4. Start a new session of your assistant so it loads the Hertzon server.
+
+![AI Assistants dialog](tutorial/mcp_dialog.png)
+***Tools > AI Assistants (MCP)...**: the live link checkbox and one Register button per assistant.*
 
 ### 5.2 Ask for a simulation
 

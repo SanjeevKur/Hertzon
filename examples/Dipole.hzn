@@ -180,10 +180,10 @@
       "CoordinateSystem": "Global",
       "PhiStart": "0deg",
       "PhiStop": "360deg",
-      "PhiStep": "10deg",
+      "PhiStep": "2deg",
       "ThetaStart": "0deg",
       "ThetaStop": "180deg",
-      "ThetaStep": "10deg"
+      "ThetaStep": "2deg"
      }
     }
    ],
