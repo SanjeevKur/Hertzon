@@ -20,10 +20,12 @@ draw the model, assign boundaries and excitations, add an analysis setup with
 and radiation patterns. The finite-element solver underneath is
 [EMerge](https://github.com/FennisRobert/EMerge) (2nd-order Nédélec FEM, gmsh/OpenCASCADE geometry).
 
-> **Built on EMerge.** All electromagnetic computation in Hertzon is done by
-> [EMerge](https://github.com/FennisRobert/EMerge), the open-source FEM solver developed by
-> **Robert Fennis / Emerge Numerics B.V.** Hertzon adds the graphical workflow around it. Many thanks to
-> Robert Fennis for making EMerge available under the GPL.
+> **Built on EMerge.** The finite-element core of Hertzon (Nédélec formulation, element matrices, ports,
+> boundary conditions, solver interface) is [EMerge](https://github.com/FennisRobert/EMerge), the open-source
+> FEM solver developed by **Robert Fennis / Emerge Numerics B.V.** Many thanks to Robert Fennis for making
+> EMerge available under the GPL. Hertzon adds the graphical workflow and its own solver extensions on top:
+> the hzmesh mesher, adaptive refinement (local Delaunay, bisection, Mmg), a fast error estimator, faster
+> assembly kernels, curved elements, far-field and RCS post-processing, and fixes for large models.
 
 Hertzon is a desktop application (Qt + VTK) built for responsiveness with large models:
 geometry is tessellated incrementally per object, the solver runs in its own process, and

@@ -4621,9 +4621,9 @@ class MainWindow(QMainWindow):
         QMessageBox.about(self, "About Hertzon",
                           f"<b>Hertzon {__version__}</b><br>Open-source 3D full-wave FEM workflow with adaptive meshing."
                           "<br><br>"
-                          "Built on <a href='https://github.com/FennisRobert/EMerge'>EMerge</a>, the FEM solver by "
-                          "Robert Fennis / Emerge Numerics B.V. (GPL v2+), which does all electromagnetic "
-                          "computation.<br>Geometry: gmsh/OpenCASCADE, display: VTK/PyVista.<br><br>"
+                          "Built on <a href='https://github.com/FennisRobert/EMerge'>EMerge</a>, the open-source FEM "
+                          "solver by Robert Fennis / Emerge Numerics B.V. (GPL v2+), which provides the "
+                          "finite-element core.<br>Geometry: gmsh/OpenCASCADE, display: VTK/PyVista.<br><br>"
                           "Licensed under the GNU GPL v2 or later.")
 
     def show_help(self) -> None:
