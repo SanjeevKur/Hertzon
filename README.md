@@ -160,7 +160,7 @@ If you use Hertzon in a publication, please cite it. GitHub shows a ready-made r
 **Cite this repository** on the repository page (from `CITATION.cff`), as APA or BibTeX. Every release
 is archived on Zenodo with its own DOI; the badge at the top links to the latest one. Please also cite
 [EMerge](https://github.com/FennisRobert/EMerge) by Robert Fennis / Emerge Numerics B.V., the solver Hertzon is
-built on.
+built on: DOI [10.5281/zenodo.17025518](https://doi.org/10.5281/zenodo.17025518).
 
 ## License
 
