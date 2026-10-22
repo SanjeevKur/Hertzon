@@ -97,6 +97,7 @@ Legend: **✔** implemented and tested · **◐** implemented with limitations �
 | Interpolating (error tolerance, max solutions) | ✔ (rational fit with adaptive validation points; validation points from a reduced basis of the direct solutions, factorized only when its residual is too large) |
 | Fast (ALPS) | ✔ (one centre factorization, LDLᵀ, reduced basis with residual control per point) |
 | Linear Step / Linear Count / Log Scale / Single Points | ✔ |
+| Save fields (all frequencies) | ✔ Discrete and Fast: field plots, far fields, gain patterns and antenna parameters at every sweep frequency; Interpolating stores S-parameters only |
 
 ## Results and post-processing
 

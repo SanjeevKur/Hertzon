@@ -246,7 +246,12 @@ Results are the input impedance (about 73 Ω at resonance), S11, the radiation p
    This tells Hertzon where to evaluate the radiation.
 2. **Add Solution Setup...**: Frequency `1GHz`, Maximum passes `10`, Maximum Delta S `0.02`.
 3. **Add Frequency Sweep...**: **Interpolating**, Linear Count, `0.7GHz` to `1.3GHz`, Count `121`.
-4. **Validation Check**, **Analyze All**.
+   This is enough for S-parameters and impedance over frequency.
+4. For gain, patterns and antenna parameters **over frequency**, add a second sweep: **Fast**, Linear
+   Count, `0.7GHz` to `1.3GHz`, Count `7`, with **Save fields (all frequencies)**. Far fields are computed
+   from the stored fields, so only a Discrete or Fast sweep with Save fields has them at every frequency;
+   an Interpolating sweep has S-parameters only, and the far field reports then offer LastAdaptive.
+5. **Validation Check**, **Analyze All**.
 
 ### 3.5 Results
 
@@ -254,10 +259,13 @@ Results are the input impedance (about 73 Ω at resonance), S11, the radiation p
    `dB(S(1,1))` shows the resonance. Choose the category **Z Parameter** for `re(Z(1,1))` and
    `im(Z(1,1))`, the input impedance. Resonance is where the imaginary part crosses zero.
 2. **Create Far Fields Report > Radiation Pattern**: `dB(GainTotal)` over θ at φ = 0° is the
-   familiar figure eight. **3D Polar Plot** shows the doughnut.
+   familiar figure eight. **3D Polar Plot** shows the doughnut. With the solution **Setup1 : Sweep** of
+   the Fast sweep, **Frequency** picks the pattern at each sweep frequency. Right-click > **Marker** sets
+   markers, **Beamwidth / Side Lobes...** gives the opening angle (-3 dB) and the side lobe level;
+   **Create Far Fields Report > Rectangular Plot** shows the same cut over the angle.
 3. **Results > Overlay 3D Pattern on Model** puts the 3D pattern onto the dipole.
 4. **Create Antenna Parameters Report > Data Table**: peak gain, directivity, radiated power and
-   radiation efficiency.
+   radiation efficiency; with the Fast sweep as solution over frequency (**Rectangular Plot**).
 5. **Results > Mag E** on a cut plane through the dipole, then **Animate**: you can watch the waves
    leave the antenna.
 
