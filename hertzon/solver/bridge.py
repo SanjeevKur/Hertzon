@@ -1008,9 +1008,13 @@ class Bridge:
                     tet_obj[own] = len(names)
                     tet_prio[own] = prio
                     names.append(name.split(" (")[0] if name.startswith("Region (") else name)
-                    stats.append({"object": name, **tet_statistics(nodes, tets[ids])})
+                    stats.append({"object": name})
                 except Exception:  # noqa: BLE001
                     pass
+            # statistics over the tetrahedra each object finally owns (overlapped ones counted once)
+            for i, st in enumerate(stats):
+                own = tets[tet_obj == i]
+                st.update(tet_statistics(nodes, own) if len(own) else {"tets": 0})
             self.store.save_npz("mesh.npz", nodes=nodes.astype(np.float64), tets=tets.astype(np.int32),
                                 tet_obj=tet_obj, obj_names=np.array(names or [""], dtype=str),
                                 **self.curved_mesh())
