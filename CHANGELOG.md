@@ -3,7 +3,7 @@
 All notable changes of each release. The release workflow copies the section of the released version into
 the GitHub release notes.
 
-## Unreleased
+## 0.1.22 (2026-10-22)
 
 ### Changed
 - **Solver core EMerge 3.0.0a25** (was 2.8.9): matrix assembly in EMerge's Rust core, about 4x faster
@@ -16,6 +16,15 @@ the GitHub release notes.
 - **EMerge material library** (emsutil): 255 more materials (dielectrics, metals, semiconductors, foams,
   solder masks, liquids) in the Materials dialog, with a "Libraries" filter; frequency dependent data is
   used by the solver.
+- **Markers in the polar Radiation Pattern**: double-click or right-click > Marker (max/min, next max/min,
+  delta), drag a marker around the circle, marker table under the plot.
+- **Beamwidth / side lobes** (right-click > Marker): opening angle of the main lobe at a level below the
+  maximum (default -3 dB, e.g. -10 dB), its edges and the side lobe level, in the polar and the rectangular
+  pattern.
+- **Create Far Fields Report > Rectangular Plot**: the pattern cut over the angle as its own menu entry.
+- **Save fields** of a sweep also for Fast sweeps: far fields, gain patterns and antenna parameters over
+  frequency. Far field and antenna reports name the solved sweeps without fields (Interpolating, or Save
+  fields off) instead of leaving them out silently.
 
 ### Fixed
 - Plane wave excitation on EMerge 3 (its new default angle convention sent the wave in the wrong direction).

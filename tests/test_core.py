@@ -509,7 +509,17 @@ def test_radiation_pattern_of_a_sweep_frequency_and_rectangular(tmp_path):
     w.ff_freq.setCurrentIndex(1)
     assert rep.props["freq"] == "2000000000" and "2 GHz" in w.info.text()
     assert w._ff()["_Prad"][0] == pytest.approx(2.0)
-    assert not w._xy_plot()
+    # polar plot: markers are angles in deg on the polar axes, the beamwidth rows go to the marker table
+    assert w._polar() and w.fig.axes[0].name == "polar"
+    x, y = w._trace_xy("dB(GainTotal)")
+    w.marker_at("max")
+    assert w.markers == [pytest.approx(x[np.argmax(y)])]
+    assert w._from_ax(np.radians(350)) == pytest.approx(-10)
+    rep.props.update(bandwidth="dB(GainTotal)", bw_level="-3")
+    w.refresh()
+    rows = [w.mtable.item(r, 0).text() for r in range(w.mtable.rowCount())]
+    assert rows[0] == "m1" and "BW @ -3 dB" in rows
+    w._clear_markers()
     w.ff_plot.setCurrentText("Rectangular")
     assert rep.props["plot"] == "Rectangular" and w._xy_plot()
     ax = w.fig.axes[0]
@@ -519,3 +529,21 @@ def test_radiation_pattern_of_a_sweep_frequency_and_rectangular(tmp_path):
     w.marker_at("max")
     assert len(w.markers) == 1 and w.markers[0] == pytest.approx(x[np.argmax(y)])
     assert w.mtable.isVisibleTo(w) and w.mtable.rowCount() == 1
+
+
+def test_beamwidth_and_side_lobes():
+    from hertzon.gui.reports import beamwidth
+    x = np.linspace(-180, 180, 361)                       # Phi cut over the full circle
+    y = 10 * np.log10(np.maximum(np.cos(np.radians(x) / 2) ** 4, 1e-9))
+    b = beamwidth(x, y, -3)
+    half = 2 * np.degrees(np.arccos(0.5 ** 0.25))         # cos^4(t/2) = 1/2
+    assert b["width"] == pytest.approx(2 * half, abs=0.5) and b["lo"] == pytest.approx(-half, abs=0.3)
+    assert not b["open"] and "sll" not in b
+    x = np.linspace(0, 360, 361)                           # Theta cut 0..360 with the beam across 0/360
+    b = beamwidth(x, 10 * np.log10(np.maximum(np.cos(np.radians(x) / 2) ** 4, 1e-9)), -3)
+    assert b["width"] == pytest.approx(2 * half, abs=0.5) and b["max_at"] == pytest.approx(0)
+    assert b["lo"] == pytest.approx(360 - half, abs=0.3) and b["hi"] == pytest.approx(half, abs=0.3)
+    x = np.linspace(-90, 90, 181)                          # uniform array: first side lobe -13.26 dB
+    u = 4 * np.sin(np.radians(x))
+    b = beamwidth(x, 20 * np.log10(np.abs(np.sinc(u)) + 1e-12), -3)
+    assert b["sll"] == pytest.approx(-13.26, abs=0.1) and abs(b["sll_at"]) == pytest.approx(21, abs=1)

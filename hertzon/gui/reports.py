@@ -134,6 +134,18 @@ def ff_solution_list(doc) -> list[str]:
     return out
 
 
+def sweeps_without_fields(doc) -> list[str]:
+    """Solved sweeps without far field surface fields (Interpolating, or Save fields off)."""
+    out = []
+    if not doc.project.path:
+        return out
+    for s in doc.design.setups:
+        st = ResultStore(result_dir(doc, s.name))
+        out += [f"{s.name} : {sol}" for sol in st.solutions()
+                if sol != "LastAdaptive" and not (st.folder / f"huygens_{sol}.npz").exists()]
+    return out
+
+
 def ff_frequencies(ff: dict) -> list[tuple[int, float]]:
     """(index k, frequency in Hz) of the far fields of a solution, sorted by frequency."""
     ks = {int(k.split("_")[1]) for k in ff if k.startswith("freq_")}
@@ -291,6 +303,55 @@ def bandwidth(x: np.ndarray, y: np.ndarray, level: float) -> tuple[float, float,
     xl = cross(lo - 1, lo) if lo > 0 else x[0]
     xh = cross(hi, hi + 1) if hi < len(y) - 1 else x[-1]
     return float(xl), float(xh), float(x[k])
+
+
+def beamwidth(x: np.ndarray, y: np.ndarray, rel: float) -> dict | None:
+    """Main lobe of a pattern cut y(x) (x in deg): the angles where y falls rel dB (e.g. -3) below the
+    maximum, the width between them and the side lobe level (highest other peak relative to the maximum).
+    A cut over the full circle wraps around."""
+    x, y = np.asarray(x, float), np.asarray(y, float)
+    ok = np.isfinite(y)
+    x, y = x[ok], y[ok]
+    if len(y) < 3:
+        return None
+    circ = x[-1] - x[0] >= 360 - 1e-6
+    if circ:                                    # the last point repeats the first one: unroll three turns
+        x, y = x[:-1], y[:-1]
+        n = len(y)
+        x, y, k = np.r_[x - 360, x, x + 360], np.tile(y, 3), int(np.argmax(y)) + n
+    else:
+        n, k = len(y), int(np.argmax(y))
+    level = y[k] + rel
+
+    def edge(step: int) -> tuple[float, bool, int]:
+        """(angle where the lobe falls to level, found, last index of the lobe down to its first minimum)."""
+        i, found, lobe = k, None, None
+        for _ in range(n - 1):
+            j = i + step
+            if not 0 <= j < len(y):
+                break
+            if found is None and y[j] < level:
+                found = x[i] + (level - y[i]) * (x[j] - x[i]) / (y[j] - y[i])
+            if lobe is None and y[j] > y[i]:
+                lobe = i
+            if found is not None and lobe is not None:
+                break
+            i = j
+        return (x[i] if found is None else found), found is not None, (i if lobe is None else lobe)
+
+    lo, ok_lo, l0 = edge(-1)
+    hi, ok_hi, l1 = edge(1)
+    wrap = (lambda v: (v + 180) % 360 - 180) if circ and x[n] < 0 <= x[2 * n - 1] else \
+        (lambda v: v % 360) if circ else (lambda v: v)
+    out = {"lo": float(wrap(lo)), "hi": float(wrap(hi)), "width": float(hi - lo), "max_at": float(wrap(x[k])),
+           "max": float(y[k]), "open": not (ok_lo and ok_hi)}
+    # side lobes: the highest peak outside the main lobe (between its first minima)
+    rng = range(k - n + 1, k + n) if circ else range(n)
+    side = [i for i in rng if 0 < i < len(y) - 1 and not l0 <= i <= l1 and y[i] >= y[i - 1] and y[i] > y[i + 1]]
+    if side:
+        j = max(side, key=lambda i: y[i])
+        out["sll"], out["sll_at"] = float(y[j] - y[k]), float(wrap(x[j]))
+    return out
 
 
 def _templates() -> dict:
@@ -501,6 +562,14 @@ class ReportWindow(QWidget):
         self.info = QLabel()
         self.info.setWordWrap(True)
         ll.addWidget(self.info)
+        if report.kind in ("Radiation Pattern", "3D Polar Plot") + ANTENNA_KINDS:
+            miss = sweeps_without_fields(doc)
+            if miss:
+                hint = QLabel(f"Not in the list (no fields saved): {', '.join(miss)}. Far fields over frequency "
+                              "need a Discrete or Fast sweep with 'Save fields (all frequencies)'.")
+                hint.setWordWrap(True)
+                hint.setStyleSheet("color:#7a6a00")
+                ll.addWidget(hint)
         split.addWidget(left)
         right = QWidget()
         rl = QVBoxLayout(right)
@@ -744,7 +813,12 @@ class ReportWindow(QWidget):
             return None
         best, bd = None, px
         for i, mk in enumerate(self.markers):
-            d = abs(ev.inaxes.transData.transform((mk, 0.0))[0] - ev.x)
+            if self._polar():               # angle on the polar axes, compared in deg (3 deg ~ a few pixels)
+                if ev.xdata is None:
+                    return None
+                d = abs((self._from_ax(ev.xdata) - mk + 180) % 360 - 180) * px / 3
+            else:
+                d = abs(ev.inaxes.transData.transform((mk, 0.0))[0] - ev.x)
             if d <= bd:
                 best, bd = i, d
         return best
@@ -770,7 +844,7 @@ class ReportWindow(QWidget):
             return
         if ev.inaxes is None or ev.xdata is None:
             return
-        self.markers[i] = float(ev.xdata)
+        self.markers[i] = self._from_ax(ev.xdata)
         ln = getattr(self, "_drag_line", None)
         if ln is not None:
             ln.set_xdata([ev.xdata, ev.xdata])
@@ -801,12 +875,12 @@ class ReportWindow(QWidget):
         if ev.button == 1 and near is not None and not ev.dblclick:
             # drag marker m(n) along the x axis; Del removes the selected marker
             self._drag = self._sel_marker = near
-            self._drag_line = ev.inaxes.axvline(self.markers[near], color="#c0392b", lw=1.2)
+            self._drag_line = ev.inaxes.axvline(self._to_ax(self.markers[near]), color="#c0392b", lw=1.2)
             self.canvas.draw_idle()
             return
         if ev.inaxes is None or not self._xy_plot() or ev.button != 1 or ev.dblclick is False:
             return
-        self.markers.append(float(ev.xdata))
+        self.markers.append(self._from_ax(ev.xdata))
         self.report.props["markers"] = ",".join(f"{m:g}" for m in self.markers)
         self.changed.emit()
         self.refresh()
@@ -999,7 +1073,23 @@ class ReportWindow(QWidget):
 
     def _xy_plot(self) -> bool:
         """Line plot over frequency, passes or angle: markers, axis and trace properties."""
-        return self.report.kind in ("Rectangular", "Monostatic RCS", "Antenna Parameters") or self._ff_rect()
+        return self.report.kind in ("Rectangular", "Monostatic RCS", "Antenna Parameters", "Radiation Pattern")
+
+    def _polar(self) -> bool:
+        """Radiation Pattern on polar axes: markers are angles in deg, the axes work in rad."""
+        return self.report.kind == "Radiation Pattern" and not self._ff_rect()
+
+    def _to_ax(self, v):
+        return np.radians(v) if self._polar() else v
+
+    def _from_ax(self, x: float) -> float:
+        """Marker position (deg on the cut's angle range) of an axes x value."""
+        if not self._polar():
+            return float(x)
+        d = float(np.degrees(x)) % 360
+        if self.report.props.get("cut", "Phi") == "Phi" and d > 180:   # the Phi cut runs over -180..180
+            d -= 360
+        return d
 
     def _ff_rect(self) -> bool:
         return self.report.kind == "Radiation Pattern" and self.report.props.get("plot") == "Rectangular"
@@ -1013,14 +1103,18 @@ class ReportWindow(QWidget):
             mk.addAction("Next Max", lambda: self.marker_at("next_max"))
             mk.addAction("Next Min", lambda: self.marker_at("next_min"))
             if ev.xdata is not None:
-                mk.addAction("Add Marker Here", lambda x=float(ev.xdata): self._add_marker(x))
+                mk.addAction("Add Marker Here", lambda x=self._from_ax(ev.xdata): self._add_marker(x))
             a = mk.addAction("Delta Markers (relative to m1)")
             a.setCheckable(True)
             a.setChecked(self.report.props.get("delta", "False") == "True")
             a.toggled.connect(lambda on: self._set_prop("delta", str(on)))
-            mk.addAction("Bandwidth...", self.bandwidth_marker)
+            if self.report.kind == "Radiation Pattern":
+                mk.addAction("Beamwidth / Side Lobes...", self.bandwidth_marker)
+            else:
+                mk.addAction("Bandwidth...", self.bandwidth_marker)
             mk.addSeparator()
             mk.addAction("Clear All Markers", self._clear_markers)
+        if self._xy_plot() and not self._polar():
             m.addAction("Axis Properties...", self.axis_properties)
             m.addAction("Trace Properties...", self.trace_properties)
         m.addSeparator()
@@ -1069,8 +1163,13 @@ class ReportWindow(QWidget):
         tr = self._selected_trace()
         if tr is None:
             return
-        lvl, ok = QInputDialog.getDouble(self, "Bandwidth", f"Level for {split_trace(tr)[0]}:",
-                                         float(self.report.props.get("bw_level", "-10")), -1e9, 1e9, 3)
+        if self.report.kind == "Radiation Pattern":
+            # beamwidth (opening angle) of the main lobe: the level below the maximum, -3 dB = half power
+            lvl, ok = QInputDialog.getDouble(self, "Beamwidth", f"Level below the maximum of {tr} (dB):",
+                                             float(self.report.props.get("bw_level", "-3")), -1e3, 0, 2)
+        else:
+            lvl, ok = QInputDialog.getDouble(self, "Bandwidth", f"Level for {split_trace(tr)[0]}:",
+                                             float(self.report.props.get("bw_level", "-10")), -1e9, 1e9, 3)
         if not ok:
             return
         self.report.props["bandwidth"] = tr
@@ -1213,6 +1312,7 @@ class ReportWindow(QWidget):
         (trace, x, y, axes, colour), with the marker table."""
         p = self.report.props
         delta = p.get("delta", "False") == "True"
+        A = self._to_ax
         rows = []
         for n, mk in enumerate(self.markers, start=1):
             row = [f"m{n}", f"{mk:.6g}{unit}"]
@@ -1221,12 +1321,12 @@ class ReportWindow(QWidget):
                     row.append("")
                     continue
                 yi = float(np.interp(mk, xs, y))
-                target.plot([mk], [yi], "v", color=col, ms=7)
+                target.plot([A(mk)], [yi], "v", color=col, ms=7)
                 row.append(f"{yi:.5g}")
                 if tr == curves[0][0]:
-                    target.annotate(f"m{n}", (mk, yi), textcoords="offset points", xytext=(4, 6), fontsize=8,
+                    target.annotate(f"m{n}", (A(mk), yi), textcoords="offset points", xytext=(4, 6), fontsize=8,
                                     bbox=dict(boxstyle="round", fc="#ffffe0", ec="#999"))
-            ax.axvline(mk, color="#888", lw=0.6, ls=":")
+            ax.axvline(A(mk), color="#888", lw=0.6, ls=":")
             rows.append(row)
         if delta and len(rows) > 1:
             base = self.markers[0]
@@ -1236,7 +1336,11 @@ class ReportWindow(QWidget):
                     row.append(f"{np.interp(mk, xs, y) - np.interp(base, xs, y):.5g}" if len(xs) else "")
                 rows.append(row)
         bw = p.get("bandwidth")
-        if bw:
+        if bw and self.report.kind == "Radiation Pattern":
+            for tr, xs, y, target, col in curves:
+                if tr == bw:
+                    rows += self._beam_rows(tr, xs, y, target, float(p.get("bw_level", "-3")))
+        elif bw:
             for tr, xs, y, target, col in curves:
                 if tr != bw:
                     continue
@@ -1255,6 +1359,26 @@ class ReportWindow(QWidget):
         if rows and len(rows[-1]) != len(hdr):
             hdr = hdr + [""] * max(0, max(len(r) for r in rows) - len(hdr))
         self._update_marker_table(rows, hdr)
+
+    def _beam_rows(self, tr: str, xs, y, ax, rel: float) -> list[list[str]]:
+        """Beamwidth (opening angle) and side lobe level of one pattern trace, drawn and as table rows."""
+        b = beamwidth(xs, y, rel)
+        if b is None:
+            return []
+        A = self._to_ax
+        lvl = b["max"] + rel
+        if self._polar():
+            ax.plot(np.linspace(0, 2 * np.pi, 361), np.full(361, lvl), color="#c0392b", lw=0.8, ls="--")
+        else:
+            ax.axhline(lvl, color="#c0392b", lw=0.8, ls="--")
+        for a in (b["lo"], b["hi"]):
+            ax.axvline(A(a), color="#c0392b", lw=0.9)
+        rows = [[f"BW @ {rel:g} dB", f"{b['width']:.4g} deg" + ("  (lobe reaches the end of the cut)"
+                                                               if b["open"] else ""),
+                 f"{b['lo']:.4g} .. {b['hi']:.4g} deg", f"max {b['max']:.4g} at {b['max_at']:.4g} deg"]]
+        if "sll" in b:
+            rows.append(["Side lobe", f"{b['sll']:.4g} dB", f"at {b['sll_at']:.4g} deg", tr])
+        return rows
 
     def _draw_rect(self) -> None:
         st, sol, data = self._data()
@@ -1570,15 +1694,12 @@ class ReportWindow(QWidget):
             if name not in q:
                 continue
             ang, yy = self._ff_cut(q, tr)
-            if rect:
-                x = np.degrees(ang)
-                line, = ax.plot(x, yy, label=tr)
-                curves.append((tr, x, yy, ax, line.get_color()))
-            else:
-                ax.plot(ang, yy, label=tr)
+            x = np.degrees(ang)
+            line, = ax.plot(x if rect else ang, yy, label=tr)
+            curves.append((tr, x, yy, ax, line.get_color()))
+        other = "Theta" if cut == "Phi" else "Phi"
+        self._draw_markers(ax, curves, " deg", f"{other} [deg]")
         if rect:
-            other = "Theta" if cut == "Phi" else "Phi"
-            self._draw_markers(ax, curves, " deg", f"{other} [deg]")
             ax.set_xlabel(f"{other} [deg]")
             self._apply_axes(ax, None)
             if self.report.props.get("xlabel"):
@@ -1586,14 +1707,12 @@ class ReportWindow(QWidget):
             if self.report.props.get("ylabel"):
                 ax.set_ylabel(self.report.props["ylabel"])
             ax.grid(True, alpha=0.4)
-        else:
-            self.mtable.setVisible(False)
         ax.legend(loc="best" if rect else "lower right", fontsize=8)
         ax.set_title(f"{self.report.name}: {cut} = {val:g} deg, {ftxt}", fontsize=10)
         self.canvas.draw_idle()
         self.info.setText(f"{ftxt}: radiated power {q['_Prad'][0]:.4g} W ({q.get('_Pinc', [1.0])[0]:.4g} W "
-                          "incident, Edit Sources)" + (". Double-click: marker. Right-click: markers, axes."
-                                                       if rect else ""))
+                          "incident, Edit Sources). Double-click: marker. Right-click: markers, beamwidth" +
+                          (", axes." if rect else "."))
 
     def export(self) -> None:
         path, _ = QFileDialog.getSaveFileName(self, "Export Data", f"{self.report.name}.csv",
