@@ -417,10 +417,10 @@ the README's *No warranty* section.
 
 ## Where to go next
 
-* `examples/` has twelve finished projects, from a microstrip line to a Rotman lens. See the table in the
+* `examples/` has thirteen finished projects, from a microstrip line to a Rotman lens. See the table in the
   [README](../README.md#examples).
 * **Tools > Antenna Design > Rectangular Patch...** and **Tools > Filter Design > Tapped Hairpin...** create
   complete, parametrized designs with setup, sweep and optimization from a few specifications.
 * [MESHER.md](MESHER.md) explains how adaptive meshing works. [FEATURE_MATRIX.md](FEATURE_MATRIX.md)
   shows what is implemented.
-* **File > Export EMerge Python Script** turns any design into a stand-alone EMerge script.
+* **File > Export > EMerge Python Script** turns any design into a stand-alone EMerge script.

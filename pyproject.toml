@@ -22,7 +22,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-test = ["pytest"]
+test = ["pytest", "gerbonara", "pygerber", "pillow"]   # Gerber export is read back with independent parsers
 
 [project.scripts]
 hertzon = "hertzon.gui.app:main"

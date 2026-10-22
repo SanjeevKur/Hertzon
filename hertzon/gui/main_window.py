@@ -237,9 +237,12 @@ class MainWindow(QMainWindow):
         m.addAction("New Window", self.new_window)
         m.addSeparator()
         m.addAction(self.a_import)
-        m.addAction("Export Geometry (STEP)...", self.export_step)
-        m.addAction("Export Touchstone...", self.export_touchstone)
-        m.addAction("Export EMerge Python Script...", self.export_script)
+        ex = m.addMenu("Export")
+        ex.addAction("Geometry (STEP)...", self.export_step)
+        ex.addAction("Touchstone...", self.export_touchstone)
+        ex.addAction("EMerge Python Script...", self.export_script)
+        ex.addSeparator()
+        ex.addAction("Gerber...", self.export_gerber)
         m.addSeparator()
         m.addAction(self.a_exit)
 
@@ -469,6 +472,7 @@ class MainWindow(QMainWindow):
         g.small("Import Geometry", "import", self.import_geometry)
         g.small("Export STEP", "export", self.export_step)
         g.small("Export Script", "export", self.export_script)
+        g.small("Export Gerber", "export", self.export_gerber)
         g = pg.group("Tools")
         g.large("Options", "options", self.options)
         g.large("Materials", "material", self.edit_materials)
@@ -1864,6 +1868,11 @@ class MainWindow(QMainWindow):
         K.build_design(self.des, self.doc.evaluator())
         gmsh.write(path)
         self.msgs.add("info", f"Exported {path}")
+
+    def export_gerber(self) -> None:
+        """File > Export > Gerber: copper layers (Gerber X2), board outline and Excellon drill files."""
+        from .gerber_dialog import GerberExportDialog
+        GerberExportDialog(self, self.doc).exec()
 
     def export_touchstone(self, sol: str | None = None) -> None:
         sols = [x for x in solution_list(self.doc) if "AdaptivePasses" not in x]

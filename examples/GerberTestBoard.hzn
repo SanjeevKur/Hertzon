@@ -1,0 +1,626 @@
+{
+ "name": "GerberTestBoard",
+ "designs": [
+  {
+   "name": "TwoLayerBoard",
+   "units": "mm",
+   "settings": {
+    "SolutionType": "Modal",
+    "AutoOpen": "Off",
+    "AutoOpenBoundary": "Auto",
+    "AutoOpenPadding": "",
+    "FilterAirMargin": "12mm"
+   },
+   "variables": {},
+   "objects": [
+    {
+     "name": "Substrate",
+     "history": [
+      {
+       "kind": "CreateBox",
+       "props": {
+        "Position": "0,0,0",
+        "XSize": "40",
+        "YSize": "30",
+        "ZSize": "1.6"
+       },
+       "suppressed": false
+      },
+      {
+       "kind": "Subtract",
+       "props": {
+        "Tools": "MountHole,Slot",
+        "KeepOriginals": "False"
+       },
+       "suppressed": false
+      }
+     ],
+     "material": "FR4_epoxy",
+     "solve_inside": true,
+     "model": true,
+     "color": "#5fb3a6",
+     "transparency": 0.0,
+     "wireframe": false,
+     "visible": true,
+     "consumed_by": null,
+     "group": "",
+     "orientation": "Global"
+    },
+    {
+     "name": "MountHole",
+     "history": [
+      {
+       "kind": "CreateCylinder",
+       "props": {
+        "CenterPosition": "5,5,0",
+        "Axis": "Z",
+        "Radius": "1.6",
+        "Height": "1.6",
+        "NumberOfSegments": "0"
+       },
+       "suppressed": false
+      }
+     ],
+     "material": "vacuum",
+     "solve_inside": true,
+     "model": true,
+     "color": "#e6f2ff",
+     "transparency": 0.0,
+     "wireframe": false,
+     "visible": true,
+     "consumed_by": "Substrate",
+     "group": "",
+     "orientation": "Global"
+    },
+    {
+     "name": "Slot",
+     "history": [
+      {
+       "kind": "CreateBox",
+       "props": {
+        "Position": "34,4,0",
+        "XSize": "2",
+        "YSize": "6",
+        "ZSize": "1.6"
+       },
+       "suppressed": false
+      }
+     ],
+     "material": "vacuum",
+     "solve_inside": true,
+     "model": true,
+     "color": "#e6f2ff",
+     "transparency": 0.0,
+     "wireframe": false,
+     "visible": true,
+     "consumed_by": "Substrate",
+     "group": "",
+     "orientation": "Global"
+    },
+    {
+     "name": "Rect",
+     "history": [
+      {
+       "kind": "CreateRectangle",
+       "props": {
+        "Position": "2,20,1.6",
+        "Axis": "Z",
+        "XSize": "10",
+        "YSize": "5",
+        "ZSize": "1"
+       },
+       "suppressed": false
+      }
+     ],
+     "material": "vacuum",
+     "solve_inside": true,
+     "model": true,
+     "color": "#8080ff",
+     "transparency": 0.0,
+     "wireframe": false,
+     "visible": true,
+     "consumed_by": null,
+     "group": "",
+     "orientation": "Global"
+    },
+    {
+     "name": "Disk",
+     "history": [
+      {
+       "kind": "CreateCircle",
+       "props": {
+        "CenterPosition": "20,22,1.6",
+        "Axis": "Z",
+        "Radius": "3",
+        "NumberOfSegments": "0"
+       },
+       "suppressed": false
+      }
+     ],
+     "material": "vacuum",
+     "solve_inside": true,
+     "model": true,
+     "color": "#8080ff",
+     "transparency": 0.0,
+     "wireframe": false,
+     "visible": true,
+     "consumed_by": null,
+     "group": "",
+     "orientation": "Global"
+    },
+    {
+     "name": "Plane",
+     "history": [
+      {
+       "kind": "CreateRectangle",
+       "props": {
+        "Position": "14,4,1.6",
+        "Axis": "Z",
+        "XSize": "12",
+        "YSize": "10",
+        "ZSize": "1"
+       },
+       "suppressed": false
+      },
+      {
+       "kind": "Subtract",
+       "props": {
+        "Tools": "Cutout",
+        "KeepOriginals": "False"
+       },
+       "suppressed": false
+      }
+     ],
+     "material": "vacuum",
+     "solve_inside": true,
+     "model": true,
+     "color": "#8080ff",
+     "transparency": 0.0,
+     "wireframe": false,
+     "visible": true,
+     "consumed_by": null,
+     "group": "",
+     "orientation": "Global"
+    },
+    {
+     "name": "Cutout",
+     "history": [
+      {
+       "kind": "CreateCircle",
+       "props": {
+        "CenterPosition": "20,9,1.6",
+        "Axis": "Z",
+        "Radius": "2",
+        "NumberOfSegments": "0"
+       },
+       "suppressed": false
+      }
+     ],
+     "material": "vacuum",
+     "solve_inside": true,
+     "model": true,
+     "color": "#8080ff",
+     "transparency": 0.0,
+     "wireframe": false,
+     "visible": true,
+     "consumed_by": "Plane",
+     "group": "",
+     "orientation": "Global"
+    },
+    {
+     "name": "Island",
+     "history": [
+      {
+       "kind": "CreateCircle",
+       "props": {
+        "CenterPosition": "20,9,1.6",
+        "Axis": "Z",
+        "Radius": "1",
+        "NumberOfSegments": "0"
+       },
+       "suppressed": false
+      }
+     ],
+     "material": "vacuum",
+     "solve_inside": true,
+     "model": true,
+     "color": "#8080ff",
+     "transparency": 0.0,
+     "wireframe": false,
+     "visible": true,
+     "consumed_by": null,
+     "group": "",
+     "orientation": "Global"
+    },
+    {
+     "name": "OverlapA",
+     "history": [
+      {
+       "kind": "CreateRectangle",
+       "props": {
+        "Position": "30,18,1.6",
+        "Axis": "Z",
+        "XSize": "6",
+        "YSize": "6",
+        "ZSize": "1"
+       },
+       "suppressed": false
+      }
+     ],
+     "material": "vacuum",
+     "solve_inside": true,
+     "model": true,
+     "color": "#8080ff",
+     "transparency": 0.0,
+     "wireframe": false,
+     "visible": true,
+     "consumed_by": null,
+     "group": "",
+     "orientation": "Global"
+    },
+    {
+     "name": "OverlapB",
+     "history": [
+      {
+       "kind": "CreateCircle",
+       "props": {
+        "CenterPosition": "36,21,1.6",
+        "Axis": "Z",
+        "Radius": "3",
+        "NumberOfSegments": "0"
+       },
+       "suppressed": false
+      }
+     ],
+     "material": "vacuum",
+     "solve_inside": true,
+     "model": true,
+     "color": "#8080ff",
+     "transparency": 0.0,
+     "wireframe": false,
+     "visible": true,
+     "consumed_by": null,
+     "group": "",
+     "orientation": "Global"
+    },
+    {
+     "name": "Oval",
+     "history": [
+      {
+       "kind": "CreateEllipse",
+       "props": {
+        "CenterPosition": "7,11,1.6",
+        "Axis": "Z",
+        "MajorRadius": "2",
+        "Ratio": "0.5"
+       },
+       "suppressed": false
+      }
+     ],
+     "material": "vacuum",
+     "solve_inside": true,
+     "model": true,
+     "color": "#8080ff",
+     "transparency": 0.0,
+     "wireframe": false,
+     "visible": true,
+     "consumed_by": null,
+     "group": "",
+     "orientation": "Global"
+    },
+    {
+     "name": "PadTop",
+     "history": [
+      {
+       "kind": "CreateCircle",
+       "props": {
+        "CenterPosition": "28,6,1.6",
+        "Axis": "Z",
+        "Radius": "0.8",
+        "NumberOfSegments": "0"
+       },
+       "suppressed": false
+      }
+     ],
+     "material": "vacuum",
+     "solve_inside": true,
+     "model": true,
+     "color": "#8080ff",
+     "transparency": 0.0,
+     "wireframe": false,
+     "visible": true,
+     "consumed_by": null,
+     "group": "",
+     "orientation": "Global"
+    },
+    {
+     "name": "Trace",
+     "history": [
+      {
+       "kind": "CreateBox",
+       "props": {
+        "Position": "2,15,1.6",
+        "XSize": "15",
+        "YSize": "1",
+        "ZSize": "0.035"
+       },
+       "suppressed": false
+      }
+     ],
+     "material": "copper",
+     "solve_inside": true,
+     "model": true,
+     "color": "#d98c4a",
+     "transparency": 0.0,
+     "wireframe": false,
+     "visible": true,
+     "consumed_by": null,
+     "group": "",
+     "orientation": "Global"
+    },
+    {
+     "name": "Ground",
+     "history": [
+      {
+       "kind": "CreateRectangle",
+       "props": {
+        "Position": "0,0,0",
+        "Axis": "Z",
+        "XSize": "40",
+        "YSize": "30",
+        "ZSize": "1"
+       },
+       "suppressed": false
+      },
+      {
+       "kind": "Subtract",
+       "props": {
+        "Tools": "GndClear,GndSlot",
+        "KeepOriginals": "False"
+       },
+       "suppressed": false
+      }
+     ],
+     "material": "vacuum",
+     "solve_inside": true,
+     "model": true,
+     "color": "#8080ff",
+     "transparency": 0.0,
+     "wireframe": false,
+     "visible": true,
+     "consumed_by": null,
+     "group": "",
+     "orientation": "Global"
+    },
+    {
+     "name": "GndClear",
+     "history": [
+      {
+       "kind": "CreateCircle",
+       "props": {
+        "CenterPosition": "5,5,0",
+        "Axis": "Z",
+        "Radius": "2.5",
+        "NumberOfSegments": "0"
+       },
+       "suppressed": false
+      }
+     ],
+     "material": "vacuum",
+     "solve_inside": true,
+     "model": true,
+     "color": "#8080ff",
+     "transparency": 0.0,
+     "wireframe": false,
+     "visible": true,
+     "consumed_by": "Ground",
+     "group": "",
+     "orientation": "Global"
+    },
+    {
+     "name": "GndSlot",
+     "history": [
+      {
+       "kind": "CreateRectangle",
+       "props": {
+        "Position": "33.5,3.5,0",
+        "Axis": "Z",
+        "XSize": "3",
+        "YSize": "7",
+        "ZSize": "1"
+       },
+       "suppressed": false
+      }
+     ],
+     "material": "vacuum",
+     "solve_inside": true,
+     "model": true,
+     "color": "#8080ff",
+     "transparency": 0.0,
+     "wireframe": false,
+     "visible": true,
+     "consumed_by": "Ground",
+     "group": "",
+     "orientation": "Global"
+    },
+    {
+     "name": "Via",
+     "history": [
+      {
+       "kind": "CreateCylinder",
+       "props": {
+        "CenterPosition": "28,6,0",
+        "Axis": "Z",
+        "Radius": "0.4",
+        "Height": "1.6",
+        "NumberOfSegments": "0"
+       },
+       "suppressed": false
+      }
+     ],
+     "material": "copper",
+     "solve_inside": true,
+     "model": true,
+     "color": "#d98c4a",
+     "transparency": 0.0,
+     "wireframe": false,
+     "visible": true,
+     "consumed_by": null,
+     "group": "",
+     "orientation": "Global"
+    },
+    {
+     "name": "PortSheet",
+     "history": [
+      {
+       "kind": "CreateRectangle",
+       "props": {
+        "Position": "2,0,0",
+        "Axis": "Y",
+        "XSize": "1",
+        "YSize": "1",
+        "ZSize": "1.6"
+       },
+       "suppressed": false
+      }
+     ],
+     "material": "vacuum",
+     "solve_inside": true,
+     "model": true,
+     "color": "#8080ff",
+     "transparency": 0.0,
+     "wireframe": false,
+     "visible": true,
+     "consumed_by": null,
+     "group": "",
+     "orientation": "Global"
+    },
+    {
+     "name": "RadSheet",
+     "history": [
+      {
+       "kind": "CreateRectangle",
+       "props": {
+        "Position": "0,0,8",
+        "Axis": "Z",
+        "XSize": "40",
+        "YSize": "30",
+        "ZSize": "1"
+       },
+       "suppressed": false
+      }
+     ],
+     "material": "vacuum",
+     "solve_inside": true,
+     "model": true,
+     "color": "#8080ff",
+     "transparency": 0.0,
+     "wireframe": false,
+     "visible": true,
+     "consumed_by": null,
+     "group": "",
+     "orientation": "Global"
+    },
+    {
+     "name": "Region1",
+     "history": [
+      {
+       "kind": "CreateRegion",
+       "props": {
+        "PaddingType": "Percentage Offset",
+        "+X": "20",
+        "-X": "20",
+        "+Y": "20",
+        "-Y": "20",
+        "+Z": "20",
+        "-Z": "20"
+       },
+       "suppressed": false
+      }
+     ],
+     "material": "air",
+     "solve_inside": true,
+     "model": true,
+     "color": "#e6f2ff",
+     "transparency": 0.85,
+     "wireframe": false,
+     "visible": true,
+     "consumed_by": null,
+     "group": "",
+     "orientation": "Global"
+    }
+   ],
+   "boundaries": [
+    {
+     "name": "CopperTop",
+     "kind": "Finite Conductivity",
+     "props": {},
+     "faces": [],
+     "objects": [
+      "Rect",
+      "Disk",
+      "Plane",
+      "Island",
+      "OverlapA",
+      "OverlapB",
+      "Oval",
+      "PadTop"
+     ],
+     "edges": [],
+     "enabled": true
+    },
+    {
+     "name": "PerfE_Ground",
+     "kind": "Perfect E",
+     "props": {},
+     "faces": [],
+     "objects": [
+      "Ground"
+     ],
+     "edges": [],
+     "enabled": true
+    },
+    {
+     "name": "Rad1",
+     "kind": "Radiation",
+     "props": {},
+     "faces": [],
+     "objects": [
+      "RadSheet"
+     ],
+     "edges": [],
+     "enabled": true
+    }
+   ],
+   "excitations": [
+    {
+     "name": "1",
+     "kind": "Lumped Port",
+     "props": {
+      "PortNumber": "1"
+     },
+     "faces": [],
+     "objects": [
+      "PortSheet"
+     ],
+     "edges": [],
+     "enabled": true
+    }
+   ],
+   "mesh_ops": [],
+   "setups": [],
+   "spheres": [],
+   "reports": [],
+   "field_plots": [],
+   "coord_systems": [],
+   "optimetrics": [],
+   "parametrics": [],
+   "working_cs": "Global",
+   "notes": ""
+  }
+ ],
+ "variables": {},
+ "materials": [],
+ "format": "hertzon-project",
+ "version": 1
+}
