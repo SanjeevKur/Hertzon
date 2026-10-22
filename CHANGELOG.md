@@ -21,6 +21,22 @@ the GitHub release notes.
 - Plane wave excitation on EMerge 3 (its new default angle convention sent the wave in the wrong direction).
 - Thin conductors after a re-mesh pass (EMerge 3 did not split the new mesh).
 - Rare crash of parallel sweeps on EMerge 3 (the worker threads shared one solver routine).
+## 0.1.21 (2026-10-22)
+
+### New
+- **Subtract** dialog as in HFSS: arrow buttons **→ / ←** move the selected objects between Blank Parts and
+  Tool Parts; several objects are selected by dragging with the mouse, Ctrl or Shift. Several blank parts are
+  each cut by all tool parts. Swap exchanges all blank and tool parts.
+- **Radiation Pattern** of a sweep with saved fields: the report shows the far field of the chosen solution
+  (no longer always LastAdaptive) and has a **Frequency** selector
+  ([#5](https://github.com/c8501024/Hertzon/issues/5)); the 3D Polar Plot too.
+- Radiation Pattern **Plot: Rectangular**: the cut over the angle with markers (max/min, delta, bandwidth),
+  axis properties and the marker table.
+
+### Fixed
+- View: the projection button is now **Orthographic** and shows its state (pressed: orthographic, not
+  pressed: perspective), also in View > Orthographic Projection; switching keeps the model size on screen
+  ([#4](https://github.com/c8501024/Hertzon/issues/4)).
 
 ## 0.1.20 (2026-10-22)
 

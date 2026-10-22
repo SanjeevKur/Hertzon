@@ -381,6 +381,7 @@ class ModelerView(QWidget):
         self._press_pos = None
         self._navigating = set()        # mouse buttons currently moving the camera (also while drawing)
         self.nav_mode = ""              # "rotate" / "pan": the left mouse moves the camera until switched off
+        self.on_projection = None       # callback(orthographic: bool) after the projection changed
         self._rpress_pos = None
         self._first_fit = True
         self._setup_style()
@@ -1473,9 +1474,19 @@ class ModelerView(QWidget):
     def screenshot(self, path: str) -> None:
         self.plotter.screenshot(path)
 
-    def toggle_projection(self) -> None:
+    def is_orthographic(self) -> bool:
+        return bool(self.plotter.camera.GetParallelProjection())
+
+    def set_orthographic(self, on: bool) -> None:
+        """Orthographic (parallel) or perspective projection; the model keeps its size on screen."""
         cam = self.plotter.camera
-        cam.SetParallelProjection(not cam.GetParallelProjection())
+        if bool(cam.GetParallelProjection()) != on:
+            if on:
+                d = float(np.linalg.norm(np.array(cam.GetFocalPoint()) - np.array(cam.GetPosition())))
+                cam.SetParallelScale(max(d, 1e-12) * math.tan(math.radians(cam.GetViewAngle() / 2)))
+            cam.SetParallelProjection(on)
+        if self.on_projection is not None:
+            self.on_projection(on)
         self.plotter.render()
 
     # ------------------------------------------------------------------------------------------
