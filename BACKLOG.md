@@ -16,3 +16,12 @@ Small improvements collected for a future release. Items move to `CHANGELOG.md` 
 - As in Ansys HFSS: press and hold the left mouse button and drag over the entries to select several
   objects at once, in the lists of the Subtract dialog (`QAbstractItemView.ExtendedSelection`, also with
   Ctrl/Shift click) and ideally in the model tree as well.
+
+### Radiation pattern of a sweep: frequency selector and rectangular plot ([#5](https://github.com/c8501024/Hertzon/issues/5))
+- Reported for 0.1.19: the radiation pattern report has no dropdown to pick a frequency of a sweep, although
+  the fields are stored for all sweep frequencies (visible in the E field plot).
+- Polar plots have no markers; add a rectangular (cartesian) plot option for far field reports.
+
+### View: isometric / perspective switching is one click behind ([#4](https://github.com/c8501024/Hertzon/issues/4))
+- Reported for 0.1.19: switching from perspective to isometric keeps the perspective view; the next click on
+  perspective then enables the isometric view.
