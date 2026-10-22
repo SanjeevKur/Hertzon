@@ -17,6 +17,7 @@ import numpy as np
 
 from ..model.design import Design, GeoObject, Command
 from ..model import schema
+from ..model.arcs import angular_arc, arc_center
 from ..model.expr import Evaluator, ExprError
 
 occ = None  # set lazily to gmsh.model.occ
@@ -63,21 +64,28 @@ def _polygon_surface(pts: list[tuple[float, float, float]]) -> list[tuple[int, i
     return [(2, o.addPlaneSurface([loop]))]
 
 
-def _segment_types(spec: str, n: int) -> list[tuple[str, int]]:
-    """'Line,Arc,Spline:4' -> [(kind, number of points incl. shared start)]."""
+def _segment_types(spec: str, n: int) -> list[tuple[str, int, list[str]]]:
+    """'Line,Arc,Spline:4,AngularArc:90:XY' -> [(kind, number of points incl. shared start, extra arguments)].
+
+    AngularArc (HFSS center point arc) uses start, center and end point; its arguments are the sweep angle
+    (unitless = degrees, counter-clockwise about the plane normal) and the plane (XY, YZ or ZX, default XY)."""
     out = []
     for tok in (spec or "").split(","):
         tok = tok.strip()
         if not tok:
             continue
-        kind, _, cnt = tok.partition(":")
-        kind = {"line": "Line", "arc": "Arc", "3 point arc": "Arc", "spline": "Spline"}.get(kind.strip().lower(), "Line")
+        kind, *args = tok.split(":")
+        kind = {"line": "Line", "arc": "Arc", "3 point arc": "Arc", "spline": "Spline", "angulararc": "AngularArc",
+                "center point arc": "AngularArc", "centerarc": "AngularArc"}.get(kind.strip().lower(), "Line")
+        if kind == "AngularArc":
+            out.append((kind, 3, [a.strip() for a in args]))
+            continue
         default = {"Line": 2, "Arc": 3, "Spline": 3}[kind]
         try:
-            num = int(cnt) if cnt else default
+            num = int(args[0]) if args and args[0].strip() else default
         except ValueError:
             num = default
-        out.append((kind, max(2, num)))
+        out.append((kind, max(2, num), []))
     return out
 
 
@@ -455,13 +463,32 @@ def _create(cmd: Command, ctx: BuildContext) -> list[tuple[int, int]]:
             ptags[-1] = ptags[0]
         segs = []
         i = 0
-        # segment types: Line (2 points), 3 Point Arc (3), Spline (n points); points are shared
-        for st in _segment_types(p.get("SegmentTypes", ""), n):
-            kind, cnt = st
+        # segment types: Line (2 points), 3 Point Arc (3), Spline (n points), Center Point Arc (start, center,
+        # end); points are shared
+        for kind, cnt, args in _segment_types(p.get("SegmentTypes", ""), n):
             j = min(n - 1, i + cnt - 1)
             if j <= i:
                 break
-            if kind == "Arc" and j - i == 2:
+            if kind == "AngularArc" and j - i == 2:
+                # HFSS AngularArc: the angle decides the end point, the stored end point is only a copy of it
+                ang = ev.angle(args[0]) if args and args[0] else 0.0
+                plane = args[1] if len(args) > 1 else "XY"
+                arc = angular_arc(pts[i], pts[i + 1], ang, plane)
+                ctr = arc_center(pts[i], pts[i + 1], plane)
+                tol = 1e-9 * max(np.abs(arc).max(), 1e-30)
+                if abs(ang) < 1e-12 or np.linalg.norm(arc[0] - ctr) < tol:
+                    raise GeometryError("A center point arc needs a start point off its center and an angle")
+                if not np.allclose(arc[-1], pts[j], rtol=0, atol=tol):
+                    ptags[j] = o.addPoint(*arc[-1])
+                    pts[j] = tuple(arc[-1])
+                    if j == n - 1:
+                        ends_on_start = np.allclose(arc[-1], pts[0], rtol=0, atol=tol)
+                        if ends_on_start:
+                            ptags[j] = ptags[0]
+                c = o.addPoint(*ctr)
+                tags = [ptags[i]] + [o.addPoint(*q) for q in arc[1:-1]] + [ptags[j]]
+                segs += [o.addCircleArc(p0, c, p1) for p0, p1 in zip(tags, tags[1:])]
+            elif kind == "Arc" and j - i == 2:
                 if _collinear(pts[i], pts[i + 1], pts[j]):
                     segs.append(o.addLine(ptags[i], ptags[j]))
                 else:
