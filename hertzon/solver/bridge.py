@@ -991,7 +991,10 @@ class Bridge:
                 groups[f"Region ({getattr(self, 'open_kind', 'open')})"] = self.region_geo
             groups.update(self.geos)
             # owning object of every tetrahedron (field plots are drawn per object like the reference tool)
+            # where volumes overlap, the tetrahedron belongs to the object EMerge takes the material from:
+            # highest _priority, the later one on ties (build_model: smaller volume wins, regions lose)
             tet_obj = np.full(len(tets), -1, np.int32)
+            tet_prio = np.full(len(tets), -np.inf)
             names = []
             for name, g in groups.items():
                 try:
@@ -1000,7 +1003,10 @@ class Bridge:
                     ids = np.asarray(m.mesh.get_tetrahedra(list(g.tags)), int)
                     if len(ids) == 0:
                         continue
-                    tet_obj[ids] = len(names)
+                    prio = float(getattr(g, "_priority", 0))
+                    own = ids[tet_prio[ids] <= prio]
+                    tet_obj[own] = len(names)
+                    tet_prio[own] = prio
                     names.append(name.split(" (")[0] if name.startswith("Region (") else name)
                     stats.append({"object": name, **tet_statistics(nodes, tets[ids])})
                 except Exception:  # noqa: BLE001
