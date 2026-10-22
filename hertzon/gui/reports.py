@@ -123,6 +123,23 @@ def antenna_solution_list(doc) -> list[str]:
     return out
 
 
+def ff_solution_list(doc) -> list[str]:
+    """Solutions with stored far field surface fields (LastAdaptive and the sweeps that saved fields)."""
+    out = []
+    if not doc.project.path:
+        return out
+    for s in doc.design.setups:
+        st = ResultStore(result_dir(doc, s.name))
+        out += [f"{s.name} : {sol}" for sol in st.solutions() if (st.folder / f"huygens_{sol}.npz").exists()]
+    return out
+
+
+def ff_frequencies(ff: dict) -> list[tuple[int, float]]:
+    """(index k, frequency in Hz) of the far fields of a solution, sorted by frequency."""
+    ks = {int(k.split("_")[1]) for k in ff if k.startswith("freq_")}
+    return sorted(((k, float(ff[f"freq_{k}"][0])) for k in ks), key=lambda x: x[1])
+
+
 def rcs_solution_list(doc) -> list[str]:
     """Solutions with far fields of an incident wave (monostatic RCS over frequency) and the adaptive passes."""
     out = []
@@ -150,6 +167,8 @@ def report_solution_list(doc, kind: str) -> list[str]:
         return antenna_solution_list(doc)
     if kind.startswith("Monostatic RCS"):
         return rcs_solution_list(doc)
+    if kind in ("Radiation Pattern", "3D Polar Plot"):
+        return ff_solution_list(doc)
     return solution_list(doc)
 
 
@@ -366,6 +385,15 @@ class ReportWindow(QWidget):
         self.qty = QComboBox()
         self.func = QComboBox()
         if report.kind in ("Radiation Pattern", "3D Polar Plot"):
+            self.sol.blockSignals(True)
+            self.sol.clear()
+            self.sol.addItems(ff_solution_list(doc) or [report.solution])
+            self.sol.setCurrentText(report.solution)
+            self.sol.blockSignals(False)
+            # a sweep with fields has a far field at every frequency: pick one (HFSS: Families > Freq)
+            self.ff_freq = QComboBox()
+            self.ff_freq.currentIndexChanged.connect(self._ff_freq_changed)
+            form.addRow("Frequency:", self.ff_freq)
             cats = ff_categories(doc.design)
             self.cat.addItems(cats)
             cur = ff_trace(report.traces[0])[1] if report.traces else ""
@@ -381,6 +409,13 @@ class ReportWindow(QWidget):
             self.cut_val.editingFinished.connect(self._save_props)
             form.addRow("Constant:", self.cut)
             form.addRow("Value (deg):", self.cut_val)
+            if report.kind == "Radiation Pattern":
+                self.ff_plot = QComboBox()
+                self.ff_plot.addItems(["Polar", "Rectangular"])
+                self.ff_plot.setCurrentText(report.props.get("plot", "Polar"))
+                self.ff_plot.setToolTip("Rectangular: the cut over the angle, with markers")
+                self.ff_plot.currentTextChanged.connect(lambda *_: self._save_props())
+                form.addRow("Plot:", self.ff_plot)
         elif report.kind.startswith("Monostatic RCS"):
             self.sol.blockSignals(True)
             self.sol.clear()
@@ -681,8 +716,27 @@ class ReportWindow(QWidget):
     def _save_props(self) -> None:
         self.report.props["cut"] = self.cut.currentText()
         self.report.props["cut_value"] = self.cut_val.text()
+        if getattr(self, "ff_plot", None) is not None:
+            self.report.props["plot"] = self.ff_plot.currentText()
         self.changed.emit()
         self.refresh()
+
+    def _ff_freq_changed(self, i: int) -> None:
+        f = self.ff_freq.itemData(i)
+        if f is None or getattr(self, "_filling_freq", False):
+            return
+        self.report.props["freq"] = f"{f:.12g}"
+        self.changed.emit()
+        self.refresh()
+
+    def _fill_ff_freq(self, freqs: list[tuple[int, float]], k: int) -> None:
+        self._filling_freq = True
+        self.ff_freq.clear()
+        for kk, f in freqs:
+            self.ff_freq.addItem(f"{f / 1e9:.6g} GHz", f)
+        self.ff_freq.setCurrentIndex(next((i for i, (kk, _) in enumerate(freqs) if kk == k), 0))
+        self.ff_freq.setEnabled(len(freqs) > 1)
+        self._filling_freq = False
 
     def _marker_near(self, ev, px: float = 8.0):
         """Index of the marker line within px pixels of the mouse, or None."""
@@ -944,8 +998,11 @@ class ReportWindow(QWidget):
         self.refresh()
 
     def _xy_plot(self) -> bool:
-        """Line plot over frequency or passes: markers, axis and trace properties."""
-        return self.report.kind in ("Rectangular", "Monostatic RCS", "Antenna Parameters")
+        """Line plot over frequency, passes or angle: markers, axis and trace properties."""
+        return self.report.kind in ("Rectangular", "Monostatic RCS", "Antenna Parameters") or self._ff_rect()
+
+    def _ff_rect(self) -> bool:
+        return self.report.kind == "Radiation Pattern" and self.report.props.get("plot") == "Rectangular"
 
     def _plot_menu(self, ev) -> None:
         m = QMenu(self)
@@ -1060,6 +1117,9 @@ class ReportWindow(QWidget):
         self.refresh()
 
     def _trace_xy(self, tr: str, root=None):
+        if self.report.kind == "Radiation Pattern":
+            ang, y = self._ff_cut(self._ff(), tr)
+            return np.degrees(ang), y
         if self.report.kind.startswith("Monostatic RCS"):
             f, _, _, cols, _ = self._rcs_series()
             y = dict(cols).get(tr)
@@ -1418,22 +1478,56 @@ class ReportWindow(QWidget):
                 self.table.setItem(r, c + 1, QTableWidgetItem(f"{y[r]:.6g}"))
 
     def _ff(self):
+        """Far field quantities of the report solution at the chosen frequency (cached until refresh)."""
+        cache = self.__dict__.setdefault("_cache", {})
+        if "ff" in cache:
+            return cache["ff"]
         setup, _, sol = [x.strip() for x in self.sol.currentText().partition(":")]
+        label = sol or "LastAdaptive"
         st = ResultStore(result_dir(self.doc, setup))
         sph = self.report.props.get("sphere") or (self.doc.design.spheres[0].name if self.doc.design.spheres else "")
         from ..solver.farfield_post import farfield
         if not sph:
             raise RuntimeError("Add a far field setup (Radiation > Insert Far Field Setup).")
-        ff = farfield(st, self.doc.design, sph, "LastAdaptive", self.doc.evaluator())
+        ff = farfield(st, self.doc.design, sph, label, self.doc.evaluator())
         if ff is None:
-            raise RuntimeError("No far field data: the solution has no radiation/PML boundary, or it was "
-                               "solved with an older version (analyze once more).")
+            raise RuntimeError(f"No far field data for '{label}': the solution has no radiation/PML boundary, no "
+                               "fields were saved for it, or it was solved with an older version (analyze once more).")
+        freqs = ff_frequencies(ff)
+        want = float(self.report.props.get("freq", "") or "nan")
+        k = min(freqs, key=lambda x: abs(x[1] - want))[0] if freqs and np.isfinite(want) else \
+            (freqs[0][0] if freqs else 0)
+        self._fill_ff_freq(freqs, k)
         from ..solver.ffquant import excited_quantities
-        return excited_quantities(st, self.doc.design, ff, "LastAdaptive", 0)
+        q = excited_quantities(st, self.doc.design, ff, label, k)
+        q["_freq"] = float(ff[f"freq_{k}"][0])
+        cache["ff"] = q
+        return q
+
+    def _ff_cut(self, q: dict, tr: str):
+        """(angle in rad, values) of one trace on the cut of the report (Phi or Theta constant)."""
+        th, ph = q["_theta"], q["_phi"]
+        func, name = ff_trace(tr)
+        if name not in q:
+            raise RuntimeError(f"No data for '{tr}'")
+        v = q[name]
+        cut = self.report.props.get("cut", "Phi")
+        val = np.radians(float(self.report.props.get("cut_value", "0") or 0))
+        if cut == "Phi":
+            k = int(np.argmin(np.abs(((ph - val + np.pi) % (2 * np.pi)) - np.pi)))
+            # include the opposite half plane (phi + 180) as negative theta
+            k2 = int(np.argmin(np.abs(((ph - val - np.pi + np.pi) % (2 * np.pi)) - np.pi)))
+            ang = np.r_[-th[::-1], th]
+            y = np.r_[v[::-1, k2], v[:, k]]
+        else:
+            k = int(np.argmin(np.abs(th - val)))
+            ang, y = ph, v[k, :]
+        return ang, ff_db(func, name, y)
 
     def _draw_ff(self) -> None:
         q = self._ff()
         th, ph = q["_theta"], q["_phi"]
+        ftxt = f"{q['_freq'] / 1e9:.6g} GHz"
         if self.report.kind == "3D Polar Plot":
             import pyvista as pv
             tr = self.report.traces[0] if self.report.traces else "dB(GainTotal)"
@@ -1458,35 +1552,48 @@ class ReportWindow(QWidget):
                 self._p3_drawn = True
             else:
                 self.p3.camera_position = cam
-            self.info.setText(f"Max {tr} = {vv.max():.3f}")
+            self.info.setText(f"Max {tr} = {vv.max():.3f} at {ftxt}")
             return
-        self.fig.clear()
-        ax = self.fig.add_subplot(111, projection="polar")
-        ax.set_theta_zero_location("N")
-        ax.set_theta_direction(-1)
         cut = self.report.props.get("cut", "Phi")
-        val = np.radians(float(self.report.props.get("cut_value", "0") or 0))
+        val = float(self.report.props.get("cut_value", "0") or 0)
+        rect = self._ff_rect()
+        self.fig.clear()
+        if rect:
+            ax = self.fig.add_subplot(111)
+        else:
+            ax = self.fig.add_subplot(111, projection="polar")
+            ax.set_theta_zero_location("N")
+            ax.set_theta_direction(-1)
+        curves = []
         for tr in self.report.traces:
             func, name = ff_trace(tr)
             if name not in q:
                 continue
-            v = q[name]
-            if cut == "Phi":
-                k = int(np.argmin(np.abs(((ph - val + np.pi) % (2 * np.pi)) - np.pi)))
-                ang, y = th, v[:, k]
-                # include the opposite half plane (phi + 180) as negative theta
-                k2 = int(np.argmin(np.abs(((ph - val - np.pi + np.pi) % (2 * np.pi)) - np.pi)))
-                ang = np.r_[-th[::-1], th]
-                y = np.r_[v[::-1, k2], y]
+            ang, yy = self._ff_cut(q, tr)
+            if rect:
+                x = np.degrees(ang)
+                line, = ax.plot(x, yy, label=tr)
+                curves.append((tr, x, yy, ax, line.get_color()))
             else:
-                k = int(np.argmin(np.abs(th - val)))
-                ang, y = ph, v[k, :]
-            yy = ff_db(func, name, y)
-            ax.plot(ang, yy, label=tr)
-        ax.legend(loc="lower right", fontsize=8)
-        ax.set_title(f"{self.report.name}: {cut} = {np.degrees(val):.0f} deg", fontsize=10)
+                ax.plot(ang, yy, label=tr)
+        if rect:
+            other = "Theta" if cut == "Phi" else "Phi"
+            self._draw_markers(ax, curves, " deg", f"{other} [deg]")
+            ax.set_xlabel(f"{other} [deg]")
+            self._apply_axes(ax, None)
+            if self.report.props.get("xlabel"):
+                ax.set_xlabel(self.report.props["xlabel"])
+            if self.report.props.get("ylabel"):
+                ax.set_ylabel(self.report.props["ylabel"])
+            ax.grid(True, alpha=0.4)
+        else:
+            self.mtable.setVisible(False)
+        ax.legend(loc="best" if rect else "lower right", fontsize=8)
+        ax.set_title(f"{self.report.name}: {cut} = {val:g} deg, {ftxt}", fontsize=10)
         self.canvas.draw_idle()
-        self.info.setText(f"Radiated power {q['_Prad'][0]:.4g} W ({q.get('_Pinc', [1.0])[0]:.4g} W incident, Edit Sources)")
+        self.info.setText(f"{ftxt}: radiated power {q['_Prad'][0]:.4g} W ({q.get('_Pinc', [1.0])[0]:.4g} W "
+                          "incident, Edit Sources)" + (". Double-click: marker. Right-click: markers, axes."
+                                                       if rect else ""))
 
     def export(self) -> None:
         path, _ = QFileDialog.getSaveFileName(self, "Export Data", f"{self.report.name}.csv",

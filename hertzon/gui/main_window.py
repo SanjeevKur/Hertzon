@@ -11,8 +11,8 @@ from PySide6.QtCore import Qt, QTimer, QSettings, QEventLoop
 from PySide6.QtGui import QAction, QKeySequence, QActionGroup
 from PySide6.QtWidgets import (QMainWindow, QDockWidget, QTabWidget, QSplitter, QMenu, QFileDialog, QMessageBox,
                                QLabel, QLineEdit, QComboBox, QInputDialog, QDialog, QFormLayout, QDialogButtonBox,
-                               QCheckBox, QListWidget, QAbstractItemView, QVBoxLayout, QHBoxLayout,
-                               QSpinBox, QDoubleSpinBox, QPushButton, QApplication, QWidget)
+                               QListWidget, QAbstractItemView, QVBoxLayout,
+                               QSpinBox, QDoubleSpinBox, QApplication, QWidget)
 
 from .. import __version__
 from ..model import schema
@@ -27,7 +27,7 @@ from .trees import ProjectTree, ModelTree
 from .panels import PropertiesPanel, MessageManager, ProgressPanel, SolutionDataDialog, rename_object
 from .dialogs import (edit_assignment, edit_setup, edit_sweep, edit_sphere, ObjectPropertiesDialog, VariablesDialog,
                       MaterialsDialog, SolutionTypeDialog, ValidationDialog, GridDialog, NamedPropsDialog,
-                      SnapModeDialog)
+                      SnapModeDialog, SubtractDialog)
 from .solve import SolveManager, Job
 from .reports import ReportWindow, solution_list
 from . import fields as F
@@ -203,6 +203,11 @@ class MainWindow(QMainWindow):
         self.a_props = A("P&roperties...", self.edit_selected_properties)
         self.a_fit = A("Fit &All", self.view.fit_all, "Ctrl+D")
         self.a_fitsel = A("Fit &Selection", self.view.fit_selection, "Ctrl+E")
+        self.a_ortho = A("&Orthographic Projection", lambda on=False: self.view.set_orthographic(bool(on)),
+                         tip="Orthographic projection when checked, perspective projection when not",
+                         checkable=True)
+        self.a_ortho.setChecked(self.view.is_orthographic())
+        self.view.on_projection = self.a_ortho.setChecked
         self.sel_group = QActionGroup(self)
         self.a_mode = {}
         for mode, key in (("object", "O"), ("face", "F"), ("edge", "E"), ("vertex", "V")):
@@ -272,7 +277,7 @@ class MainWindow(QMainWindow):
         o = m.addMenu("Orientation")
         for w in ("iso", "top", "bottom", "front", "back", "right", "left"):
             o.addAction(w.capitalize(), lambda _=False, w=w: self.view.view(w))
-        m.addAction("Toggle Perspective/Orthographic", self.view.toggle_projection)
+        m.addAction(self.a_ortho)
         m.addSeparator()
         m.addAction("Grid Settings...", self.grid_settings)
         m.addAction("Hide Selection", lambda: self.set_visible(False))
@@ -496,7 +501,8 @@ class MainWindow(QMainWindow):
         g.small("Bottom", "orient", view("bottom"))
         g.small("Back", "orient", view("back"))
         g.small("Left", "orient", view("left"))
-        g.large("Perspective", "projection", self.view.toggle_projection, tip="Toggle perspective / orthographic")
+        g.large("Orthographic", "projection", self.a_ortho,
+                tip="Orthographic projection when pressed, perspective projection when not pressed")
         g = pg.group("Visibility")
         g.small("Hide Selection", "hide", lambda: self.set_visible(False))
         g.small("Show Selection", "show", lambda: self.set_visible(True))
@@ -2201,61 +2207,34 @@ class MainWindow(QMainWindow):
         objs = self.selected_objects(2)
         if not objs:
             return
-        blank, tools, keep = objs[0], objs[1:], False
+        blanks, tools, keep = objs[:1], objs[1:], False
         if op == "Subtract":
-            dlg = QDialog(self)
-            dlg.setWindowTitle("Subtract")
-            lay = QHBoxLayout(dlg)
-            bl, tl = QListWidget(), QListWidget()
-            bl.addItems([blank])
-            tl.addItems(tools)
-            for title, w in (("Blank Parts", bl), ("Tool Parts", tl)):
-                box = QVBoxLayout()
-                box.addWidget(QLabel(title))
-                box.addWidget(w)
-                lay.addLayout(box)
-            side = QVBoxLayout()
-            swap = QPushButton("Swap")
-
-            def do_swap():
-                b = [bl.item(i).text() for i in range(bl.count())]
-                t = [tl.item(i).text() for i in range(tl.count())]
-                bl.clear()
-                tl.clear()
-                bl.addItems(t[:1])
-                tl.addItems(b + t[1:])
-            swap.clicked.connect(do_swap)
-            clone = QCheckBox("Clone tool objects before operation")
-            side.addWidget(swap)
-            side.addWidget(clone)
-            bb = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-            bb.accepted.connect(dlg.accept)
-            bb.rejected.connect(dlg.reject)
-            side.addWidget(bb)
-            lay.addLayout(side)
+            dlg = SubtractDialog(blanks, tools, self)
             if dlg.exec() != QDialog.Accepted:
                 return
-            blank = bl.item(0).text()
-            tools = [tl.item(i).text() for i in range(tl.count())]
-            keep = clone.isChecked()
+            blanks, tools, keep = dlg.blanks(), dlg.tools(), dlg.clone.isChecked()
         self.doc.checkpoint()
-        b = self.des.obj(blank)
-        if keep:
-            clones = []
-            for t in tools:
-                c = copy.deepcopy(self.des.obj(t))
-                c.name = self.des.unique_name(t + "_tool")
-                c.consumed_by = blank
-                self.des.objects.append(c)
-                clones.append(c.name)
-            tools = clones
-        else:
-            for t in tools:
-                self.des.obj(t).consumed_by = blank
-        b.history.append(Command.new(op, Tools=",".join(tools), KeepOriginals=str(keep)))
-        self._drop_refs(tools if not keep else [])
+        consumed = []
+        for i, blank in enumerate(blanks):
+            b = self.des.obj(blank)
+            if keep or i < len(blanks) - 1:
+                # every blank part is cut by all tools: clones for all but the last (or for all with "Clone")
+                use = []
+                for t in tools:
+                    c = copy.deepcopy(self.des.obj(t))
+                    c.name = self.des.unique_name(t + "_tool")
+                    c.consumed_by = blank
+                    self.des.objects.append(c)
+                    use.append(c.name)
+            else:
+                use = tools
+                for t in tools:
+                    self.des.obj(t).consumed_by = blank
+                consumed = tools
+            b.history.append(Command.new(op, Tools=",".join(use), KeepOriginals=str(keep)))
+        self._drop_refs(consumed)
         self.doc.commit("model")
-        self.doc.select([Pick(blank)])
+        self.doc.select([Pick(n) for n in blanks])
 
     def _drop_refs(self, objs: list[str]) -> None:
         """Remove boundary/excitation references to objects that no longer exist on their own."""
