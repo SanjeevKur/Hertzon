@@ -14,6 +14,8 @@ python -m hertzon.solver.benchmark examples/benchmark/scaling/large_patch.hzn Pa
 Every core count solves the whole setup in a fresh solver process (1 core first); the
 `--workers` runs solve only the sweeps again, with `Parallel` on, on the adaptive mesh of the fastest run. The times per phase are in `<out_dir>/benchmark.json`.
 
+Results on a 32-core workstation, with the swept bands plotted: [docs/BENCHMARKS.md](../../../docs/BENCHMARKS.md).
+
 Size and time with 4 cores (development container, for orientation):
 
 | Case | Design | Final mesh | Passes | Total (passes, sweep) |

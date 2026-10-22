@@ -101,6 +101,9 @@ what is still missing.
 See [docs/MESHER.md](docs/MESHER.md) for how the adaptive mesh refinement works: hzmesh, the local
 Delaunay mesher, curved elements and benchmark results.
 
+See [docs/BENCHMARKS.md](docs/BENCHMARKS.md) for solve times on a 32-core workstation: a patch antenna
+with 613k unknowns, swept over a 3:1 band with 101 points, in 203 s (1375 s on one core).
+
 ## Examples
 
 | File | What it shows |
