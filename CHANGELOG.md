@@ -21,6 +21,7 @@ the GitHub release notes.
 - Plane wave excitation on EMerge 3 (its new default angle convention sent the wave in the wrong direction).
 - Thin conductors after a re-mesh pass (EMerge 3 did not split the new mesh).
 - Rare crash of parallel sweeps on EMerge 3 (the worker threads shared one solver routine).
+
 ## 0.1.21 (2026-10-22)
 
 ### New

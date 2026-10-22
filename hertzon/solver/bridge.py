@@ -201,6 +201,7 @@ class Bridge:
         self.step("Boundary setup", t)
         t = time.time()
         emit("progress", value=10, text="Initial mesh (lambda refinement)")
+        keep_global_max_size(m)
         m.generate_mesh()
         info(f"Initial mesh: {m.mesh.n_tets} tetrahedra")
         self.step("Initial meshing", t)
@@ -1881,6 +1882,23 @@ def scattered_energy(fld, m) -> tuple[float, float]:
     _interp_known_tets(fld, c[0], c[1], c[2], mapping)
     e2 = np.abs(fld.Ex) ** 2 + np.abs(fld.Ey) ** 2 + np.abs(fld.Ez) ** 2
     return ws, float(np.nansum(np.real(fld.er) * e2 * vol))
+
+
+def keep_global_max_size(m) -> None:
+    """Keep gmsh's global maximum element size (Mesh.MeshSizeMax, a quarter of the model diagonal from the
+    geometry build) for the solver mesh. EMerge 2.8.9 left the option alone, so it limited the initial mesh
+    and every re-mesh; EMerge 3 resets it to "no limit" unless Mesher.set_global_max_size is given, which
+    made the initial mesh about three times coarser and the adaptive passes many more."""
+    mesher = getattr(m, "mesher", None)
+    if mesher is None or not hasattr(mesher, "set_global_max_size"):
+        return
+    try:
+        import gmsh
+        h = float(gmsh.option.getNumber("Mesh.MeshSizeMax"))
+    except Exception:  # noqa: BLE001
+        return
+    if 0 < h < 1e20:
+        mesher.set_global_max_size(h / float(getattr(mesher, "_scale", 1.0) or 1.0))
 
 
 def excite(fld, port: dict) -> None:

@@ -390,6 +390,7 @@ def test_worker_routines_are_independent():
     for key, s in r.solvers.items():
         assert a.solvers[key] is not s and a.solvers[key] is not b.solvers[key]
 
+
 def test_subtract_dialog_moves_single_objects():
     """Subtract: the arrow buttons move the selected objects between Blank Parts and Tool Parts (as in HFSS)."""
     import os
