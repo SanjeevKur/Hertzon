@@ -80,6 +80,9 @@ def apply() -> None:
         return pick(self, A, b, matrix_type, direct)
 
     S.AutomaticRoutine.pick_solver = pick_solver
+    if "__new__" in vars(S.AutomaticRoutine):
+        S.SolveRoutine.duplicate = _duplicate
+
 
     solve = S.SolverPardiso.solve
 
@@ -109,6 +112,23 @@ def apply() -> None:
     assemble_freq_matrix._hertzon_fast = getattr(assemble, "_hertzon_fast", False)
     Assembler.assemble_freq_matrix = assemble_freq_matrix
     _pipeline()
+
+
+def _duplicate(self):
+    """A routine of its own for a worker thread. EMerge 3 made AutomaticRoutine a singleton, so its
+    duplicate() returned the same routine: the worker threads shared it, replaced each other's solvers
+    and now and then factorized in the same PARDISO handle at the same time (segmentation fault in
+    MKL). Forced solvers are mapped to the copies as well, not shared with the main routine."""
+    from emerge._emerge import solver as S
+    new = object.__new__(type(self))
+    S.SolveRoutine.__init__(new)
+    keep = ("solvers", "forced_solver", "pre")
+    new.__dict__.update({k: v for k, v in vars(self).items() if k not in keep})
+    copies = {}
+    for tpe, solver in self.solvers.items():
+        copies[id(solver)] = new.solvers[tpe] = solver.duplicate()
+    new.forced_solver = [copies.get(id(s), s) for s in self.forced_solver]
+    return new
 
 
 def _pipeline() -> None:

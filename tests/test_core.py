@@ -376,3 +376,16 @@ def test_results_dir_stays_inside_results_folder():
     for design, setup in [("..", ".."), (".", ".."), ("", ""), ("../..", "x"), ("a/../..", "...")]:
         d = results_dir(proj, design, setup).resolve()
         assert d.parent.parent == base, (design, setup, d)
+
+
+def test_worker_routines_are_independent():
+    """EMerge 3's AutomaticRoutine is a singleton: the parallel sweep threads must still get routines and
+    PARDISO handles of their own (shared ones crashed in MKL now and then)."""
+    from hertzon.solver import emerge_patches
+    emerge_patches.apply()
+    from emerge._emerge import solver as S
+    r = S.AutomaticRoutine()
+    a, b = r.duplicate(), r.duplicate()
+    assert a is not r and b is not a
+    for key, s in r.solvers.items():
+        assert a.solvers[key] is not s and a.solvers[key] is not b.solvers[key]
