@@ -27,6 +27,8 @@ the GitHub release notes.
   fields off) instead of leaving them out silently.
 
 ### Fixed
+- The Windows setup no longer stops at EMerge 3's one-time welcome text ("Press Enter to continue"):
+  the setup marks it as shown and runs its checks without console input.
 - Plane wave excitation on EMerge 3 (its new default angle convention sent the wave in the wrong direction).
 - Thin conductors after a re-mesh pass (EMerge 3 did not split the new mesh).
 - Rare crash of parallel sweeps on EMerge 3 (the worker threads shared one solver routine).

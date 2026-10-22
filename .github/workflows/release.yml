@@ -41,7 +41,7 @@ jobs:
           name: dist
           path: dist
       - name: Run the installer silently (it runs setup.ps1 like on a user's machine)
-        timeout-minutes: 60
+        timeout-minutes: 40
         shell: pwsh
         run: |
           $exe = (Get-ChildItem dist\Hertzon-Setup-*.exe).FullName
