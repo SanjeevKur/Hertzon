@@ -310,3 +310,133 @@ def test_results_dir_stays_inside_results_folder():
     for design, setup in [("..", ".."), (".", ".."), ("", ""), ("../..", "x"), ("a/../..", "...")]:
         d = results_dir(proj, design, setup).resolve()
         assert d.parent.parent == base, (design, setup, d)
+
+
+def test_subtract_dialog_moves_single_objects():
+    """Subtract: the arrow buttons move the selected objects between Blank Parts and Tool Parts (as in HFSS)."""
+    import os
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    from PySide6.QtWidgets import QApplication, QAbstractItemView, QDialogButtonBox
+    from hertzon.gui.dialogs import SubtractDialog
+    app = QApplication.instance() or QApplication([])  # noqa: F841
+    dlg = SubtractDialog(["Cylinder1"], ["Cylinder2", "Cylinder3"])
+    ok = dlg.buttons.button(QDialogButtonBox.Ok)
+    assert dlg.blank_list.selectionMode() == QAbstractItemView.ExtendedSelection
+    assert dlg.tool_list.selectionMode() == QAbstractItemView.ExtendedSelection
+    assert not dlg.to_tool.isEnabled() and not dlg.to_blank.isEnabled() and ok.isEnabled()
+    dlg.tool_list.item(1).setSelected(True)                     # Cylinder3 <- back to the blank parts
+    dlg.to_blank.click()
+    assert dlg.blanks() == ["Cylinder1", "Cylinder3"] and dlg.tools() == ["Cylinder2"]
+    dlg.blank_list.clearSelection()
+    for i in range(2):                                          # both blanks -> tools: no blank part left
+        dlg.blank_list.item(i).setSelected(True)
+    dlg.to_tool.click()
+    assert dlg.blanks() == [] and dlg.tools() == ["Cylinder2", "Cylinder1", "Cylinder3"] and not ok.isEnabled()
+    dlg.swap()
+    assert dlg.blanks() == ["Cylinder2", "Cylinder1", "Cylinder3"] and dlg.tools() == [] and not ok.isEnabled()
+
+
+def test_subtract_with_several_blank_parts():
+    """Every blank part is cut by all tool parts; the tools are cloned for all but the last blank."""
+    import os
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    import types
+    from PySide6.QtWidgets import QApplication, QDialog
+    from hertzon.gui import main_window as MW
+    app = QApplication.instance() or QApplication([])  # noqa: F841
+    proj = Project()
+    des = proj.designs[0]
+    for name, x in (("A", 0), ("B", 20), ("T", 5)):
+        des.add_object("CreateBox", name, Position=f"{x},0,0", XSize="10", YSize="10", ZSize="10")
+
+    class Dlg:
+        def __init__(self, blanks, tools, parent=None):
+            self.clone = types.SimpleNamespace(isChecked=lambda: False)
+
+        def exec(self):
+            return QDialog.Accepted
+
+        def blanks(self):
+            return ["A", "B"]
+
+        def tools(self):
+            return ["T"]
+    win = types.SimpleNamespace(des=des, doc=types.SimpleNamespace(checkpoint=lambda: None, commit=lambda w: None,
+                                                                   select=lambda p: None),
+                                selected_objects=lambda n: ["A", "T"], _drop_refs=lambda objs: None)
+    old = MW.SubtractDialog
+    MW.SubtractDialog = Dlg
+    try:
+        MW.MainWindow.boolean(win, "Subtract")
+    finally:
+        MW.SubtractDialog = old
+    cuts = {o.name: [c for c in o.history if c.kind == "Subtract"] for o in des.objects}
+    assert cuts["A"][0].props["Tools"] == "T_tool" and des.obj("T_tool").consumed_by == "A"
+    assert cuts["B"][0].props["Tools"] == "T" and des.obj("T").consumed_by == "B"
+
+
+def test_projection_keeps_the_model_size():
+    """View > Orthographic: switching projection keeps the visible height (the parallel scale matches)."""
+    import math
+    import types
+    from hertzon.gui.viewer import ModelerView
+    from vtkmodules.vtkRenderingCore import vtkCamera
+    cam = vtkCamera()
+    cam.SetPosition(0, 0, 100)
+    cam.SetFocalPoint(0, 0, 0)
+    cam.SetViewAngle(30)
+    got = []
+    v = types.SimpleNamespace(plotter=types.SimpleNamespace(camera=cam, render=lambda: None), on_projection=got.append)
+    ModelerView.set_orthographic(v, True)
+    assert cam.GetParallelProjection() and got == [True]
+    assert cam.GetParallelScale() == pytest.approx(100 * math.tan(math.radians(15)))
+    ModelerView.set_orthographic(v, False)
+    assert not cam.GetParallelProjection() and got == [True, False]
+
+
+def test_radiation_pattern_of_a_sweep_frequency_and_rectangular(tmp_path):
+    """Radiation Pattern of a sweep with fields: the frequency is chosen in the report, and the cut can be
+    drawn over the angle (rectangular) with markers."""
+    import os
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    from PySide6.QtWidgets import QApplication
+    from hertzon.gui.doc import Document, result_dir
+    from hertzon.gui.reports import ReportWindow, ff_solution_list
+    from hertzon.model.design import Report
+    from hertzon.solver.results import ResultStore
+    app = QApplication.instance() or QApplication([])  # noqa: F841
+    proj = Project.load(EX / "PatchAntenna.hzn")
+    proj.save(tmp_path / "p.hzn")
+    doc = Document(proj)
+    st = ResultStore(result_dir(doc, "Setup1"))
+    ports = [{"name": "1", "number": 1, "kind": "Lumped Port"}]
+    st.write_json("ports.json", ports)
+    st.save_sparams("Sweep", np.array([1e9, 2e9]), np.zeros((2, 1, 1), complex), np.array([50.0]), ports)
+    rng = np.random.default_rng(1)
+    n = 40
+    vis = rng.normal(size=(3, n)) * 0.01
+    wns = rng.normal(size=(3, n)) * 1e-4
+    E = (rng.normal(size=(3, n)) + 1j * rng.normal(size=(3, n)))
+    H = (rng.normal(size=(3, n)) + 1j * rng.normal(size=(3, n))) / 377
+    st.save_npz("huygens_Sweep.npz", vis=vis, wns=wns, stamp=np.array([1]),
+                freq_0=np.array([1e9]), E_0_1=E, H_0_1=H, Prad_0_1=np.array([0.5]),
+                freq_1=np.array([2e9]), E_1_1=2 * E, H_1_1=2 * H, Prad_1_1=np.array([2.0]))
+    assert ff_solution_list(doc) == ["Setup1 : Sweep"]
+    rep = Report("Radiation Pattern 1", "Radiation Pattern", "Setup1 : Sweep", ["dB(GainTotal)"])
+    w = ReportWindow(doc, rep)
+    assert "color:#c0392b" not in w.info.text(), w.info.text()
+    assert [w.ff_freq.itemText(i) for i in range(w.ff_freq.count())] == ["1 GHz", "2 GHz"]
+    assert "1 GHz" in w.info.text()
+    w.ff_freq.setCurrentIndex(1)
+    assert rep.props["freq"] == "2000000000" and "2 GHz" in w.info.text()
+    assert w._ff()["_Prad"][0] == pytest.approx(2.0)
+    assert not w._xy_plot()
+    w.ff_plot.setCurrentText("Rectangular")
+    assert rep.props["plot"] == "Rectangular" and w._xy_plot()
+    ax = w.fig.axes[0]
+    assert ax.name == "rectilinear" and ax.get_xlabel() == "Theta [deg]"
+    x, y = w._trace_xy("dB(GainTotal)")
+    assert x.min() == pytest.approx(-180) and x.max() == pytest.approx(180)
+    w.marker_at("max")
+    assert len(w.markers) == 1 and w.markers[0] == pytest.approx(x[np.argmax(y)])
+    assert w.mtable.isVisibleTo(w) and w.mtable.rowCount() == 1

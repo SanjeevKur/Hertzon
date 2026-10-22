@@ -1,5 +1,5 @@
 """Dialogs: boundaries/excitations/mesh operations, setups, sweeps, variables, materials,
-solution type, validation check, far field setup and object properties."""
+solution type, validation check, far field setup, object properties and Subtract."""
 from __future__ import annotations
 
 import copy
@@ -9,7 +9,7 @@ from PySide6.QtGui import QColor, QBrush
 from PySide6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QFormLayout, QLineEdit, QDialogButtonBox, QLabel,
                                QTableWidget, QTableWidgetItem, QHeaderView, QPushButton, QComboBox, QCheckBox,
                                QTabWidget, QWidget, QMessageBox, QTreeWidget, QTreeWidgetItem, QGroupBox,
-                               QRadioButton, QAbstractItemView, QDoubleSpinBox)
+                               QRadioButton, QAbstractItemView, QDoubleSpinBox, QListWidget)
 
 from ..model import schema
 from ..model.design import Assignment, Setup, Sweep, InfiniteSphere, GeoObject
@@ -182,6 +182,85 @@ def edit_sphere(parent, doc, sp: InfiniteSphere) -> bool:
     sp.name = dlg.name or sp.name
     sp.props = dlg.values
     return True
+
+
+class SubtractDialog(QDialog):
+    """Modeler > Boolean > Subtract: Blank Parts and Tool Parts as in HFSS. The arrow buttons move the selected
+    objects from one list to the other; several objects are selected by dragging, Ctrl or Shift."""
+
+    def __init__(self, blanks: list[str], tools: list[str], parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Subtract")
+        lay = QHBoxLayout(self)
+        self.blank_list, self.tool_list = QListWidget(), QListWidget()
+        for w, names in ((self.blank_list, blanks), (self.tool_list, tools)):
+            w.setSelectionMode(QAbstractItemView.ExtendedSelection)
+            w.addItems(names)
+            w.itemSelectionChanged.connect(self._update)
+        self.to_tool, self.to_blank = QPushButton("\u2192"), QPushButton("\u2190")
+        self.to_tool.setToolTip("Move the selected blank parts to the tool parts")
+        self.to_blank.setToolTip("Move the selected tool parts to the blank parts")
+        self.to_tool.clicked.connect(lambda: self._move(self.blank_list, self.tool_list))
+        self.to_blank.clicked.connect(lambda: self._move(self.tool_list, self.blank_list))
+        arrows = QVBoxLayout()
+        arrows.addStretch(1)
+        for b in (self.to_tool, self.to_blank):
+            b.setFixedWidth(36)
+            arrows.addWidget(b)
+        arrows.addStretch(1)
+        for title, w in (("Blank Parts", self.blank_list), ("Tool Parts", self.tool_list)):
+            box = QVBoxLayout()
+            box.addWidget(QLabel(title))
+            box.addWidget(w)
+            lay.addLayout(box)
+            if w is self.blank_list:
+                lay.addLayout(arrows)
+        side = QVBoxLayout()
+        swap = QPushButton("Swap")
+        swap.setToolTip("Exchange all blank parts with all tool parts")
+        swap.clicked.connect(self.swap)
+        self.clone = QCheckBox("Clone tool objects before operation")
+        side.addWidget(swap)
+        side.addWidget(self.clone)
+        side.addStretch(1)
+        self.buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        self.buttons.accepted.connect(self.accept)
+        self.buttons.rejected.connect(self.reject)
+        side.addWidget(self.buttons)
+        lay.addLayout(side)
+        self._update()
+
+    @staticmethod
+    def _names(w: QListWidget) -> list[str]:
+        return [w.item(i).text() for i in range(w.count())]
+
+    def blanks(self) -> list[str]:
+        return self._names(self.blank_list)
+
+    def tools(self) -> list[str]:
+        return self._names(self.tool_list)
+
+    def _move(self, src: QListWidget, dst: QListWidget) -> None:
+        rows = sorted((src.row(it) for it in src.selectedItems()), reverse=True)
+        moved = [src.takeItem(r).text() for r in rows][::-1]
+        dst.clearSelection()
+        for name in moved:
+            dst.addItem(name)
+            dst.item(dst.count() - 1).setSelected(True)
+        self._update()
+
+    def swap(self) -> None:
+        b, t = self.blanks(), self.tools()
+        self.blank_list.clear()
+        self.tool_list.clear()
+        self.blank_list.addItems(t)
+        self.tool_list.addItems(b)
+        self._update()
+
+    def _update(self) -> None:
+        self.to_tool.setEnabled(bool(self.blank_list.selectedItems()))
+        self.to_blank.setEnabled(bool(self.tool_list.selectedItems()))
+        self.buttons.button(QDialogButtonBox.Ok).setEnabled(bool(self.blanks()) and bool(self.tools()))
 
 
 class ObjectPropertiesDialog(QDialog):
