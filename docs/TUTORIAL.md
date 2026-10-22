@@ -8,7 +8,8 @@ This guide walks through four complete simulations step by step:
 4. [The radar cross section of a sphere](#4-radar-cross-section-of-a-sphere) (incident plane wave, RCS)
 
 and then shows how to let an AI assistant do the same work for you through
-[Hertzon's MCP server](#5-let-an-ai-assistant-build-and-run-it-mcp).
+[Hertzon's MCP server](#5-let-an-ai-assistant-build-and-run-it-mcp), and how to
+[export a printed circuit board as Gerber files](#6-gerber-export-of-a-printed-circuit-board) for manufacturing.
 
 > **Fastest start: let an AI assistant do it.** Open **Tools > AI Assistants (MCP)...**, press
 > *Register* next to Claude Code, Claude desktop, Codex or VS Code and tick **Let AI assistants work in
@@ -415,6 +416,50 @@ the README's *No warranty* section.
 
 ---
 
+## 6. Gerber export of a printed circuit board
+
+**Goal:** manufacturing data (Gerber X2 copper layers, board outline, Excellon drill files) of a planar
+design. The project is `examples/GerberTestBoard.hzn`: a 40 x 30 mm FR4 board, 1.6 mm thick, with copper
+shapes on top (rectangle, circle, a plane with a round cut-out and an island in it, overlapping rectangle
+and circle, an ellipse, a 35 µm thick trace body, a via pad), a ground plane with clearances on the bottom,
+a copper via, a mounting hole and a milled slot. A port sheet, a radiation sheet and the air region show
+that simulation helpers stay out of the files. `examples/PatchAntenna.hzn` and `examples/HairpinFilter.hzn`
+export the same way.
+
+1. Open the project and choose **File > Export > Gerber...** (ribbon: **Project > Import / Export > Export
+   Gerber**).
+2. **Board plane and origin:** keep *Global*, plane *XY*, origin *Lower left corner of the board outline*.
+   For a board drawn in another plane pick its coordinate system and plane; all files use this one frame
+   and the bottom layer is not mirrored.
+3. **Layer assignment** tab: Hertzon suggests the target of every object. Copper sheets (Perfect E or
+   Finite Conductivity) go to *L1 Top* or *L2 Bottom* by their height, the copper trace body is cut at half
+   its thickness, the via becomes a *Plated hole* and the substrate the *Board outline*. Port, radiation
+   sheet and region are *Simulation helpers* and cannot be exported. Change a target with its drop-down list.
+4. **Layers** tab: the copper layers from top to bottom with their elevation. Rename a layer (the name goes
+   into the file name) or untick it to leave it out.
+5. **Preview:** the copper as it will be written, the outline, PTH (white) and NPTH (red) holes and the
+   origin. The copper cut-out shows the island inside it, the overlapping rectangle and circle are one shape,
+   and the ground clearance around the mounting hole is free. The message list says which curves are
+   approximated (here the ellipse, within the 1 µm curve tolerance; circles and arcs stay exact).
+6. Choose the folder and press **Export**. A message lists the written files (**Open Folder** opens them):
+
+| File | Content |
+|---|---|
+| `TwoLayerBoard-L1_Top.gbr`, `TwoLayerBoard-L2_Bottom.gbr` | copper layers |
+| `TwoLayerBoard-Profile.gbr` | board outline with the slot |
+| `TwoLayerBoard-PTH_L1-L2.drl` | the via, 0.8 mm, plated |
+| `TwoLayerBoard-NPTH.drl` | the mounting hole, 3.2 mm, non-plated |
+| `TwoLayerBoard-export-report.txt` | settings, layers, objects, holes and messages |
+
+![Gerber export dialog with the test board](tutorial/gerber_dialog.png)
+
+Open the files in any Gerber viewer (e.g. the KiCad Gerber viewer) to compare them with the preview.
+If something cannot be exported unambiguously (a tilted copper sheet, a thick conductor that is no via),
+the dialog names the object; errors keep the *Export* button disabled. How layers, polarity, arcs and
+drills are derived is described in [GERBER_EXPORT.md](GERBER_EXPORT.md).
+
+---
+
 ## Where to go next
 
 * `examples/` has thirteen finished projects, from a microstrip line to a Rotman lens. See the table in the
@@ -424,3 +469,4 @@ the README's *No warranty* section.
 * [MESHER.md](MESHER.md) explains how adaptive meshing works. [FEATURE_MATRIX.md](FEATURE_MATRIX.md)
   shows what is implemented.
 * **File > Export > EMerge Python Script** turns any design into a stand-alone EMerge script.
+* **File > Export > Gerber...** writes Gerber X2 and Excellon files of a board ([section 6](#6-gerber-export-of-a-printed-circuit-board)).

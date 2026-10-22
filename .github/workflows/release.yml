@@ -75,17 +75,28 @@ jobs:
         run: |
           VER=$(python3 -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["project"]["version"])')
           echo "tag=v$VER" >> "$GITHUB_OUTPUT"
+          echo "ver=$VER" >> "$GITHUB_OUTPUT"
+      - name: Release notes from CHANGELOG.md
+        run: |
+          # the section "## <version> ..." up to the next "## " heading
+          awk -v v="${{ steps.ver.outputs.ver }}" '
+            /^## / { on = (index($0, "## " v " ") == 1 || $0 == "## " v) }
+            on && !/^## / { print }' CHANGELOG.md > notes.md
+          {
+            echo
+            echo 'Windows installer (`Hertzon-Setup-*.exe`) and Linux package (`Hertzon-*-linux.tar.gz`).'
+            echo
+            echo 'Hertzon is built on [EMerge](https://github.com/FennisRobert/EMerge), the open-source FEM solver by'
+            echo 'Robert Fennis, which provides the finite-element core.'
+          } >> notes.md
+          cat notes.md
       - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_type == 'tag' && github.ref_name || steps.ver.outputs.tag }}
           name: Hertzon ${{ github.ref_type == 'tag' && github.ref_name || steps.ver.outputs.tag }}
           target_commitish: ${{ github.sha }}
-          body: |
-            Windows installer (`Hertzon-Setup-*.exe`) and Linux package (`Hertzon-*-linux.tar.gz`).
-
-            Hertzon is built on [EMerge](https://github.com/FennisRobert/EMerge), the open-source FEM solver by
-            Robert Fennis, which provides the finite-element core.
+          body_path: notes.md
           files: |
             dist/Hertzon-Setup-*.exe
             dist/Hertzon-*-linux.tar.gz

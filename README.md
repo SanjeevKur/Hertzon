@@ -181,6 +181,10 @@ hertzon/gui      main window, 3D modeler, project tree, property grids, reports,
 hertzon/mcp      MCP server for AI assistants, live link to the window, client registration
 ```
 
+## Changes
+
+What changed in each release: [CHANGELOG.md](CHANGELOG.md).
+
 ## Tests
 
 ```bash
