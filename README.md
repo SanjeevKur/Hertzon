@@ -122,15 +122,24 @@ solvers, openEMS (FDTD), electrostatics and magnetostatics, circuit co-simulatio
 | `examples/DroneRCS.hzn` | RCS of an imported drone STL model (`Delta_Composites_Demo_3_Layers/`) at 1 GHz, plane wave |
 | `examples/Coax.hzn` | 20 mm, 50 Ω PTFE coax with TEM wave ports, sweep 1-10 GHz ([tutorial](docs/TUTORIAL.md#2-coaxial-cable-with-wave-ports)) |
 | `examples/Dipole.hzn` | Half-wave dipole for 1 GHz with a lumped port, **Auto Open**, far field and gain ([tutorial](docs/TUTORIAL.md#3-half-wave-dipole)) |
+| `examples/GerberTestBoard.hzn` | Two-layer board with copper shapes, cut-outs, a via and holes: the test case of **File > Export > Gerber** ([docs](docs/GERBER_EXPORT.md)) |
 | `examples/SphereRCS.hzn` | RCS of a 100 mm PEC sphere at 1 GHz, plane wave, PML, checked against the Mie series ([tutorial](docs/TUTORIAL.md#4-radar-cross-section-of-a-sphere)) |
 
 `examples/benchmark/` holds the validation and timing cases (patch antenna, waveguide post against a reference,
 sphere RCS against the Mie series, scaling from small to large models) with their scripts.
 The first four examples are regenerated with `python examples/make_examples.py`.
 
+## Manufacturing data (Gerber)
+
+**File > Export > Gerber...** writes Gerber X2 files per copper layer, the board outline and Excellon drill
+files (plated / non-plated) from the real CAD geometry: choose the board plane (any coordinate system),
+origin and units, check the suggested layer assignment in the preview and export. Arcs stay exact,
+overlapping copper is merged, cut-outs and islands keep their polarity, and simulation helpers (air
+region, ports, radiation boundaries) are left out. See [docs/GERBER_EXPORT.md](docs/GERBER_EXPORT.md).
+
 ## Scripting
 
-* **File > Export EMerge Python Script** writes a stand-alone script that rebuilds the same EMerge
+* **File > Export > EMerge Python Script** writes a stand-alone script that rebuilds the same EMerge
   model (geometry, materials, boundaries, ports, initial mesh) and runs the setup, or stops after
   meshing with `--prepare-only` so you can continue in plain EMerge.
 * Solve without the GUI: `python -m hertzon.solver.run Project.hzn DesignName Setup1 out_folder`.
@@ -175,7 +184,7 @@ hertzon/mcp      MCP server for AI assistants, live link to the window, client r
 ## Tests
 
 ```bash
-pip install pytest && python -m pytest tests
+pip install pytest gerbonara pygerber && python -m pytest tests
 ```
 
 ## Citing Hertzon

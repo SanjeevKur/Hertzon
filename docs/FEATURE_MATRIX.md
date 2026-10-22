@@ -108,6 +108,7 @@ Legend: **✔** implemented and tested · **◐** implemented with limitations �
 | Radiation: Infinite Sphere, 2D pattern cuts, 3D polar plot, Gain / Directivity / Realized gain, Eθ/Eφ | ✔ |
 | Field overlays on faces, objects and cut planes: Mag, Complex Mag and Vector of E, H, Jsurf and J (volume current sigma E), phase animation | ✔ |
 | Export Touchstone, CSV, images | ✔ |
+| Export Gerber X2 (copper layers, profile) and Excellon (PTH / NPTH), File > Export > Gerber ([details](GERBER_EXPORT.md)) | ✔ |
 | Optimization: conjugate gradient (projected Polak-Ribiere+), goals on report expressions, error-area or worst-case cost, filter mask, parallel gradient evaluations | ✔ |
 | Parametric sweep | ✖ (next step) |
 | Filter design toolkit: Tools > Filter Design > Tapped Hairpin (N = 2 to 9 resonators, design frequency, hfsynpy microstrip synthesis, parametrized geometry, setup, sweep and conjugate gradient optimization on the filter mask) | ✔ |
@@ -117,6 +118,6 @@ Legend: **✔** implemented and tested · **◐** implemented with limitations �
 
 ## Extras
 
-* **Export EMerge Python Script**: writes a stand-alone script that rebuilds the same EMerge model
+* **File > Export > EMerge Python Script**: writes a stand-alone script that rebuilds the same EMerge model
   and runs the setup (or stops after meshing for custom scripting).
 * Plain-text project files (JSON), easy to diff and generate.
