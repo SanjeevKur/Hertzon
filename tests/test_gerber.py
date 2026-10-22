@@ -341,5 +341,20 @@ def test_export_dialog(tmp_path, monkeypatch):
     written = dlg.export(interactive=False)
     names = sorted(x.name for x in written)
     assert "dlg-L2_GND.gbr" in names and "dlg-PTH_L1-L2.drl" in names
+    assert "Export finished" in dlg.status.text()
+    # the Export button must call export() interactively (clicked(bool) must not reach 'interactive')
+    from PySide6.QtCore import QTimer
+    from PySide6.QtWidgets import QMessageBox
+    shown = []
+
+    def close_boxes():
+        for w in app.topLevelWidgets():
+            if isinstance(w, QMessageBox) and w.isVisible():
+                shown.append(w.text())
+                w.done(0)
+    for k in range(1, 30):
+        QTimer.singleShot(100 * k, close_boxes)
+    dlg.export_btn.click()
+    assert shown and any("Overwrite" in t or "Export finished" in t for t in shown)
     dlg.grab().save(str(tmp_path / "dialog.png"))
     app.processEvents()

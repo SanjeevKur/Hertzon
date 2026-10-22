@@ -161,7 +161,8 @@ class GerberExportDialog(QDialog):
         row.addWidget(self.status, 1)
         self.export_btn = QPushButton("Export")
         self.export_btn.setDefault(True)
-        self.export_btn.clicked.connect(self.export)
+        # clicked(bool) would land in the 'interactive' argument and silence every message
+        self.export_btn.clicked.connect(lambda: self.export())
         close = QPushButton("Close")
         close.clicked.connect(self.reject)
         row.addWidget(self.export_btn)
@@ -417,24 +418,46 @@ class GerberExportDialog(QDialog):
         try:
             plan = G.file_plan(self.res, base)
         except G.ExportError as e:
+            self._done(f"Export failed, nothing was written: {e}", ok=False)
             if interactive:
-                QMessageBox.critical(self, "Export Gerber", f"Nothing was written:\n{e}")
+                QMessageBox.critical(self, "Export Gerber", f"Export failed. Nothing was written:\n\n{e}")
             return []
         existing = [n for n in plan if (folder / n).exists()]
         if existing and interactive:
             r = QMessageBox.question(self, "Export Gerber", "Overwrite existing files?\n\n" + "\n".join(existing))
             if r != QMessageBox.Yes:
                 return []
-        written = G.write(self.res, folder, base)
+        try:
+            written = G.write(self.res, folder, base)
+        except OSError as e:
+            self._done(f"Export failed: {e}", ok=False)
+            if interactive:
+                QMessageBox.critical(self, "Export Gerber", f"Export failed while writing to {folder}:\n\n{e}")
+            return []
         log = getattr(self.parent(), "msgs", None)
         if log is not None:
             log.add("info", f"Gerber export: {len(written)} files written to {folder}")
         warn = [m for m in self.res.messages if m.level == "warning"]
+        self._done(f"Export finished: {len(written)} files written to {folder}"
+                   + (f" ({len(warn)} warning(s))" if warn else ""), ok=True)
         if interactive:
-            QMessageBox.information(self, "Export Gerber", f"Written to {folder}:\n\n" +
-                                    "\n".join(p.name for p in written) +
-                                    (f"\n\n{len(warn)} warning(s), see the export report." if warn else ""))
+            box = QMessageBox(QMessageBox.Information, "Export Gerber", "Export finished!", parent=self)
+            box.setInformativeText(f"{len(written)} files written to {folder}:\n\n" +
+                                   "\n".join(p.name for p in written) +
+                                   (f"\n\n{len(warn)} warning(s), see the export report." if warn else ""))
+            open_btn = box.addButton("Open Folder", QMessageBox.ActionRole)
+            box.addButton(QMessageBox.Ok)
+            box.exec()
+            if box.clickedButton() is open_btn:
+                from PySide6.QtCore import QUrl
+                from PySide6.QtGui import QDesktopServices
+                QDesktopServices.openUrl(QUrl.fromLocalFile(str(folder.resolve())))
         return written
+
+    def _done(self, text: str, ok: bool) -> None:
+        """Result of the last export in the status line (stays visible after the message box)."""
+        col = "#1e8449" if ok else MSG_COLORS["error"]
+        self.status.setText(f"<span style='color:{col}'><b>{'✔' if ok else '✖'} {text}</b></span>")
 
 
 def _clean(s: str) -> str:
