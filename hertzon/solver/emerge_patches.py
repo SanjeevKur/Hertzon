@@ -1,4 +1,5 @@
-"""Run-time fixes for EMerge 2.8.9 (applied once in the solver worker).
+"""Run-time fixes for EMerge 2.8.9 and 3.0 (applied once in the solver worker). Every fix checks the
+EMerge source it changes and leaves other versions alone; EMerge 3 already has most of the speed-ups.
 
 Mesh3D._pre_update builds a dense (nodes x nodes) int32 edge lookup table. With 342k nodes that is 436 GiB
 (MemoryError for large imported models). It is replaced by a sorted-key lookup with the same indexing."""
@@ -478,6 +479,33 @@ def apply_thin_conductor() -> None:
 
     partition_dof._hertzon_consistent = True
     Nedelec2.partition_dof = partition_dof
+    _thin_conductor_new_mesh()
+
+
+def _thin_conductor_new_mesh() -> None:
+    """EMerge 3 splits the sheet DoFs only once, when the boundary data is first initialized; the basis of
+    a new mesh (next adaptive pass) then has no second side and the assembly fails (tri_to_field_os is
+    None). Every new basis is split here as well."""
+    try:
+        from emerge._emerge.physics.microwave import microwave_3d as M
+        from emerge._emerge.physics.microwave.bcs.boundary_conditions import ThinConductor
+    except Exception:  # noqa: BLE001
+        return
+    orig = M.Microwave3D._initialize_field
+    if getattr(orig, "_hertzon_split", False):
+        return
+
+    def _initialize_field(self):
+        new = self.basis is None
+        orig(self)
+        if new and getattr(self, "_bc_data_initialized", False):
+            tc = self.bc.oftype(ThinConductor)
+            if tc:
+                self.basis.partition_dof([x.tags for x in tc])
+                self.basis._partitioned = True
+
+    _initialize_field._hertzon_split = True
+    M.Microwave3D._initialize_field = _initialize_field
 
 
 def apply_mesh_fallback() -> None:
@@ -519,7 +547,11 @@ def apply_curved() -> None:
     tets next to curved CAD surfaces are recomputed after EMerge's assembly. Any error leaves EMerge's
     own (straight) matrices in place."""
     try:
-        from emerge._emerge.physics.microwave.assembly import assembler, curlcurl
+        from emerge._emerge.physics.microwave.assembly import assembler
+        try:
+            from emerge._emerge.physics.microwave.assembly import curlcurl
+        except ImportError:     # EMerge 3: the assembler reads it from emr_microwave at call time
+            from emerge._emerge.physics.microwave.assembly import emr_microwave as curlcurl
         from . import curvilinear as CV
     except Exception:  # noqa: BLE001
         return

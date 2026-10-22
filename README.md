@@ -70,8 +70,8 @@ pip install -e .                                        # installs emerge, PySid
 python -m hertzon examples/WaveguidePost.hzn             # or just: hertzon
 ```
 
-The first solve compiles EMerge's numba kernels, which takes a few minutes once; later solves start
-immediately. On Linux without a desktop, run under `xvfb-run`.
+EMerge 3 ships its solver kernels compiled; the first solve only compiles Hertzon's own numba kernels
+(curved elements, refinement), which takes about a minute once; later solves start immediately. On Linux without a desktop, run under `xvfb-run`.
 
 ## The workflow
 

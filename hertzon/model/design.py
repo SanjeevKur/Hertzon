@@ -14,7 +14,7 @@ from pathlib import Path
 
 from . import schema
 from .expr import Evaluator
-from .materials import Material, SYSTEM_BY_NAME, default_color, normalize_color
+from .materials import Material, default_color, library_material, library_materials, normalize_color
 
 FILE_VERSION = 1
 
@@ -321,13 +321,14 @@ class Project:
         for m in self.materials:
             if m.name == name:
                 return m
-        if name in SYSTEM_BY_NAME:
-            return SYSTEM_BY_NAME[name]
+        m = library_material(name)
+        if m is not None:
+            return m
         raise KeyError(f"Unknown material '{name}'")
 
     def all_materials(self) -> list[Material]:
         local = {m.name for m in self.materials}
-        return list(self.materials) + [m for m in SYSTEM_BY_NAME.values() if m.name not in local]
+        return list(self.materials) + [m for m in library_materials() if m.name not in local]
 
     def design(self, name: str) -> Design:
         for d in self.designs:

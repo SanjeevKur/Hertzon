@@ -1,5 +1,9 @@
 """Faster FEM matrix assembly for EMerge 2.8.9 (same matrices, applied once in the solver worker).
 
+EMerge 3 builds the element matrices, the CSC pattern and the boundary index arrays in its compiled
+library and caches the pattern itself, so there only the PARDISO changes (complex symmetric LDLT, PEC
+rows/columns removed in parallel) are applied.
+
 Between "Using ... basis functions" and "Starting solve" EMerge spends about 13 s per pass on a 250k
 element model, mostly outside its parallel element kernel:
 
@@ -42,7 +46,10 @@ def _kernels():
     return local_tet_to_edgeid, local_tet_to_triid, ned2_tet_stiff_mass, parse_dofcode, matinv
 
 
-_lte, _ltt, _ned2, _parse, _matinv = _kernels()
+try:
+    _lte, _ltt, _ned2, _parse, _matinv = _kernels()
+except ImportError:         # EMerge 3: its own compiled assembly is used (see apply)
+    _lte = _ltt = _ned2 = _parse = _matinv = None
 
 
 def _main_thread() -> bool:
@@ -572,22 +579,9 @@ def apply() -> None:
     if _DONE or os.environ.get("HERTZON_SLOW_ASSEMBLY") == "1":
         return
     _DONE = True
-    from emerge._emerge.elements import femdata
-    from emerge._emerge.physics.microwave.assembly import assembler, curlcurl
     from emerge._emerge import solver
-    femdata.FEMBasis.empty_tri_rowcol = empty_tri_rowcol
-    curlcurl.tet_mass_stiffness_matrices = tet_mass_stiffness_matrices
-    for name in ("assemble_freq_matrix", "assemble_scattering_matrix", "assemble_eig_matrix"):
-        fn = getattr(assembler.Assembler, name, None)
-        if fn is None or getattr(fn, "_hertzon_fast", False):
-            continue
-        try:
-            new, n = _patched(fn, _ASSEMBLER_SUBS)
-        except Exception:  # noqa: BLE001
-            new, n = None, 0
-        if new is not None:
-            setattr(assembler.Assembler, name, new)
-        STATS[name] = n
+    if _ned2 is not None:
+        _apply_assembly()
     fn = solver.SolveRoutine.solve
     try:
         new, n = _patched(fn, [(re.compile(r"Asel = A\[:, solve_ids\]\[solve_ids, :\]"),
@@ -608,3 +602,22 @@ def apply() -> None:
             STATS["pardiso"] = "complex symmetric"
         except Exception:  # noqa: BLE001
             STATS["pardiso"] = "unchanged"
+
+
+def _apply_assembly() -> None:
+    """EMerge 2.8.9: element matrices, CSC pattern and boundary arrays (see the module docstring)."""
+    from emerge._emerge.elements import femdata
+    from emerge._emerge.physics.microwave.assembly import assembler, curlcurl
+    femdata.FEMBasis.empty_tri_rowcol = empty_tri_rowcol
+    curlcurl.tet_mass_stiffness_matrices = tet_mass_stiffness_matrices
+    for name in ("assemble_freq_matrix", "assemble_scattering_matrix", "assemble_eig_matrix"):
+        fn = getattr(assembler.Assembler, name, None)
+        if fn is None or getattr(fn, "_hertzon_fast", False):
+            continue
+        try:
+            new, n = _patched(fn, _ASSEMBLER_SUBS)
+        except Exception:  # noqa: BLE001
+            new, n = None, 0
+        if new is not None:
+            setattr(assembler.Assembler, name, new)
+        STATS[name] = n

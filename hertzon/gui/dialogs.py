@@ -13,7 +13,7 @@ from PySide6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QFormLayout, Q
 
 from ..model import schema
 from ..model.design import Assignment, Setup, Sweep, InfiniteSphere, GeoObject
-from ..model.materials import Material, normalize_color
+from ..model.materials import EMERGE_DISPERSION, EMERGE_LIBRARY, Material, normalize_color
 from ..model.validate import validate, CATEGORIES, worst
 from .props import PropertyGrid, TabbedPropertyGrid
 
@@ -427,6 +427,8 @@ class MaterialEditDialog(QDialog):
         # frequency dependence
         self.disp = QComboBox()
         self.disp.addItems(["None", "Djordjevic-Sarkar", "Debye"])
+        if mat.dispersion == EMERGE_DISPERSION and mat.emsutil_key:
+            self.disp.addItem(EMERGE_DISPERSION)      # the frequency dependent data of EMerge's library
         self.disp.setCurrentText(mat.dispersion or "None")
         f.addRow("Frequency dependence", self.disp)
         self.fm = QLineEdit(mat.measured_frequency)
@@ -439,8 +441,8 @@ class MaterialEditDialog(QDialog):
             f.addRow(lab, w)
         self.aniso.toggled.connect(self._update)
         self.disp.currentTextChanged.connect(self._update)
-        if mat.library == "System":
-            f.addRow(QLabel("System materials are read only; the edit is stored as a project material."))
+        if mat.library in ("System", EMERGE_LIBRARY):
+            f.addRow(QLabel("Library materials are read only; the edit is stored as a project material."))
         bb = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         bb.accepted.connect(self.accept)
         bb.rejected.connect(self.reject)
@@ -472,7 +474,8 @@ class MaterialEditDialog(QDialog):
                         relaxation_frequency=self.frel.text(), anisotropic=self.aniso.isChecked(),
                         permittivity_tensor=self.et.text() if self.aniso.isChecked() else "",
                         permeability_tensor=self.ut.text() if self.aniso.isChecked() else "",
-                        loss_tangent_tensor=self.tt.text() if self.aniso.isChecked() else "")
+                        loss_tangent_tensor=self.tt.text() if self.aniso.isChecked() else "",
+                        emsutil_key=self.mat.emsutil_key)
 
 
 class MaterialsDialog(QDialog):
@@ -488,6 +491,11 @@ class MaterialsDialog(QDialog):
         self.search = QLineEdit()
         self.search.textChanged.connect(self._fill)
         top.addWidget(self.search)
+        top.addWidget(QLabel("Libraries:"))
+        self.libs = QComboBox()
+        self.libs.addItems(["All", "Project", "SysLibrary", "EMerge Library"])
+        self.libs.currentTextChanged.connect(self._fill)
+        top.addWidget(self.libs)
         lay.addLayout(top)
         self.table = QTableWidget(0, 6)
         self.table.setHorizontalHeaderLabels(["Name", "Location", "Rel. Permittivity", "Rel. Permeability",
@@ -517,13 +525,16 @@ class MaterialsDialog(QDialog):
 
     def _fill(self) -> None:
         q = self.search.text().lower()
-        mats = [m for m in self.doc.project.all_materials() if q in m.name.lower()]
+        lib = self.libs.currentText()
+        want = {"Project": ("Project",), "SysLibrary": ("System",), "EMerge Library": (EMERGE_LIBRARY,)}.get(lib)
+        mats = [m for m in self.doc.project.all_materials() if q in m.name.lower() and (want is None or m.library in want)]
         self.table.setRowCount(len(mats))
         for r, m in enumerate(mats):
             er = m.permittivity_tensor if m.anisotropic and m.permittivity_tensor else m.permittivity
             if m.dispersion and m.dispersion != "None":
                 er = f"{er} ({m.dispersion})"
-            for c, v in enumerate([m.name, "Project" if m.library == "Project" else "SysLibrary", er,
+            loc = {"Project": "Project", EMERGE_LIBRARY: "EMerge Library"}.get(m.library, "SysLibrary")
+            for c, v in enumerate([m.name, loc, er,
                                    m.permeability, "PEC" if m.pec else m.conductivity, m.loss_tangent]):
                 self.table.setItem(r, c, QTableWidgetItem(str(v)))
             if m.name == self.current:

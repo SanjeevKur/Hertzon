@@ -8,9 +8,10 @@ version = "0.1.21"
 description = "3D full-wave FEM simulator with an adaptive-meshing workflow, built on EMerge"
 readme = "README.md"
 license = {text = "GPL-2.0-or-later"}
-requires-python = ">=3.10"
+requires-python = ">=3.10,<3.14"   # EMerge 3 supports Python 3.10 to 3.13
 dependencies = [
-    "emerge==2.8.9",
+    "emerge==3.0.0a25",           # brings emsutil (material library) with it
+    "numba>=0.60",                # Hertzon's own kernels (curved elements, refinement size field); EMerge 3 no longer needs it
     "PySide6>=6.5",
     "pyvista>=0.43",
     "pyvistaqt>=0.11",

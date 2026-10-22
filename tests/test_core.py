@@ -180,6 +180,9 @@ def test_parallel_error_kernel_source():
     """The parallel error estimate is generated from EMerge's kernel: the tet loop must become a prange
     without exits (else numba runs it serially), everything else unchanged."""
     from hertzon.solver import fast_error
+    from hertzon.solver.emerge_compat import EMERGE3
+    if EMERGE3:
+        pytest.skip("EMerge 3 has its own compiled error estimate")
     src = fast_error._source()
     assert src is not None
     assert "for itet in prange(N_TETS):" in src and "parallel=True" in src
@@ -210,10 +213,12 @@ def test_fast_assembly_patches_and_sparse_helpers():
     sparse helpers must give scipy's results."""
     import scipy.sparse as sp
     from hertzon.solver import fast_assembly as FA
+    from hertzon.solver.emerge_compat import EMERGE3
     from emerge._emerge.physics.microwave.assembly import assembler
     from emerge._emerge import solver
-    n = sum(FA._patched(assembler.Assembler.assemble_freq_matrix, FA._ASSEMBLER_SUBS)[1:])
-    assert n == 5
+    if not EMERGE3:             # EMerge 3 assembles in its compiled library: only the solve is patched
+        n = sum(FA._patched(assembler.Assembler.assemble_freq_matrix, FA._ASSEMBLER_SUBS)[1:])
+        assert n == 5
     assert FA._patched(solver.SolveRoutine.solve, [(FA.re.compile(r"Asel = A\[:, solve_ids\]\[solve_ids, :\]"),
                                                     "x")])[1] == 1
     rng = np.random.default_rng(0)
@@ -229,6 +234,67 @@ def test_fast_assembly_patches_and_sparse_helpers():
     assert U is not None and abs(U - sp.triu(A)).max() == 0
     assert FA.upper_symmetric((A + sp.random(300, 300, density=0.01, random_state=3)).tocsc()) is None
     assert np.array_equal(FA.free_ids(10, {3, 7, 0}), [1, 2, 4, 5, 6, 8, 9])
+
+
+def test_curved_kernels_match_emerge_element_matrices():
+    """The curved elements use EMerge 2.8.9's numba basis functions (ned2_kernels); with zero edge
+    displacement they must give the element matrices of the installed EMerge (also EMerge 3's compiled
+    assembly: same DoF codes and local edge/face order)."""
+    from hertzon.solver import curvilinear as CV
+    from hertzon.solver import ned2_kernels as NK
+    from emerge._emerge.elements.dofsets import ElementSpace
+    try:
+        from emr import curlcurl as CC         # EMerge 3
+    except ImportError:
+        from emerge._emerge.physics.microwave.assembly import curlcurl as CC
+    rng = np.random.default_rng(1)
+    nodes = np.array([[0, 1, 0, 0, 1], [0, 0, 1, 0, 1], [0, 0, 0, 1, 1]], float) * 1e-3 + rng.normal(0, 1e-4, (3, 5))
+    tets = np.array([[0, 1], [1, 2], [2, 3], [3, 4]], np.int64)           # two tets sharing face 1-2-3
+    st = np.sort(tets, axis=0)
+    edges = np.unique(np.concatenate([st[[a, b]] for a, b in ((0, 1), (0, 2), (0, 3), (1, 2), (1, 3), (2, 3))],
+                                     axis=1), axis=1)
+    tris = np.unique(np.concatenate([st[list(t)] for t in ((0, 1, 2), (0, 1, 3), (0, 2, 3), (1, 2, 3))], axis=1),
+                     axis=1)
+    ekey = {tuple(e): i for i, e in enumerate(edges.T.tolist())}
+    tkey = {tuple(t): i for i, t in enumerate(tris.T.tolist())}
+    t2e = np.array([[ekey[(st[a, k], st[b, k])] for k in range(2)]
+                    for a, b in ((0, 1), (0, 2), (0, 3), (1, 2), (1, 3), (2, 3))], np.int64)
+    t2t = np.array([[tkey[tuple(st[list(t), k])] for k in range(2)]
+                    for t in ((0, 1, 2), (0, 1, 3), (0, 2, 3), (1, 2, 3))], np.int64)
+    er = np.repeat(np.array([[2.2, 0.1, 0], [0.1, 2.0, 0], [0, 0, 1.7]], complex)[:, :, None], 2, axis=2)
+    ur = np.repeat((np.eye(3, dtype=complex) * (1.3 - 0.1j))[:, :, None], 2, axis=2)
+    _, build = CV.kernels()
+    for sp in ElementSpace:
+        codes = np.array(sp.get_set().set3d.codes, dtype=np.int64)
+        nd = len(codes)
+        t2f = np.arange(2 * nd, dtype=np.int64).reshape(nd, 2)
+        E0, B0 = CC._matrix_builder(nodes, tets, tris, edges, t2f, t2e, t2t, ur, er, np.arange(2, dtype=np.int64),
+                                    codes)[:2]
+        E1, B1 = np.zeros(2 * nd * nd, complex), np.zeros(2 * nd * nd, complex)
+        build(nodes, tets, tris, edges, t2e, t2t, ur, er, np.arange(2, dtype=np.int64), np.arange(2, dtype=np.int64),
+              np.zeros((2, 6, 3)), codes, CV._QP, E1, B1)
+        assert np.abs(E1 - np.asarray(E0)).max() < 1e-9 * np.abs(E0).max(), sp
+        assert np.abs(B1 - np.asarray(B0)).max() < 1e-9 * np.abs(B0).max(), sp
+    assert NK.matinv(ur[:, :, 0])[0, 0] == pytest.approx(1 / (1.3 - 0.1j))
+
+
+def test_emerge_material_library():
+    """EMerge's material library (emsutil) appears next to Hertzon's own one; frequency dependent
+    materials keep EMerge's data for the solve."""
+    from hertzon.model.materials import EMERGE_DISPERSION, EMERGE_LIBRARY, emerge_library, emerge_object
+    lib = emerge_library()
+    if not lib:
+        pytest.skip("emsutil not installed")
+    assert len(lib) > 100
+    ro = lib["Rogers RO4350B"]
+    assert ro.library == EMERGE_LIBRARY and float(ro.permittivity) == pytest.approx(3.48)
+    assert float(ro.loss_tangent) == pytest.approx(0.0037) and ro.emsutil_key == "DIEL_RO4350B"
+    assert not {"pec", "copper", "air"} & {n.lower() for n in lib}       # Hertzon's own ones win
+    p = Project()
+    assert p.material("Rogers RO4350B") is ro and ro in p.all_materials()
+    disp = [m for m in lib.values() if m.dispersion == EMERGE_DISPERSION]
+    for m in disp:
+        assert emerge_object(m.emsutil_key) is not None
 
 
 def test_thin_conductor_keeps_the_assembled_dof_numbering():
@@ -310,6 +376,19 @@ def test_results_dir_stays_inside_results_folder():
     for design, setup in [("..", ".."), (".", ".."), ("", ""), ("../..", "x"), ("a/../..", "...")]:
         d = results_dir(proj, design, setup).resolve()
         assert d.parent.parent == base, (design, setup, d)
+
+
+def test_worker_routines_are_independent():
+    """EMerge 3's AutomaticRoutine is a singleton: the parallel sweep threads must still get routines and
+    PARDISO handles of their own (shared ones crashed in MKL now and then)."""
+    from hertzon.solver import emerge_patches
+    emerge_patches.apply()
+    from emerge._emerge import solver as S
+    r = S.AutomaticRoutine()
+    a, b = r.duplicate(), r.duplicate()
+    assert a is not r and b is not a
+    for key, s in r.solvers.items():
+        assert a.solvers[key] is not s and a.solvers[key] is not b.solvers[key]
 
 
 def test_subtract_dialog_moves_single_objects():

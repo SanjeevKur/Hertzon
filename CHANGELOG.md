@@ -3,6 +3,25 @@
 All notable changes of each release. The release workflow copies the section of the released version into
 the GitHub release notes.
 
+## Unreleased
+
+### Changed
+- **Solver core EMerge 3.0.0a25** (was 2.8.9): matrix assembly in EMerge's Rust core, about 4x faster
+  sweep assembly; the first solve after the installation no longer waits for numba compiles of EMerge
+  (cold start of the microstrip benchmark 12 min -> 2.5 min). Python 3.10 to 3.13.
+- Hertzon's own extensions (re-mesh refinement, curved elements, thin conductors, PARDISO LDLT, parallel
+  sweeps) ported; the curved-element kernels are now part of Hertzon (`ned2_kernels.py`, from EMerge 2.8.9).
+
+### New
+- **EMerge material library** (emsutil): 255 more materials (dielectrics, metals, semiconductors, foams,
+  solder masks, liquids) in the Materials dialog, with a "Libraries" filter; frequency dependent data is
+  used by the solver.
+
+### Fixed
+- Plane wave excitation on EMerge 3 (its new default angle convention sent the wave in the wrong direction).
+- Thin conductors after a re-mesh pass (EMerge 3 did not split the new mesh).
+- Rare crash of parallel sweeps on EMerge 3 (the worker threads shared one solver routine).
+
 ## 0.1.21 (2026-10-22)
 
 ### New

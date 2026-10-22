@@ -256,10 +256,8 @@ def curved_data(mesh, exclude=frozenset()):
 # ------------------------------------------------------------------------------------------------
 
 # module-level kernels so that numba can cache the compiled code next to this file (first run only)
-from emerge._emerge.compiled.ccbf import _eval_f_3d, _eval_curl_f_3d, parse_dofcode  # noqa: E402
-from emerge._emerge.physics.microwave.assembly.curlcurl import (  # noqa: E402
-    local_tet_to_edgeid, local_tet_to_triid, tet_coefficients)
-from emerge._emerge.mth.optimized import matinv  # noqa: E402
+from .ned2_kernels import (_eval_f_3d, _eval_curl_f_3d, parse_dofcode, local_tet_to_edgeid,  # noqa: E402
+                           local_tet_to_triid, matinv, tet_coefficients)
 
 
 @njit(cache=True, nogil=True)
