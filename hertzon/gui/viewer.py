@@ -15,6 +15,12 @@ from .doc import Document, Pick
 from ..model.schema import BOUNDARY_COLORS, EXCITATION_COLORS
 from ..model.materials import normalize_color
 
+
+def _alt_key() -> bool:
+    """Alt held now. VTK's Qt interactor only passes Ctrl and Shift on, so its GetAltKey() is always false."""
+    from PySide6.QtWidgets import QApplication
+    return bool(QApplication.queryKeyboardModifiers() & Qt.AltModifier)
+
 HIGHLIGHT = "#e8b04a"          # selected objects, faces, edges
 HIGHLIGHT_METAL = "#ffcf66"    # selected conductors: brighter than copper
 SEL_EDGE = "#b06f00"           # dark gold outline of the selection: easy to see what was hit
@@ -632,7 +638,7 @@ class ModelerView(QWidget):
             self._navigating.discard("left")
         if self.draw is not None:
             # Alt + left drag rotates while drawing; a plain click enters a point
-            if self.plotter.iren.interactor.GetAltKey():
+            if _alt_key():
                 self._navigating.add("left")
                 self._rot_last = self._press_pos
             return
@@ -647,9 +653,13 @@ class ModelerView(QWidget):
             self._panning = True
             self.style.OnMiddleButtonDown()
             return
-        if iren.GetAltKey() and iren.GetShiftKey():
+        if _alt_key() and iren.GetShiftKey():
             self._start_dolly()
             self._dolly = True
+        elif _alt_key():
+            self._dolly = False                 # Alt + left drag rotates (a click without a drag still selects)
+            self._navigating.add("left")
+            self._rot_last = self._press_pos
         elif iren.GetShiftKey():
             self._dolly = False
             self._panning = True
@@ -677,8 +687,8 @@ class ModelerView(QWidget):
             self._panning = False
             self.style.OnMiddleButtonUp()
         self._rot_last = None
+        self._navigating.discard("left")
         if self.nav_mode:
-            self._navigating.discard("left")
             return                              # Rotate / Pan mode: the left mouse does not select
         if not moved:
             add = bool(self.plotter.iren.interactor.GetControlKey())

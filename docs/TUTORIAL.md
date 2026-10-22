@@ -32,8 +32,15 @@ next to the 3D view. At the bottom are the **Message Manager** and the **Progres
 **Selecting.** Press **O** to select whole objects and **F** to select single faces (E for edges, V for
 vertices). Click to select, Ctrl+click to add. **Edit > Select by Name** finds an object in a large model.
 
-**Navigating.** Mouse wheel zooms. Dragging with the middle mouse button rotates, Ctrl + middle button
-pans and Shift + middle button zooms. The
+**Navigating.**
+
+| | Mouse | Alternatives |
+|---|---|---|
+| Rotate | Middle button drag | Alt + left drag |
+| Pan | Shift + left drag | Ctrl + middle drag |
+| Zoom | Mouse wheel (at the cursor) | Right drag, Shift + middle drag, Alt + Shift + left drag |
+
+A plain left drag does not move the view. Without a middle button (touchpad), the
 **Rotate** and **Pan** buttons on the Draw tab turn the left mouse button into rotate or pan mode
 until you press Esc or click the button again. **View > Fit All** (or the ribbon button) brings
 everything into view.
