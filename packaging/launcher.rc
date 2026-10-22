@@ -9,7 +9,7 @@ BEGIN
     BEGIN
       VALUE "FileDescription", "Hertzon - 3D full-wave FEM solver"
       VALUE "ProductName", "Hertzon"
-      VALUE "ProductVersion", "0.1.17"
+      VALUE "ProductVersion", "0.1.18"
       VALUE "LegalCopyright", "GPL-2.0-or-later"
     END
   END

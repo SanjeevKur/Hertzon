@@ -1,8 +1,9 @@
 """Compile the solver kernels ahead of the first solve: python -m hertzon.solver.warmup
 
-EMerge and Hertzon compile their numba kernels on first use and keep them in the disk cache. A small
-patch antenna solve (two adaptive passes with local Delaunay refinement, far field, a discrete and a
-fast sweep) runs every kernel a real solve needs, so the first solve of a user starts at full speed.
+EMerge and Hertzon compile their numba kernels on first use and keep them in the disk cache. Three small
+solves run the kernels real solves need, so the first solve of a user starts at full speed: a patch antenna
+(lumped port, local Delaunay refinement, far field, a discrete and a fast sweep), the NATO sphere (curved
+elements, plane wave) and a coax (wave ports, first-order elements, interpolating sweep).
 Run by setup.ps1 at the end of the installation; Hertzon.exe runs it before the first start of an
 installation made without it (marker .venv/hertzon_kernels.txt).
 """
@@ -21,6 +22,20 @@ EXAMPLES = Path(__file__).resolve().parents[2] / "examples"
 EXAMPLE = EXAMPLES / "PatchAntenna.hzn"
 # curved elements, plane wave and RCS: kernels the patch antenna does not use (NATO sphere, two passes)
 CURVED = EXAMPLES / "NATO-Sphere.hzn"
+# wave ports (2D port mode solve), first-order elements and the interpolating sweep (coax, two passes):
+# without it the first pass of a wave port model compiled for about a minute after the installation
+WAVEPORT = EXAMPLES / "Coax.hzn"
+
+
+def _waveport_project(dst: Path) -> tuple[str, str]:
+    d = json.loads(WAVEPORT.read_text(encoding="utf-8"))
+    des = d["designs"][0]
+    st = des["setups"][0]
+    st["props"].update(MaximumPasses="2", MinimumPasses="2", MaximumDeltaS="1e-9", SaveFields="True")
+    for sw in st.get("sweeps", []):
+        sw["props"].update(Start="1GHz", Stop="2GHz", Count="5", MaxSolutions="6")
+    dst.write_text(json.dumps(d, indent=1), encoding="utf-8")
+    return des["name"], st["name"]
 
 
 def _curved_project(dst: Path) -> tuple[str, str]:
@@ -56,6 +71,8 @@ def run(log=print, timeout: float = 3600, background: bool = False) -> bool:
     ok = _solve(_project, "Warmup", log, timeout, background, t0)
     if CURVED.exists():
         ok = _solve(_curved_project, "WarmupCurved", log, timeout, background, t0) and ok
+    if WAVEPORT.exists():
+        ok = _solve(_waveport_project, "WarmupWavePort", log, timeout, background, t0) and ok
     log(f"Solver kernels {'ready' if ok else 'NOT ready'} after {time.time() - t0:.0f} s")
     return ok
 
