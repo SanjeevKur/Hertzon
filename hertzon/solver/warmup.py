@@ -15,6 +15,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 from pathlib import Path
 
@@ -62,7 +63,7 @@ def _project(dst: Path) -> tuple[str, str]:
     return des["name"], st["name"]
 
 
-def run(log=print, timeout: float = 3600, background: bool = False) -> bool:
+def run(log=print, timeout: float = 1800, background: bool = False) -> bool:
     """Solve the warm-up projects in solver processes. True when both finished."""
     if not EXAMPLE.exists():
         log(f"Warm-up example missing: {EXAMPLE}")
@@ -92,9 +93,16 @@ def _solve(make, name: str, log, timeout: float, background: bool, t0: float) ->
         p = subprocess.Popen([sys.executable, "-m", "hertzon.solver.run", str(proj), design, setup, str(tmp / "out")],
                              stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding="utf-8",
                              errors="replace", env=env, cwd=str(Path(__file__).resolve().parents[2]), **extra)
+        # a solve that hangs (no output at all) must not block the setup or Hertzon.exe: kill it after the
+        # time limit, the kernels it did not reach are then compiled on the first real solve
+        watchdog = threading.Timer(max(1.0, t0 + timeout - time.time()), p.kill)
+        watchdog.daemon = True
+        watchdog.start()
         last = ""
+        tail: list[str] = []
         for line in p.stdout:
             if not line.startswith("@@HZN "):
+                tail = (tail + [line.rstrip()])[-20:]
                 continue
             try:
                 msg = json.loads(line[6:])
@@ -109,7 +117,15 @@ def _solve(make, name: str, log, timeout: float, background: bool, t0: float) ->
                 p.kill()
                 log("  stopped: took too long")
                 return False
-        return p.wait() == 0
+        rc = p.wait()
+        watchdog.cancel()
+        if time.time() - t0 > timeout:
+            log(f"  {name} stopped after {time.time() - t0:.0f} s: took too long")
+        if rc != 0:
+            log(f"  {name} ended with exit code {rc}; last output:")
+            for t in tail:
+                log(f"    {t}")
+        return rc == 0
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 
@@ -128,7 +144,20 @@ def main() -> int:
     if os.name == "nt":
         os.system("title Hertzon setup")  # noqa: S605
     print("Hertzon setup: preparing the solver (once, a few minutes) ...", flush=True)
-    ok = run(lambda s: print(s, flush=True), background="--background" in sys.argv)
+    logfile = Path(sys.prefix) / "hertzon_warmup.log"
+    try:
+        logfile.write_text(f"Hertzon warm-up {time.ctime()}\n", encoding="utf-8")
+    except OSError:
+        pass
+
+    def log(text: str) -> None:
+        print(text, flush=True)
+        try:
+            with logfile.open("a", encoding="utf-8") as f:
+                f.write(text + "\n")
+        except OSError:
+            pass
+    ok = run(log, background="--background" in sys.argv)
     # also after a failure: Hertzon.exe must not repeat it at every start (a solve then compiles itself)
     _done("ok" if ok else "failed")
     return 0 if ok else 1

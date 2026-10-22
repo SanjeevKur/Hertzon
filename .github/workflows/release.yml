@@ -41,12 +41,17 @@ jobs:
           name: dist
           path: dist
       - name: Run the installer silently (it runs setup.ps1 like on a user's machine)
+        timeout-minutes: 60
         shell: pwsh
         run: |
           $exe = (Get-ChildItem dist\Hertzon-Setup-*.exe).FullName
           $dir = "$env:RUNNER_TEMP\Hertzon"
           Start-Process -FilePath $exe -ArgumentList '/S', "/D=$dir" -Wait
           if (-not (Test-Path "$dir\.venv\hertzon_installed.txt")) { throw 'setup.ps1 did not finish: the package installation failed' }
+      - name: Warm-up log
+        if: always()
+        shell: pwsh
+        run: Get-Content "$env:RUNNER_TEMP\Hertzon\.venv\hertzon_warmup.log" -ErrorAction SilentlyContinue
       - name: Start check (imports of the main window and the solver)
         shell: pwsh
         env:
