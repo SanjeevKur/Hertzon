@@ -3566,6 +3566,8 @@ class MainWindow(QMainWindow):
             sub("Create Terminal Solution Data Report", plots)
         if av["farfield"]:
             sub("Create Far Fields Report", [("Radiation Pattern", lambda: self.create_report("Radiation Pattern")),
+                                             ("Rectangular Plot", lambda: self.create_report(
+                                                 "Radiation Pattern", props={"plot": "Rectangular"})),
                                              ("3D Polar Plot", lambda: self.create_report("3D Polar Plot"))])
         if av["antenna"]:
             sub("Create Antenna Parameters Report", [
@@ -3592,7 +3594,7 @@ class MainWindow(QMainWindow):
     def _fill_results_menu(self, m) -> None:
         self._fill_report_menu(m)
 
-    def create_report(self, kind: str, quiet: bool = False) -> None:
+    def create_report(self, kind: str, quiet: bool = False, props: dict | None = None) -> None:
         sols = solution_list(self.doc)
         sol = next((s for s in sols if not s.endswith("LastAdaptive") and "AdaptivePasses" not in s),
                    sols[0] if sols else
@@ -3631,11 +3633,14 @@ class MainWindow(QMainWindow):
                   "Near Field Line": "Near Field", "Monostatic RCS": "Monostatic RCS",
                   "Monostatic RCS Table": "Monostatic RCS Table", "Antenna Parameters": "Antenna Parameters Plot",
                   "Antenna Parameters Table": "Antenna Parameters Table"}[kind]
+        if kind == "Radiation Pattern" and (props or {}).get("plot") == "Rectangular":
+            prefix = "Far Field Plot"
         names = {r.name for r in self.des.reports}
         i = 1
         while f"{prefix} {i}" in names:
             i += 1
         r = Report(f"{prefix} {i}", kind, sol, traces)
+        r.props.update(props or {})
         if kind in ("Rectangular", "Smith Chart", "Data Table") and not sols and self.doc.project.path:
             # nominal design not solved: show the variations of a solved parametric setup (families)
             from .reports import family_solution_list

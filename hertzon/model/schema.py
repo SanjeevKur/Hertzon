@@ -288,7 +288,9 @@ SWEEP: list[Prop] = [
     P("Count", "int", "101", visible_if=("Distribution", "Linear Count")),
     P("SamplesPerDecade", "int", "20", visible_if=("Distribution", "Log Scale")),
     P("Points", "text", "1GHz,2GHz", visible_if=("Distribution", "Single Points")),
-    P("SaveFields", "bool", "False", label="Save fields (all frequencies)", visible_if=("SweepType", "Discrete")),
+    P("SaveFields", "bool", "False", label="Save fields (all frequencies)", visible_if=("SweepType", "!Interpolating"),
+      help="Store the fields at every sweep frequency: field plots, far fields, gain patterns and antenna "
+           "parameters over frequency (needs disk space). Discrete and Fast sweeps"),
     P("ErrorTolerance", "float", "0.5", label="Error tolerance (%)", visible_if=("SweepType", "!Discrete")),
     P("MaxSolutions", "int", "250", label="Max solutions", visible_if=("SweepType", "!Discrete")),
     P("Parallel", "bool", "False", label="Solve frequencies in parallel"),
