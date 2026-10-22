@@ -99,6 +99,7 @@ def _solve(make, name: str, log, timeout: float, background: bool, t0: float) ->
         watchdog.daemon = True
         watchdog.start()
         last = ""
+        done = False        # the solve finished; a crash while the process exits does not matter then
         tail: list[str] = []
         for line in p.stdout:
             if not line.startswith("@@HZN "):
@@ -111,6 +112,8 @@ def _solve(make, name: str, log, timeout: float, background: bool, t0: float) ->
             if msg.get("type") == "progress" and msg.get("text") and msg["text"] != last:
                 last = msg["text"]
                 log(f"  [{time.time() - t0:5.0f} s] {last}")
+            elif msg.get("type") == "done":
+                done = True
             elif msg.get("type") == "failed":
                 log(f"  failed: {msg.get('error')}")
             if time.time() - t0 > timeout:
@@ -121,11 +124,11 @@ def _solve(make, name: str, log, timeout: float, background: bool, t0: float) ->
         watchdog.cancel()
         if time.time() - t0 > timeout:
             log(f"  {name} stopped after {time.time() - t0:.0f} s: took too long")
-        if rc != 0:
+        if rc != 0 and not done:
             log(f"  {name} ended with exit code {rc}; last output:")
             for t in tail:
                 log(f"    {t}")
-        return rc == 0
+        return rc == 0 or done
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 

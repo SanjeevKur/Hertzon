@@ -2096,12 +2096,20 @@ HARD_EXIT = False      # set by the solver process (run.py)
 def hard_exit() -> None:
     """End the solver process right after the results are written. On Windows the teardown of gmsh,
     MKL/Pardiso and numba threads at interpreter exit can crash with an access violation (exit code
-    0xC0000005), which reported a finished solution as failed."""
+    0xC0000005), which reported a finished solution as failed. os._exit still runs the DLL detach code
+    there (ExitProcess) and crashed the same way now and then, so Windows ends with TerminateProcess."""
     if not HARD_EXIT:
         return
     for stream in (sys.stdout, sys.stderr):
         try:
             stream.flush()
+        except Exception:  # noqa: BLE001
+            pass
+    if os.name == "nt":
+        try:
+            import ctypes
+            k32 = ctypes.windll.kernel32
+            k32.TerminateProcess(k32.GetCurrentProcess(), 0)
         except Exception:  # noqa: BLE001
             pass
     os._exit(0)
