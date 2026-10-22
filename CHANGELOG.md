@@ -3,7 +3,7 @@
 All notable changes of each release. The release workflow copies the section of the released version into
 the GitHub release notes.
 
-## Unreleased
+## 0.1.21 (2026-10-22)
 
 ### New
 - **Subtract** dialog as in HFSS: arrow buttons **→ / ←** move the selected objects between Blank Parts and
