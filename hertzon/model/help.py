@@ -142,7 +142,9 @@ HELP: dict[str, str] = {
     "EnforceRefinementPercent": "Adjust the refinement until the target percentage is reached.",
     "CurvedElements": "Tetrahedra at curved metal and material surfaces (cylinders, spheres, splines) get curved edges that follow the true geometry instead of flat facets. Removes the faceting error, so round posts, rods and dielectric resonators converge with far fewer elements. Applies to PEC, finite-conductivity metal, symmetry and material surfaces. Surfaces that touch a port, and impedance, lumped and thin-conductor faces, stay flat. Faceted primitives (NumberOfSegments/NumberOfVertices > 0) are flat by definition. Switch off only to compare with the plain flat-faceted mesh.",
     "RefinementMethod": "Local (Delaunay), the default: local, the mesh is refined in place by local Delaunay point insertion around the worst elements; everything else stays exactly the same (nested meshes, no re-meshing noise, no gmsh run per pass). Remesh (slow): re-mesh the whole model each pass with gmsh. Remesh (stable, experimental): re-mesh, but every region keeps its current element size and only the worst elements are halved (nearly nested meshes, smoother convergence; test option).",
-    "SaveFields": "Store fields for field plots (needs disk space).",
+    "SaveFields": "Store fields for field plots (needs disk space). In a sweep (Discrete or Fast): the fields at "
+                  "every frequency, needed for far fields, gain patterns and antenna parameters over frequency; "
+                  "an Interpolating sweep has S-parameters only.",
     "Threads": "Number of CPU cores used by the solver (0 = all).",
     "MinimumFrequency": "Lowest eigenfrequency to search for.",
     "MaximumDeltaFreq": "Convergence target: maximum relative change of the eigenfrequencies (%).",
