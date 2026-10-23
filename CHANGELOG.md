@@ -12,6 +12,14 @@ the GitHub release notes.
 - **Center Point Arc segments in polylines** (key **C** while drawing, like L / A / S): stored as the HFSS
   segment type `AngularArc:<angle>:<plane>` in *Segment types*, so the angle can be edited (and be an
   expression, e.g. `AngularArc:ang:XY`); the end point follows the angle. Closed arcs can be covered.
+- **First start note**: when the solver kernels are not compiled yet (Hertzon started without the setup's
+  warm-up, e.g. a pip installation, or after an update), the Message Manager and the status bar say
+  "First start detected", and the first solve shows "compiling the solver kernels (once, a few minutes)".
+
+### Changed
+- **NATO sphere example**: radiation boundary instead of PML and Max Delta E 0.001; the sphere RCS example
+  and the tutorial name the radiation boundary as well (with a plane wave the radiation boundary is used
+  in any case, the incident wave enters through it; the help of *Open boundary* now says so).
 
 ### Changed
 - **Overlapping solids** as in HFSS with material override: a conductor wins over a dielectric (or air) in

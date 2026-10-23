@@ -7,7 +7,7 @@
    "settings": {
     "SolutionType": "Modal",
     "AutoOpen": "Auto Open",
-    "AutoOpenBoundary": "PML",
+    "AutoOpenBoundary": "Radiation",
     "AutoOpenPadding": "",
     "FilterAirMargin": "12mm",
     "RadiatingStructure": "False",
@@ -100,7 +100,7 @@
       "HighFrequency": "10GHz",
       "MaximumPasses": "20",
       "MaximumDeltaS": "0.02",
-      "MaximumDeltaEnergy": "0.0001",
+      "MaximumDeltaEnergy": "0.001",
       "UseMatrixConvergence": "False",
       "MaxDeltaMag": "0.02",
       "MaxDeltaPhase": "2",

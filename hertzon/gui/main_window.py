@@ -128,6 +128,7 @@ class MainWindow(QMainWindow):
         self._update_title()
         self.doc.rebuild()
         self.msgs.add("info", f"Hertzon {__version__} - 3D full-wave FEM (EMerge solver)")
+        self._first_start_note()
         from .ai_link import AiLink
         self.ai_link = AiLink(self)
         if self.settings.value("ai/live_link", False, type=bool):
@@ -3171,6 +3172,20 @@ class MainWindow(QMainWindow):
         dlg.show()
         dlg.raise_()
         return dlg.ok
+
+    def _first_start_note(self) -> None:
+        """Solver kernels not compiled yet on this machine (Hertzon started without the setup's warm-up,
+        e.g. from a pip installation or after an update): say so before the first solve takes longer."""
+        try:
+            from ..solver.bridge import _first_run
+            first = _first_run()
+        except Exception:  # noqa: BLE001
+            return
+        if first:
+            self.msgs.add("warning", "First start detected: the solver kernels are compiled during the first "
+                          "solve, once. It takes a few minutes longer than usual.")
+            self.statusBar().showMessage("First start detected: the first solve compiles the solver kernels "
+                                         "(once, a few minutes)", 30000)
 
     def goto_message(self, text: str) -> None:
         """Select what a message is about: object, boundary/excitation/mesh operation, setup, report."""
