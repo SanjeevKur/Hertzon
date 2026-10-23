@@ -14,7 +14,10 @@
 > ⚠️ **Hertzon is under active development. It can still contain bugs, which are being fixed step by step.
 > Please verify important results independently and report problems as GitHub issues.**
 
-An open-source 3D full-wave electromagnetic simulator with a **classic engineering workflow**:
+🌐 **Website:** [c8501024.github.io/Hertzon](https://c8501024.github.io/Hertzon/)
+
+An open-source 3D full-wave electromagnetic simulator (FEM, frequency domain) for **antennas, microwave
+filters, waveguides, PCB structures and radar cross section**, with a **classic engineering workflow**:
 draw the model, assign boundaries and excitations, add an analysis setup with
 **adaptive meshing**, add frequency sweeps, analyze, then look at S-parameters, fields
 and radiation patterns. The finite-element solver underneath is
