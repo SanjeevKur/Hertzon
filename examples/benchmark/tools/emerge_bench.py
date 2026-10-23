@@ -14,6 +14,7 @@ from __future__ import annotations
 import collections
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -128,6 +129,7 @@ def run(outdir: str, cases: list[str], passes: int | None, env: dict | None = No
                            stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL)
         for case in cases or list(CASES):
             p = prepare(case, passes, Path(td))
+            shutil.rmtree(out / case, ignore_errors=True)   # an old result folder would resume its adaptive passes
             t = time.time()
             with open(out / f"{case}.log", "w", encoding="utf-8") as log:
                 subprocess.run([sys.executable, __file__, "_one", case, str(p), str(out / case)],
