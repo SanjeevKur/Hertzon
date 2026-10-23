@@ -2833,6 +2833,8 @@ class MainWindow(QMainWindow):
             self.ask_non_model = False
             self.settings.setValue("modeler/ask_non_model", False)
         if box.clickedButton() is nm:
+            if cb.isChecked():          # don't ask again means: keep drawing Non Model objects
+                self.set_new_objects_model(False)
             return False
         if box.buttonRole(box.clickedButton()) == QMessageBox.NoRole:
             return True
