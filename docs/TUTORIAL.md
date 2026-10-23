@@ -258,9 +258,11 @@ Results are the input impedance (about 73 Ω at resonance), S11, the radiation p
 1. Select `Gap` (**O**), **Simulation > Excitations > Assign > Lumped Port** (or the **Lumped Port**
    ribbon button).
 2. **Full port impedance**: `73ohm` (or `50ohm`, if you want S11 against a 50 Ω generator).
-3. **Integration line**: Hertzon proposes a line across the shorter side of the sheet. The gap sheet here is
-   square, so check it. It must run from one arm to the other, along Z: `0,0,-g/2;0,0,g/2`.
-   The line is drawn as an arrow on the model.
+3. **Integration line**: Hertzon places the line between the two conductors that touch the sheet, from the
+   centre of one contact to the centre of the other, here from one arm to the other along Z:
+   `0,0,-g/2;0,0,g/2`. The line is drawn as an arrow on the model. To set it yourself, enter start and end
+   point, or right click the port in the project tree > **Draw Integration Line** and click both points
+   in the 3D view (**Auto Integration Line** places it automatically again).
 
 ### 3.4 Far field, setup and sweep
 

@@ -154,7 +154,9 @@ BOUNDARIES: dict[str, list[Prop]] = {
     "Lumped RLC": [P("UseResistance", "bool", "True"), P("Resistance", "expr", "50ohm"),
                    P("UseInductance", "bool", "False"), P("Inductance", "expr", "1nH"),
                    P("UseCapacitance", "bool", "False"), P("Capacitance", "expr", "1pF"),
-                   P("IntegrationLine", "points", "", help="Start;End point of the current flow line")],
+                   P("IntegrationLine", "points", "", help="Start;End point of the current flow line, from one conductor to the other. Set "
+                     "automatically between the two conductors touching the sheet; right click the boundary to "
+                     "draw it in the 3D view or to place it automatically again")],
     "Radiation": [P("Order", "choice", "First order", choices=("First order", "Second order")),
                   P("FarFieldReference", "bool", "True", label="Include for near/far field calculation")],
     "PML": [P("Thickness", "length", "", help="Empty = lambda/4 at lowest frequency"),
@@ -185,7 +187,9 @@ EXCITATIONS: dict[str, list[Prop]] = {
                   P("Deembed", "bool", "False", tab="Post Processing"),
                   P("DeembedDistance", "length", "0", tab="Post Processing", visible_if=("Deembed", "True"))],
     "Lumped Port": [P("PortNumber", "int", "1"), P("Impedance", "expr", "50ohm", label="Full port impedance"),
-                    P("IntegrationLine", "points", "", help="Start;End of the voltage line. Empty = auto")],
+                    P("IntegrationLine", "points", "", help="Start;End of the voltage line, from one conductor to the other. Set "
+                     "automatically between the two conductors touching the sheet (empty = auto); right click the "
+                     "port to draw it in the 3D view or to place it automatically again")],
     "Floquet Port": [P("PortNumber", "int", "1"), P("NumberOfModes", "int", "2"),
                      P("Permittivity", "expr", "1", label="Medium permittivity")],
     "Incident Plane Wave": [P("VectorInput", "choice", "Cartesian", label="Vector input format",

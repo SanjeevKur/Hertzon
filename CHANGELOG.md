@@ -3,6 +3,20 @@
 All notable changes of each release. The release workflow copies the section of the released version into
 the GitHub release notes.
 
+## Unreleased
+
+### Changed
+- **Integration line of Lumped Port and Lumped RLC**: placed automatically between the two conductors
+  that touch the sheet, from the centre of one contact to the centre of the other (conductors: objects of a
+  metal material and faces or objects with a Perfect E or Finite Conductivity boundary). A gap longer than
+  the traces are wide or a sheet wider than the traces now gets the right line. Without two touching
+  conductors the line runs across the shorter side of the sheet as before.
+
+### New
+- **Draw Integration Line** (right click a Lumped Port or Lumped RLC in the project tree): start and end
+  point picked with two clicks in the 3D view, with snapping to vertices and edge centers.
+  **Auto Integration Line** places it between the conductors again.
+
 ## 0.1.25 (2026-10-23)
 
 ### Changed

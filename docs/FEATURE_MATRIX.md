@@ -61,7 +61,7 @@ Legend: **✔** implemented and tested · **◐** implemented with limitations �
 | Function | In Hertzon | Status | Notes |
 |---|---|---|---|
 | Wave Port (modes, Zpi/Zpv/Zvi, renormalize, de-embed) | Wave Port | ✔ | De-embedding uses the solved port propagation constant |
-| Lumped Port (impedance, integration line) | Lumped Port | ✔ | Integration line is filled in automatically for rectangular sheets |
+| Lumped Port (impedance, integration line) | Lumped Port | ✔ | Integration line placed automatically between the touching conductors, or drawn in the 3D view |
 | Floquet Port | Floquet Port | ◐ | Needs periodic boundaries, which are not available yet |
 | Incident Plane Wave | Incident Plane Wave | ✖ | Can be assigned, solver warns |
 
