@@ -1,0 +1,37 @@
+# Test installers for every push to the dev branch. They are not published as a release: the
+# Windows installer and the Linux package are an Actions artifact of the run (Actions tab > the run >
+# Artifacts, needs a GitHub login), kept for 30 days. A newer push cancels a build still running.
+name: Dev build
+
+on:
+  push:
+    branches: [dev]
+  workflow_dispatch:
+
+concurrency:
+  group: dev-build
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    uses: ./.github/workflows/build.yml
+    with:
+      artifact: Hertzon-test-${{ github.run_number }}
+      retention-days: 30
+
+  summary:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download link
+        run: |
+          {
+            echo "### Test installer ${{ github.run_number }}"
+            echo
+            echo "Commit \`${GITHUB_SHA::7}\` on dev, Windows installation checked."
+            echo
+            echo "[Download Hertzon-test-${{ github.run_number }}.zip](${{ needs.build.outputs.artifact-url }})"
+          } >> "$GITHUB_STEP_SUMMARY"

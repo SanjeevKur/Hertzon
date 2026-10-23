@@ -1,0 +1,36 @@
+{
+  "projectName": "hertzon",
+  "projectOwner": "c8501024",
+  "repoType": "github",
+  "repoHost": "https://github.com",
+  "files": [
+    "README.md"
+  ],
+  "imageSize": 80,
+  "commit": false,
+  "commitConvention": "none",
+  "contributorsPerLine": 7,
+  "linkToUsage": false,
+  "contributors": [
+    {
+      "login": "c8501024",
+      "name": "c8501024",
+      "avatar_url": "https://avatars.githubusercontent.com/u/29594166?v=4",
+      "profile": "https://github.com/c8501024",
+      "contributions": [
+        "code",
+        "maintenance"
+      ]
+    },
+    {
+      "login": "FeruzTopalov",
+      "name": "FeruzTopalov",
+      "avatar_url": "https://avatars.githubusercontent.com/u/32893186?v=4",
+      "profile": "https://github.com/FeruzTopalov",
+      "contributions": [
+        "bug",
+        "ideas"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,72 @@
+# Builds the Windows installer and the Linux package and installs the Windows one on a clean Windows
+# machine with Python 3.13 (the full setup a user gets, packages included). Used by release.yml and
+# dev.yml; both files end up in one Actions artifact.
+name: Build
+
+on:
+  workflow_call:
+    inputs:
+      artifact:
+        description: Name of the artifact with the installers
+        type: string
+        default: dist
+      retention-days:
+        description: Days the artifact is kept (0 = the repository default, 90)
+        type: number
+        default: 0
+    outputs:
+      artifact-url:
+        description: Download link of the artifact
+        value: ${{ jobs.build.outputs.artifact-url }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    outputs:
+      artifact-url: ${{ steps.upload.outputs.artifact-url }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install NSIS
+        run: sudo apt-get update && sudo apt-get install -y nsis
+      - name: Build installers
+        run: bash packaging/build_installer.sh
+      - uses: actions/upload-artifact@v4
+        id: upload
+        with:
+          name: ${{ inputs.artifact }}
+          retention-days: ${{ inputs.retention-days }}
+          path: |
+            dist/Hertzon-Setup-*.exe
+            dist/Hertzon-*-linux.tar.gz
+
+  install-windows:
+    needs: build
+    runs-on: windows-latest
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.artifact }}
+          path: dist
+      - name: Run the installer silently (it runs setup.ps1 like on a user's machine)
+        timeout-minutes: 40
+        shell: pwsh
+        run: |
+          $exe = (Get-ChildItem dist\Hertzon-Setup-*.exe).FullName
+          $dir = "$env:RUNNER_TEMP\Hertzon"
+          Start-Process -FilePath $exe -ArgumentList '/S', "/D=$dir" -Wait
+          if (-not (Test-Path "$dir\.venv\hertzon_installed.txt")) { throw 'setup.ps1 did not finish: the package installation failed' }
+      - name: Warm-up log
+        if: always()
+        shell: pwsh
+        run: Get-Content "$env:RUNNER_TEMP\Hertzon\.venv\hertzon_warmup.log" -ErrorAction SilentlyContinue
+      - name: Start check (imports of the main window and the solver)
+        shell: pwsh
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          $py = "$env:RUNNER_TEMP\Hertzon\.venv\Scripts\python.exe"
+          & $py -c "import hertzon, hertzon.gui.main_window, hertzon.solver.run, emerge, hfsynpy; print('Hertzon', hertzon.__version__, 'imports ok')"
+          if ($LASTEXITCODE -ne 0) { throw 'import check failed' }
