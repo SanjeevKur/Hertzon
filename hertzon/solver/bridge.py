@@ -1968,16 +1968,7 @@ def excite(fld, port: dict) -> None:
 
 def _interp_known_tets(fld, x, y, z, mapping) -> None:
     """fld.interpolate at points whose containing tetrahedron is known (skips the point location search)."""
-    basis = fld.basis
-    orig = basis.interpolate_index
-    try:
-        basis.interpolate_index = lambda *a, **k: mapping.astype(orig(x[:1], y[:1], z[:1]).dtype, copy=False)
-        fld.interpolate(x, y, z, usenan=False)
-    finally:
-        try:
-            del basis.interpolate_index
-        except AttributeError:
-            basis.interpolate_index = orig
+    fld.interpolate(x, y, z, usenan=False, mapping=mapping)
 
 
 def _peak_rss() -> float:
