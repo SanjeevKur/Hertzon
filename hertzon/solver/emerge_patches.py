@@ -479,33 +479,6 @@ def apply_thin_conductor() -> None:
 
     partition_dof._hertzon_consistent = True
     Nedelec2.partition_dof = partition_dof
-    _thin_conductor_new_mesh()
-
-
-def _thin_conductor_new_mesh() -> None:
-    """EMerge 3 splits the sheet DoFs only once, when the boundary data is first initialized; the basis of
-    a new mesh (next adaptive pass) then has no second side and the assembly fails (tri_to_field_os is
-    None). Every new basis is split here as well."""
-    try:
-        from emerge._emerge.physics.microwave import microwave_3d as M
-        from emerge._emerge.physics.microwave.bcs.boundary_conditions import ThinConductor
-    except Exception:  # noqa: BLE001
-        return
-    orig = M.Microwave3D._initialize_field
-    if getattr(orig, "_hertzon_split", False):
-        return
-
-    def _initialize_field(self):
-        new = self.basis is None
-        orig(self)
-        if new and getattr(self, "_bc_data_initialized", False):
-            tc = self.bc.oftype(ThinConductor)
-            if tc:
-                self.basis.partition_dof([x.tags for x in tc])
-                self.basis._partitioned = True
-
-    _initialize_field._hertzon_split = True
-    M.Microwave3D._initialize_field = _initialize_field
 
 
 def apply_mesh_fallback() -> None:

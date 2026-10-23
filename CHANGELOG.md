@@ -5,6 +5,12 @@ the GitHub release notes.
 
 ## Unreleased
 
+### Changed
+- **EMerge 3.0.0b5** (was 3.0.0a25), as advised in #25. It fixes the port mode solve for wave ports and
+  the thin conductor split after a re-mesh pass; Hertzon's own workaround for the latter is removed, and
+  the setup no longer needs to mark EMerge's welcome text as shown. Speed and results were checked
+  against 3.0.0a25 on the benchmark models (`examples/benchmark/tools/emerge_bench.py`).
+
 ### Fixed
 - **Radiation Pattern, polar plot**: a Phi cut is now labelled over theta -180..180 deg, as defined on the
   far field sphere and shown in the rectangular plot, instead of 0..360 deg (#18). A Theta cut keeps phi
