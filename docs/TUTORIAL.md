@@ -61,6 +61,24 @@ lines follow.
 (F5) solves every enabled setup. Each adaptive pass appears in the Progress window, and **Results >
 Solution Data...** shows the convergence table, the mesh statistics and the matrix data.
 
+**Overlapping objects.** Solids may overlap; Hertzon does not refuse them. In the overlap a conductor wins
+over a dielectric (or air), whatever its size; otherwise the smaller object wins, and the air region is
+always background. This is the rule of HFSS with *material override*. An object completely inside
+another (substrate in an air box, a via in the substrate) is the usual case and needs nothing. The
+**Validation Check** lists every other overlap with the material that applies there:
+
+| Overlap | Example | Validation Check |
+|---|---|---|
+| Conductor partly in a dielectric | via sticking out of the substrate, trace over the board edge | ✔ note: the conductor applies |
+| Two dielectrics (or two conductors) of different materials, partly | substrate and a glue layer shifted into each other | ⚠ warning: the smaller object applies; HFSS rejects this |
+| Dielectric completely inside a conductor | dielectric inside a PEC bounding box | ⚠ warning: the dielectric has no effect |
+| Same material | two copper pieces touching | not listed (nothing changes) |
+
+Select an overlap and click **Resolve Overlap**, or **Resolve All Overlaps**: Hertzon subtracts the object
+whose material applies from the other one (**Subtract** with *Clone tool objects before operation*, so both stay). The
+model then shows exactly what is solved, nothing changes in the result, and the geometry is free of
+overlaps as HFSS expects it (for example before an export). Undo (Ctrl+Z) takes it back.
+
 > The very first analysis after installing or updating compiles EMerge's solver kernels and takes a few
 > minutes longer. The installer already does this once, so normally you do not notice it.
 

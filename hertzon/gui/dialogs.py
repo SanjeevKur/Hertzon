@@ -657,10 +657,13 @@ class ValidationDialog(QDialog):
     ICON = {"ok": "✔", "warning": "⚠", "error": "✖"}
     COLOR = {"ok": "#1e8449", "warning": "#b9770e", "error": "#c0392b"}
 
-    def __init__(self, doc, parent=None):
+    def __init__(self, doc, parent=None, overlaps=None, resolve=None):
+        """overlaps: classified overlapping solids (model.validate.Overlap) from the exact geometry check;
+        resolve(list of Overlap) subtracts the winner of each from the loser."""
         super().__init__(parent)
         self.setWindowTitle(f"Validation Check: {doc.project.name} - {doc.design.name}")
-        checks = validate(doc.project, doc.design, doc.tess, doc.errors)
+        checks = validate(doc.project, doc.design, doc.tess, doc.errors, overlaps)
+        fixable = {ov.message: ov for ov in overlaps or [] if not ov.contained}
         self.ok = not any(c.level == "error" for c in checks)
         lay = QHBoxLayout(self)
         tree = QTreeWidget()
@@ -683,6 +686,23 @@ class ValidationDialog(QDialog):
         side.addWidget(QLabel("Validation check completed." if self.ok else
                               "Validation check found errors.\nPlease fix them before analyzing."))
         side.addStretch()
+        if fixable and resolve is not None:
+            # resolve overlaps the way the solver treats them: subtract the winning object from the other one
+            one = QPushButton("Resolve Overlap")
+            one.setToolTip("Subtract the object whose material applies in the selected overlap from the other "
+                           "object (Subtract with Clone tool objects), so the model shows what is solved")
+            one.setEnabled(False)
+            tree.currentItemChanged.connect(lambda it, _p: one.setEnabled(
+                it is not None and (it.data(0, Qt.UserRole) or "") in fixable))
+
+            def run(ovs):
+                self.accept()
+                resolve(ovs)
+            one.clicked.connect(lambda: run([fixable[tree.currentItem().data(0, Qt.UserRole)]]))
+            every = QPushButton(f"Resolve All Overlaps ({len(fixable)})")
+            every.clicked.connect(lambda: run(list(fixable.values())))
+            side.addWidget(one)
+            side.addWidget(every)
         close = QPushButton("Close")
         close.clicked.connect(self.accept)
         side.addWidget(close)

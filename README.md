@@ -89,7 +89,9 @@ EMerge 3 ships its solver kernels compiled; the first solve only compiles Hertzo
    passes, maximum Delta S, matrix convergence, minimum (converged) passes, percent refinement,
    maximum refinement, lambda refinement, solver choice. **Add Frequency Sweep**: discrete or
    interpolating, linear step / count / log / single points.
-5. **Validation Check**, then **Analyze All** (F5). The progress window shows each adaptive pass;
+5. **Validation Check** (also lists overlapping solids with the material that applies there, and resolves
+   them with one click: conductor wins over dielectric, otherwise the smaller object, as HFSS with material
+   override), then **Analyze All** (F5). The progress window shows each adaptive pass;
    **Solution Data** shows the convergence table and plot, matrix data and mesh statistics.
 6. **Results**: rectangular plots, Smith chart, data table, radiation pattern, 3D polar plot;
    **Fields**: magnitude, complex magnitude and vector plots of E, H and surface current on faces,

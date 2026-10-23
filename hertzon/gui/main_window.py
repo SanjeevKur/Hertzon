@@ -3164,8 +3164,45 @@ class MainWindow(QMainWindow):
             self.des.spheres.append(sp)
             self.doc.commit("radiation", geometry=False)
 
+    def solid_overlaps(self):
+        """Exact check of overlapping model solids (model.validate.Overlap), None if it failed."""
+        from ..kernel import occ as K
+        from ..model.validate import classify_overlaps
+        names = [o.name for o in self.des.live_objects() if o.model and o.history[0].kind != "CreateRegion"
+                 and o.name in self.doc.tess and self.doc.tess[o.name].dim == 3]
+        QApplication.setOverrideCursor(Qt.WaitCursor)
+        try:
+            return classify_overlaps(self.doc.project, self.des,
+                                     K.solid_overlaps(self.des, self.doc.evaluator(), names))
+        except Exception as e:  # noqa: BLE001
+            self.msgs.add("warning", f"Overlap check failed: {e}")
+            return None
+        finally:
+            QApplication.restoreOverrideCursor()
+
+    def resolve_overlaps(self, ovs) -> None:
+        """Subtract the winner of each overlap from the loser (as Subtract with Clone tool objects), so the
+        model shows the material the solver uses there. Objects that win elsewhere are cut first, so their
+        clones carry their own cuts."""
+        todo, order = list(ovs), []
+        while todo:
+            ready = [o for o in todo if not any(p.loser == o.winner for p in todo)] or todo[:1]
+            order += ready
+            todo = [o for o in todo if o not in ready]
+        self.doc.checkpoint()
+        for ov in order:
+            c = copy.deepcopy(self.des.obj(ov.winner))
+            c.name = self.des.unique_name(ov.winner + "_tool")
+            c.consumed_by = ov.loser
+            self.des.objects.append(c)
+            self.des.obj(ov.loser).history.append(Command.new("Subtract", Tools=c.name, KeepOriginals="True"))
+            self.msgs.add("info", f"Overlap resolved: '{ov.winner}' subtracted from '{ov.loser}'")
+        self.doc.commit("model")
+        self.doc.select([Pick(n) for n in dict.fromkeys(o.loser for o in order)])
+        self.validation_check()
+
     def validation_check(self) -> bool:
-        dlg = ValidationDialog(self.doc, self)
+        dlg = ValidationDialog(self.doc, self, self.solid_overlaps(), self.resolve_overlaps)
         dlg.messageActivated.connect(self.goto_message)
         dlg.setModal(False)
         dlg.setAttribute(Qt.WA_DeleteOnClose)

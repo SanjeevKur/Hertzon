@@ -16,6 +16,7 @@ Legend: **✔** implemented and tested · **◐** implemented with limitations �
 | — | **Auto Open - Filter** | ✔ | Air box with a fixed margin and radiation boundary on all outer faces (filter workflow) |
 | Undo / Redo, copy / paste | Edit menu, Ctrl+Z / Ctrl+Y / Ctrl+C / Ctrl+V | ✔ | |
 | Validation Check | Simulation > Validation Check | ✔ | Design, 3D model, boundaries/excitations, mesh, setups |
+| Overlapping objects (material override) | Validation Check > Resolve Overlap / Resolve All Overlaps | ✔ | Conductor wins over dielectric, otherwise the smaller object (HFSS with material override); partial overlaps HFSS rejects are warnings, not errors; Resolve subtracts the winner (clone) |
 | Message Manager, Progress window with Abort | Docks at the bottom | ✔ | |
 | Save / Save As / Recent | File menu (`.hzn` JSON file, results in `.hznresults/`) | ✔ | |
 

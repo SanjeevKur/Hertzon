@@ -3,6 +3,15 @@
 All notable changes of each release. The release workflow copies the section of the released version into
 the GitHub release notes.
 
+## Unreleased
+
+### New
+- **Overlapping objects in the Validation Check**: an exact geometry check lists the solids that overlap,
+  how much, and which material applies there (conductor wins over dielectric, otherwise the smaller
+  object); a dielectric completely inside a conductor is flagged as without effect. **Resolve Overlap** /
+  **Resolve All Overlaps** subtract the winning object from the other one (Subtract with clone), so the
+  model shows what is solved and is free of overlaps as HFSS expects it. Described in the tutorial (basics).
+
 ## 0.1.23 (2026-10-23)
 
 ### New

@@ -645,3 +645,50 @@ def test_first_start_note(monkeypatch):
     MainWindow._first_start_note(win)
     assert msgs[0][0] == "warning" and "First start detected" in msgs[0][1]
     assert "compiles the solver kernels" in status[0]
+
+
+def test_solid_overlaps_and_resolve():
+    """Exact overlap check: partial overlaps are listed with the material that applies (conductor wins,
+    otherwise the smaller object), contained objects only when a conductor swallows them; Resolve subtracts
+    the winner from the loser and the overlap is gone."""
+    import os
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    import types
+    from PySide6.QtWidgets import QApplication
+    from hertzon.gui import main_window as MW
+    from hertzon.model.validate import classify_overlaps
+    app = QApplication.instance() or QApplication([])  # noqa: F841
+    p = Project()
+    d = p.designs[0]
+    d.add_object("CreateBox", "Sub", Position="0,0,0", XSize="20", YSize="20", ZSize="2").material = "FR4_epoxy"
+    d.add_object("CreateBox", "Glue", Position="15,0,0", XSize="10", YSize="10", ZSize="2").material = "Teflon (tm)"
+    d.add_object("CreateCylinder", "Via", CenterPosition="5,5,-1", Axis="Z", Radius="0.5", Height="4").material = "copper"
+    d.add_object("CreateBox", "Shield", Position="40,0,0", XSize="10", YSize="10", ZSize="10").material = "pec"
+    d.add_object("CreateBox", "Inner", Position="42,2,2", XSize="2", YSize="2", ZSize="2").material = "FR4_epoxy"
+    d.add_object("CreateBox", "Air", Position="-5,-5,-5", XSize="70", YSize="30", ZSize="30").material = "vacuum"
+    ev = d.evaluator(p)
+    names = ["Sub", "Glue", "Via", "Shield", "Inner", "Air"]
+    ovs = classify_overlaps(p, d, K.solid_overlaps(d, ev, names))
+    got = {(o.winner, o.loser): o for o in ovs}
+    assert set(got) == {("Glue", "Sub"), ("Via", "Sub"), ("Shield", "Inner")}, [o.message for o in ovs]
+    assert got["Glue", "Sub"].level == "warning" and got["Via", "Sub"].level == "ok"
+    assert got["Shield", "Inner"].contained and "no effect" in got["Shield", "Inner"].message
+    checks = validate(p, d, None, {}, ovs)
+    assert sum(c.message in {o.message for o in ovs} for c in checks) == 3
+    win = types.SimpleNamespace(des=d, msgs=types.SimpleNamespace(add=lambda *a: None), validation_check=lambda: None,
+                                doc=types.SimpleNamespace(checkpoint=lambda: None, commit=lambda w: None,
+                                                          select=lambda picks: None))
+    MW.MainWindow.resolve_overlaps(win, [o for o in ovs if not o.contained])
+    assert d.obj("Sub").history[-1].kind == "Subtract" and d.obj("Sub").history[-2].kind == "Subtract"
+    assert {d.obj(n).consumed_by for n in ("Glue_tool", "Via_tool")} == {"Sub"}
+    names = [o.name for o in d.live_objects()]
+    left = classify_overlaps(p, d, K.solid_overlaps(d, ev, names))
+    assert [(o.winner, o.loser) for o in left] == [("Shield", "Inner")]
+    from PySide6.QtWidgets import QPushButton
+    from hertzon.gui.dialogs import ValidationDialog
+    done = []
+    dlg = ValidationDialog(types.SimpleNamespace(project=p, design=d, tess=None, errors={}), None, ovs, done.append)
+    every = next(b for b in dlg.findChildren(QPushButton) if b.text().startswith("Resolve All"))
+    assert every.text() == "Resolve All Overlaps (2)"
+    every.click()
+    assert len(done) == 1 and {(o.winner, o.loser) for o in done[0]} == {("Glue", "Sub"), ("Via", "Sub")}
