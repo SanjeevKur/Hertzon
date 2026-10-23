@@ -47,7 +47,7 @@ class ComponentDialog(QDialog):
         form.addRow(self.ts_label, self.ts_row)
         self.mount = QComboBox()
         self.mount.addItems(["Series", "Shunt"])
-        self.mount.setToolTip("How the component sat in a 2-port test fixture (vendor files: usually series)")
+        self.mount.setToolTip("How the component sat in a 2-port test fixture (chip L and C: usually series)")
         self.mount_label = QLabel("2-port measured as:")
         form.addRow(self.mount_label, self.mount)
         self.package = QComboBox()
@@ -94,7 +94,7 @@ class ComponentDialog(QDialog):
         cur = self.package.currentData()
         self.package.blockSignals(True)
         self.package.clear()
-        for p in LU.GENERIC + [s for s in LU.SERIES if k in ("S", s.kind)]:
+        for p in LU.GENERIC:
             self.package.addItem(p.name, p.name)
         i = self.package.findData(cur) if cur else self.package.findData("0402")
         self.package.setCurrentIndex(max(i, 0))
@@ -114,7 +114,7 @@ class ComponentDialog(QDialog):
         self.G.setValue(land.G)
         self.X.setValue(land.X)
         self.pkg_info.setText(f"Body {p.L:g} x {p.W:g} x {p.T:g} mm, terminals {p.e:g} mm"
-                              + (f" ({p.note})" if p.note else ""))
+                              )
         self._geometry_changed()
 
     def _geometry_changed(self, *_):
@@ -135,9 +135,6 @@ class ComponentDialog(QDialog):
         f, _ = QFileDialog.getOpenFileName(self, "Touchstone File", "", "Touchstone (*.s1p *.s2p)")
         if f:
             self.ts_file.setText(f)
-            ser = LU.series_for(Path(f).stem)
-            if ser is not None:
-                self.package.setCurrentIndex(max(self.package.findData(ser.name), 0))
 
     def _ok(self):
         if self.k() == "S" and not Path(self.ts_file.text().strip()).is_file():

@@ -50,7 +50,7 @@ Legend: **✔** implemented and tested · **◐** implemented with limitations �
 | Finite Conductivity (material / σ, roughness, thickness) | Finite Conductivity | `SurfaceImpedance` / `ThinConductor` | ✔ |
 | Impedance (R + jX) | Impedance | `SurfaceImpedance` | ✔ |
 | Lumped RLC (parallel or series RLC, Touchstone component) | Lumped RLC | `LumpedElement` with Z(f) | ✔ |
-| SMD components between two traces (0201 to 1206, vendor series, pads, optional 3D terminations, Touchstone parts) | Lumped Elements tab | `LumpedElement` | ✔ |
+| SMD components between two traces (0201 to 1206, pads, optional 3D terminations, Touchstone parts) | Lumped Elements tab | `LumpedElement` | ✔ |
 | Radiation (first order) | Radiation | `AbsorbingBoundary` | ✔ (second order ◐) |
 | PML | PML (on region faces) and Auto Open | `pmlbox` | ✔ |
 | Symmetry (Perfect E / Perfect H) | Symmetry | `PEC` / `PMC` | ✔ (impedance multiplier ✖) |

@@ -12,16 +12,12 @@ import numpy as np
 
 @dataclass(frozen=True)
 class Package:
-    name: str           # shown in the lists, e.g. "0402" or "Coilcraft 0402HP"
+    name: str           # shown in the lists, e.g. "0402"
     size: str           # EIA size code
     L: float            # body length (terminal to terminal)
     W: float            # body width
     T: float            # body height
     e: float            # terminal length at each end (wraparound)
-    vendor: str = ""
-    kind: str = ""      # L / C / R when the series is one kind of component
-    prefix: str = ""    # part numbers of the series start with this
-    note: str = ""
 
 
 # EIA chip sizes (nominal body dimensions of chip resistors and capacitors)
@@ -33,41 +29,11 @@ GENERIC = [
     Package("1206", "1206", 3.20, 1.60, 0.85, 0.50),
 ]
 
-# RF series (body dimensions from the data sheets: maximum length and height, nominal
-# width, terminal wraparound)
-SERIES = [
-    Package("Coilcraft 0402HP", "0402", 1.09, 0.61, 0.61, 0.18, "Coilcraft", "L", "0402HP",
-            "A max 1.09, B 0.51-0.71, C max 0.61, wraparound 0.18"),
-    Package("Coilcraft 0402HPH", "0402", 1.12, 0.66, 0.66, 0.18, "Coilcraft", "L", "0402HPH",
-            "A max 1.12, B 0.66, C max 0.66, wraparound 0.18"),
-    Package("Coilcraft 0402CS", "0402", 1.19, 0.64, 0.66, 0.18, "Coilcraft", "L", "0402CS",
-            "A max 1.19, B max 0.64, C max 0.66, wraparound 0.18"),
-    Package("Coilcraft 0603HP", "0603", 1.75, 0.98, 0.94, 0.24, "Coilcraft", "L", "0603HP",
-            "A max 1.75, B 0.86-1.09, C max 0.94, wraparound 0.24"),
-    Package("Coilcraft 0603CS", "0603", 1.80, 1.12, 1.02, 0.18, "Coilcraft", "L", "0603CS",
-            "A max 1.80, B max 1.12, C max 1.02, wraparound 0.18"),
-    Package("Murata LQW15AN", "0402", 1.00, 0.60, 0.50, 0.20, "Murata", "L", "LQW15AN",
-            "L 1.0, W 0.6, T 0.5; terminal length typical"),
-    Package("Murata LQP03TN", "0201", 0.60, 0.30, 0.30, 0.15, "Murata", "L", "LQP03TN",
-            "0201 (0603 metric) nominal; terminal length typical"),
-    Package("Murata GJM03", "0201", 0.60, 0.30, 0.30, 0.15, "Murata", "C", "GJM03",
-            "0201 (0603 metric) nominal; terminal length typical"),
-    Package("Murata GJM15", "0402", 1.00, 0.50, 0.50, 0.25, "Murata", "C", "GJM15",
-            "0402 (1005 metric) nominal; terminal length typical"),
-]
-
-PACKAGES = {p.name: p for p in GENERIC + SERIES}
+PACKAGES = {p.name: p for p in GENERIC}
 
 # typical parasitics of a chip component mounted on its pads (series ESL in nH, ESR in ohm)
 PARASITICS = {"0201": (0.15, 0.05), "0402": (0.30, 0.05), "0603": (0.45, 0.05), "0805": (0.60, 0.05),
               "1206": (0.90, 0.05)}
-
-
-def series_for(part: str) -> Package | None:
-    """RF series of a part number (longest matching prefix), e.g. from the name of its Touchstone file."""
-    p = part.upper()
-    hits = [s for s in SERIES if p.startswith(s.prefix.upper())]
-    return max(hits, key=lambda s: len(s.prefix)) if hits else None
 
 
 @dataclass(frozen=True)
