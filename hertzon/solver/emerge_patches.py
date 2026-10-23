@@ -14,6 +14,12 @@ import numpy as np
 _DONE = False
 
 
+def native(name: str) -> bool:
+    """True when the Hertzon replacement ``name`` is switched off for a comparison with plain EMerge:
+    HERTZON_EMERGE_NATIVE=mt_pardiso,thin_conductor,sheet_error,eigs_retry,mesh_fallback"""
+    return name in os.environ.get("HERTZON_EMERGE_NATIVE", "").replace(" ", "").split(",")
+
+
 class _SparseEdgeLookup:
     """Drop-in for ``mat[a, b]`` on the symmetric edge table: O(edges) memory instead of O(nodes^2)."""
 
@@ -230,7 +236,8 @@ def apply() -> None:
         logger.warning(f"Fast matrix assembly not available ({ex}); using EMerge's assembly")
     try:      # after fast_assembly: wraps its PARDISO solve
         from . import mt_pardiso
-        mt_pardiso.apply()
+        if not native("mt_pardiso"):
+            mt_pardiso.apply()
     except Exception as ex:  # noqa: BLE001
         from loguru import logger
         logger.warning(f"Parallel sweeps with PARDISO not available ({ex})")
@@ -242,9 +249,12 @@ def apply() -> None:
         logger.warning(f"Reduced basis for the interpolating sweep not available ({ex})")
     apply_amr()
     apply_curved()
-    apply_mesh_fallback()
-    apply_eigs_retry()
-    apply_thin_conductor()
+    if not native("mesh_fallback"):
+        apply_mesh_fallback()
+    if not native("eigs_retry"):
+        apply_eigs_retry()
+    if not native("thin_conductor"):
+        apply_thin_conductor()
     try:
         from emerge._emerge import mesh3d
         fn = mesh3d.Mesh3D._pre_update

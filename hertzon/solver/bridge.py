@@ -2093,6 +2093,9 @@ def _with_conductor_sheets(m, pec_tris):
     a finite conductivity (surface impedance / thin conductor). Across a conductor sheet the tangential
     H jumps by the surface current, which is physical and no discretization error; there, as on PEC, the
     residual is the tangential E on the face."""
+    from .emerge_patches import native
+    if native("sheet_error"):
+        return pec_tris
     try:
         from emerge._emerge.physics.microwave.bcs.boundary_conditions import SurfaceImpedance, ThinConductor
         tags = []

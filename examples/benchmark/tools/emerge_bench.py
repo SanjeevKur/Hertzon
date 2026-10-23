@@ -1,6 +1,6 @@
 """Speed and accuracy check of Hertzon on a given EMerge version.
 
-    python emerge_bench.py run OUTDIR [CASE ...] [--passes N]
+    python emerge_bench.py run OUTDIR [CASE ...] [--passes N] [--env NAME=VALUE ...] [--no-warmup]
     python emerge_bench.py compare REFDIR NEWDIR
 
 `run` solves each case in a fresh process (python -m ... _one) with timers around the expensive phases and
@@ -50,6 +50,8 @@ def prepare(case: str, passes: int | None, tmp: Path) -> Path:
             s["props"]["SaveFields"] = "True"   # field data is part of the measurement
             for w in s.get("sweeps", []):
                 w.setdefault("props", {})["Enabled"] = "False" if pts == 0 else "True"
+                if os.environ.get("HZBENCH_PARALLEL") == "1":    # sweep frequencies in parallel
+                    w["props"]["Parallel"] = "True"
                 if pts:
                     w["props"]["Distribution"] = "Linear Count"
                     w["props"]["Count"] = str(pts)
@@ -112,20 +114,24 @@ def one(case: str, project: str, out: str) -> None:
     os._exit(0)   # same as the solver process: skip the slow/crashy library teardown
 
 
-def run(outdir: str, cases: list[str], passes: int | None) -> None:
+def run(outdir: str, cases: list[str], passes: int | None, env: dict | None = None, warmup: bool = True) -> None:
+    """``env``: extra environment of the solves, e.g. HERTZON_EMERGE_NATIVE=mt_pardiso (see
+    hertzon.solver.emerge_patches.native) to measure a Hertzon replacement against EMerge's own code."""
+    env = {**os.environ, **(env or {})}
     out = Path(outdir)
     out.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory() as td:
         # untimed warm-up (Hertzon's own, as after an installation): numba caches its kernels per source
         # path, so a new checkout compiles first, and the parallel error estimate is only used once compiled
-        subprocess.run([sys.executable, "-m", "hertzon.solver.warmup"], cwd=ROOT, stdout=subprocess.DEVNULL,
-                       stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL)
+        if warmup:
+            subprocess.run([sys.executable, "-m", "hertzon.solver.warmup"], cwd=ROOT, stdout=subprocess.DEVNULL,
+                           stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL)
         for case in cases or list(CASES):
             p = prepare(case, passes, Path(td))
             t = time.time()
             with open(out / f"{case}.log", "w", encoding="utf-8") as log:
                 subprocess.run([sys.executable, __file__, "_one", case, str(p), str(out / case)],
-                               stdout=log, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL)
+                               stdout=log, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, env=env)
             print(f"{case}: {time.time() - t:.1f} s", flush=True)
 
 
@@ -175,6 +181,14 @@ if __name__ == "__main__":
             i = args.index("--passes")
             passes = int(args[i + 1])
             del args[i:i + 2]
-        run(sys.argv[2], args, passes)
+        env = {}
+        while "--env" in args:
+            i = args.index("--env")
+            k, v = args[i + 1].split("=", 1)
+            env[k] = v
+            del args[i:i + 2]
+        warm = "--no-warmup" not in args
+        args = [a for a in args if a != "--no-warmup"]
+        run(sys.argv[2], args, passes, env, warm)
     elif sys.argv[1] == "compare":
         compare(sys.argv[2], sys.argv[3])
