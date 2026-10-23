@@ -991,7 +991,11 @@ class Bridge:
                 groups[f"Region ({getattr(self, 'open_kind', 'open')})"] = self.region_geo
             groups.update(self.geos)
             # owning object of every tetrahedron (field plots are drawn per object like the reference tool)
+            # where volumes overlap, the tetrahedron belongs to the object EMerge takes the material from:
+            # highest _priority, the later one on ties (build_model: smaller volume wins, regions lose)
             tet_obj = np.full(len(tets), -1, np.int32)
+            tet_prio = np.full(len(tets), -np.inf)
+            members = []        # all tetrahedra inside each object's geometry, overlaps included
             names = []
             for name, g in groups.items():
                 try:
@@ -1000,13 +1004,23 @@ class Bridge:
                     ids = np.asarray(m.mesh.get_tetrahedra(list(g.tags)), int)
                     if len(ids) == 0:
                         continue
-                    tet_obj[ids] = len(names)
+                    prio = float(getattr(g, "_priority", 0))
+                    own = ids[tet_prio[ids] <= prio]
+                    tet_obj[own] = len(names)
+                    tet_prio[own] = prio
                     names.append(name.split(" (")[0] if name.startswith("Region (") else name)
-                    stats.append({"object": name, **tet_statistics(nodes, tets[ids])})
+                    members.append(ids)
+                    stats.append({"object": name})
                 except Exception:  # noqa: BLE001
                     pass
+            # statistics over the tetrahedra each object finally owns (overlapped ones counted once)
+            for i, st in enumerate(stats):
+                own = tets[tet_obj == i]
+                st.update(tet_statistics(nodes, own) if len(own) else {"tets": 0})
             self.store.save_npz("mesh.npz", nodes=nodes.astype(np.float64), tets=tets.astype(np.int32),
                                 tet_obj=tet_obj, obj_names=np.array(names or [""], dtype=str),
+                                obj_ptr=np.cumsum([0] + [len(i) for i in members]).astype(np.int64),
+                                obj_tets=np.concatenate(members or [np.zeros(0, int)]).astype(np.int32),
                                 **self.curved_mesh())
             stats.append({"object": "Total", **tet_statistics(nodes, tets)})
             self.store.write_json("mesh_stats.json", {"tets": int(tets.shape[0]), "nodes": int(nodes.shape[0]),
