@@ -69,7 +69,8 @@ GEOMETRY: dict[str, list[Prop]] = {
                              P("NumberOfSides", "int", "6"), P("Axis", "choice", "Z", choices=AXES)],
     "CreatePolyline": [P("Points", "points", "0,0,0;1,0,0"),
                        P("SegmentTypes", "text", "", label="Segment types",
-                         help="Comma separated: Line, Arc (3 point arc), Spline:n; empty = all lines"),
+                         help="Comma separated: Line, Arc (3 point arc), Spline:n, AngularArc:angle:plane "
+                              "(center point arc); empty = all lines"),
                        P("Closed", "bool", "False"),
                        P("Covered", "bool", "False", help="Closed and covered polylines become sheets")],
     "CreateHelix": [P("CenterPosition", "point", "0,0,0"), P("Axis", "choice", "Z", choices=AXES),

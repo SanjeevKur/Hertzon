@@ -14,6 +14,7 @@ from PySide6.QtWidgets import QWidget, QVBoxLayout
 from .doc import Document, Pick
 from ..model.schema import BOUNDARY_COLORS, EXCITATION_COLORS
 from ..model.materials import normalize_color
+from ..model.arcs import angular_arc
 
 
 def _alt_key() -> bool:
@@ -53,6 +54,8 @@ class DrawState:
     current: np.ndarray | None = None
     seg_mode: str = "Line"                         # polyline segment type for the next points (edge type)
     modes: list = field(default_factory=list)     # segment type of every point after the first
+    sweep: float = 0.0                             # center point arc: angle swept so far (rad, follows the cursor)
+    sweep_ref: float = 0.0                         # its cursor angle at the last update
     ghost: list = field(default_factory=list)     # objects shown moved/mirrored while an operation is drawn
 
 
@@ -510,7 +513,9 @@ class ModelerView(QWidget):
                 self.next_behind()
             return
         if self.draw.kind == "CreatePolyline" and k in SEG_KEYS:
-            # right click > Set Edge Type (Straight / 3 Point Arc / Spline)
+            # right click > Set Edge Type (Straight / 3 Point Arc / Center Point Arc / Spline)
+            if _center_pending(self.draw):
+                return      # the center of an arc is placed: finish the arc first
             self.draw.seg_mode = SEG_KEYS[k]
             self.drawPhaseChanged.emit(self._phase_hint())
             self._update_preview()
@@ -1623,9 +1628,14 @@ class ModelerView(QWidget):
             if self.axis_lock is not None else ("  (X/Y/Z: lock axis, Tab: type coordinates)" if n else
                                                  "  (Tab: type coordinates)")
         if k == "CreatePolyline":
-            seg = {"Line": "Straight", "Arc": "3 Point Arc", "Spline": "Spline"}[self.draw.seg_mode]
+            seg = SEG_NAMES[self.draw.seg_mode]
+            if self.draw.seg_mode == "CenterArc" and n:
+                if _center_pending(self.draw):
+                    return (f"[{seg}] Enter the end angle ({math.degrees(self.draw.sweep):.1f} deg; move the cursor"
+                            " around the center to sweep)") + lock
+                return f"[{seg}] Enter the center of the arc" + lock
             return (f"[{seg}] Enter a point (right click or Enter to finish, click the first point to close;"
-                    " L/A/S: straight, 3 point arc, spline)") + lock
+                    " L/A/C/S: straight, 3 point arc, center point arc, spline)") + lock
         return (hints[n] if hints and n < len(hints) else "") + lock
 
     def _world_ray(self, pos):
@@ -1869,6 +1879,31 @@ class ModelerView(QWidget):
         d = self.draw
         if d is None:
             return
+        if d.kind == "CreatePolyline" and d.points and d.seg_mode == "CenterArc":
+            # center point arc: first the center, then the end angle (the end point lies on the circle)
+            p = np.asarray(p, float)
+            if not _center_pending(d):
+                if np.allclose(p, d.points[-1]):
+                    return
+                d.modes.append("CenterArc")
+                d.points.append(p)
+                d.sweep = d.sweep_ref = 0.0
+            else:
+                self._track_sweep(p)
+                if abs(d.sweep) < 1e-9:
+                    return
+                d.modes.append(f"CenterArc:{math.degrees(d.sweep):.10g}")
+                d.points.append(angular_arc(d.points[-2], d.points[-1], d.sweep, self._arc_plane())[-1])
+                if np.allclose(d.points[-1], d.points[0]):
+                    self.finish_polyline(closed=True)
+                    return
+            self.axis_lock = None
+            if len(d.points) >= d.phases:
+                self.finish_polyline()
+                return
+            self.drawPhaseChanged.emit(self._phase_hint())
+            self._update_preview()
+            return
         if d.kind == "CreatePolyline" and len(d.points) >= 2 and np.allclose(p, d.points[0]):
             d.points.append(np.asarray(p, float))
             d.modes.append(d.seg_mode)
@@ -1878,6 +1913,9 @@ class ModelerView(QWidget):
             d.modes.append(d.seg_mode)
         d.points.append(np.asarray(p, float))
         self.axis_lock = None
+        if d.kind == "CreatePolyline" and len(d.points) >= d.phases:
+            self.finish_polyline()      # Draw > Line / Draw > Arc: done after one segment
+            return
         if len(d.points) >= d.phases:
             pts = d.points
             kind = d.kind
@@ -1893,6 +1931,8 @@ class ModelerView(QWidget):
             return
         pts = list(d.points)
         modes = list(d.modes)
+        if _center_pending(d):      # an arc without its end angle: drop the center
+            pts, modes = pts[:-1], modes[:-1]
         if closed and len(pts) > 1 and np.allclose(pts[-1], pts[0]):
             pts = pts[:-1]
             if modes and modes[-1] != "Line":
@@ -1900,7 +1940,7 @@ class ModelerView(QWidget):
                 pts = pts + [pts[0]]
             else:
                 modes = modes[:-1]
-        self.last_segment_types = segment_spec(modes[:max(0, len(pts) - 1)])
+        self.last_segment_types = segment_spec(modes[:max(0, len(pts) - 1)], self._arc_plane())
         self.cancel_draw()
         if len(pts) >= 2:
             self.drawFinished.emit("CreatePolyline" + (":closed" if closed else ""), pts)
@@ -1913,8 +1953,15 @@ class ModelerView(QWidget):
             self.plotter.remove_actor(d.preview, render=False)
             d.preview = None
         pts = list(d.points) + ([d.current] if d.current is not None else [])
-        mesh = preview_mesh(d.kind, pts, PLANE_NORMAL[self.grid_plane],
-                            (d.modes + [d.seg_mode]) if d.kind == "CreatePolyline" else None)
+        modes = None
+        if d.kind == "CreatePolyline":
+            nxt = d.seg_mode
+            if _center_pending(d) and d.current is not None:
+                self._track_sweep(d.current)
+                nxt = f"CenterArc:{math.degrees(d.sweep):.10g}"
+                self.drawPhaseChanged.emit(self._phase_hint())
+            modes = d.modes + [nxt]
+        mesh = preview_mesh(d.kind, pts, PLANE_NORMAL[self.grid_plane], modes)
         if d.kind in OP_KINDS and len(pts) >= 2:
             mesh = self._ghost_mesh(d, np.asarray(pts[0], float), np.asarray(pts[1], float), mesh)
         if mesh is not None:
@@ -1923,6 +1970,20 @@ class ModelerView(QWidget):
             if self._frame is not self._identity:
                 d.preview.SetUserMatrix(_vtk_matrix(*self._frame))
         self.plotter.render()
+
+    def _arc_plane(self) -> str:
+        """Plane of center point arcs: the grid plane (HFSS ArcPlane)."""
+        return ARC_PLANE[PLANE_NORMAL[self.grid_plane]]
+
+    def _track_sweep(self, p) -> None:
+        """Center point arc: add the cursor's turn about the center since the last call to the swept angle,
+        so the arc follows the mouse past 180 degrees and in both directions (as in HFSS)."""
+        d = self.draw
+        a = _plane_angle(d.points[-2], d.points[-1], p, PLANE_NORMAL[self.grid_plane])
+        if a is None:
+            return
+        d.sweep += (a - d.sweep_ref + math.pi) % (2 * math.pi) - math.pi
+        d.sweep_ref = a
 
     def _ghost_mesh(self, d, a: np.ndarray, b: np.ndarray, line):
         """Selected objects translated by b-a, or mirrored at the plane through a with normal b-a."""
@@ -1948,15 +2009,37 @@ class ModelerView(QWidget):
         return out
 
 
-SEG_KEYS = {"l": "Line", "a": "Arc", "s": "Spline"}
+SEG_KEYS = {"l": "Line", "a": "Arc", "c": "CenterArc", "s": "Spline"}
+SEG_NAMES = {"Line": "Straight", "Arc": "3 Point Arc", "CenterArc": "Center Point Arc", "Spline": "Spline"}
+ARC_PLANE = {2: "XY", 0: "YZ", 1: "ZX"}      # plane normal index -> HFSS ArcPlane
 
 
-def segment_spec(modes: list[str]) -> str:
-    """Per-point segment types (points 1..n-1) -> CreatePolyline SegmentTypes ('Line,Arc,Spline:4')."""
+def _center_pending(d) -> bool:
+    """Center point arc: the center is placed, the end angle not yet."""
+    return d is not None and bool(d.modes) and d.modes[-1] == "CenterArc"
+
+
+def _plane_angle(start, center, p, n: int):
+    """Angle of p about center, from the direction of start, counter-clockwise about axis n; None at the center."""
+    i, j = (n + 1) % 3, (n + 2) % 3
+    u = np.asarray(start, float) - np.asarray(center, float)
+    v = np.asarray(p, float) - np.asarray(center, float)
+    if np.hypot(v[i], v[j]) < 1e-15 or np.hypot(u[i], u[j]) < 1e-15:
+        return None
+    return math.atan2(u[i] * v[j] - u[j] * v[i], u[i] * v[i] + u[j] * v[j])
+
+
+def segment_spec(modes: list[str], plane: str = "XY") -> str:
+    """Per-point segment types (points 1..n-1) -> CreatePolyline SegmentTypes ('Line,Arc,Spline:4').
+
+    A center point arc is "CenterArc" (center) followed by "CenterArc:<deg>" (end) -> 'AngularArc:<deg>:<plane>'."""
     out, i, n = [], 0, len(modes)
     while i < n:
         m = modes[i]
-        if m == "Arc" and i + 1 < n and modes[i + 1] == "Arc":
+        if m == "CenterArc" and i + 1 < n and modes[i + 1].startswith("CenterArc:"):
+            out.append(f"AngularArc:{modes[i + 1].split(':', 1)[1]}:{plane}")
+            i += 2
+        elif m == "Arc" and i + 1 < n and modes[i + 1] == "Arc":
             out.append("Arc")
             i += 2
         elif m == "Spline":
@@ -2002,13 +2085,17 @@ def _spline(P, n=12):
     return np.array(out)
 
 
-def densify(P: list, modes: list[str]) -> np.ndarray:
+def densify(P: list, modes: list[str], plane: str = "XY") -> np.ndarray:
     """Polyline points with arcs and splines expanded for display."""
     P = [np.asarray(p, float) for p in P]
-    spec = segment_spec(modes[:len(P) - 1])
+    spec = segment_spec(modes[:len(P) - 1], plane)
     out, i = [P[0]], 0
     for tok in (spec.split(",") if spec else []):
-        if tok == "Arc":
+        if tok.startswith("AngularArc"):
+            ang = math.radians(float(tok.split(":")[1]))
+            out += list(angular_arc(P[i], P[i + 1], ang, plane, max(2, int(abs(ang) / 0.1) + 2))[1:])
+            i += 2
+        elif tok == "Arc":
             out += list(_arc3(P[i], P[i + 1], P[i + 2])[1:])
             i += 2
         elif tok.startswith("Spline"):
@@ -2062,7 +2149,7 @@ def preview_mesh(kind: str, pts: list, n: int, modes: list | None = None):
             res = 6 if kind == "CreateRegularPolygon" else 64
             return pv.Disc(center=c, inner=0, outer=r, normal=axis, c_res=res)
         if kind == "CreatePolyline" and modes:
-            return pv.lines_from_points(densify(P, modes))
+            return pv.lines_from_points(densify(P, modes, ARC_PLANE[n]))
         if kind == "CSRotated":
             P = [np.zeros(3)] + list(P)
         if kind in ("CreatePolyline", "Measure", "MeasureAngle", "CSRotated", "CSBoth") or kind in OP_KINDS:

@@ -138,6 +138,31 @@ def _line(p):
         p.drawRect(QRectF(x - 4, y - 4, 8, 8))
 
 
+def _arc3(p):
+    p.setPen(_pen(DBLUE, 3.5))
+    p.setBrush(Qt.NoBrush)
+    p.drawArc(QRectF(10, 26, 44, 44), 0, 180 * 16)
+    p.setPen(_pen(DBLUE, 2))
+    p.setBrush(YELLOW)
+    for x, y in ((10, 48), (32, 26), (54, 48)):
+        p.drawRect(QRectF(x - 4, y - 4, 8, 8))
+
+
+def _arc_center(p):
+    p.setPen(QPen(DBLUE, 1.5, Qt.DashLine))
+    p.drawLine(QPointF(14, 50), QPointF(50, 50))
+    p.drawLine(QPointF(14, 50), QPointF(14, 14))
+    p.setPen(_pen(DBLUE, 3.5))
+    p.setBrush(Qt.NoBrush)
+    p.drawArc(QRectF(-22, 14, 72, 72), 0, 90 * 16)
+    p.setPen(_pen(DBLUE, 2))
+    p.setBrush(YELLOW)
+    for x, y in ((50, 50), (14, 14)):
+        p.drawRect(QRectF(x - 4, y - 4, 8, 8))
+    p.setBrush(DBLUE)
+    p.drawEllipse(QPointF(14, 50), 3.5, 3.5)
+
+
 def _polyline(p):
     p.setPen(_pen(DBLUE, 3.5))
     pts = [(8, 50), (22, 20), (40, 40), (56, 12)]
@@ -1088,7 +1113,7 @@ _DRAW = {
     "cut": _cut,
     "box": _box, "cylinder": _cylinder, "sphere": _sphere, "cone": _cone, "torus": _torus,
     "polyhedron": _polyhedron, "rectangle": _rect, "circle": _circle, "ellipse": _ellipse, "polygon": _polygon,
-    "line": _line, "polyline": _polyline,
+    "line": _line, "polyline": _polyline, "arc3": _arc3, "arc_center": _arc_center,
     "unite": lambda p: _boolean(p, "unite"), "subtract": lambda p: _boolean(p, "subtract"),
     "intersect": lambda p: _boolean(p, "intersect"), "split": _split,
     "move": _move, "rotate": _rotate, "mirror": _mirror, "dup_line": _dup_line, "dup_axis": _dup_axis,

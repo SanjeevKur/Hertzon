@@ -576,3 +576,55 @@ def test_keyboard_shortcuts_dialog_opens_and_saves(monkeypatch):
     MW.MainWindow._apply_shortcuts(win)
     assert act.shortcut().toString() == "Ctrl+Shift+M"
     win.settings.clear()
+
+
+def test_center_point_arc_polyline():
+    """HFSS AngularArc segments: start, center and angle; the angle decides the end point (the stored one is a copy)."""
+    import gmsh
+    p = Project()
+    d = p.designs[0]
+    d.add_object("CreatePolyline", Points="1,0,0;0,0,0;0,1,0;-2,1,0", SegmentTypes="AngularArc:90:XY,Line")
+    d.add_object("CreatePolyline", Points="1,0,0;0,0,0;1,0,0", SegmentTypes="AngularArc:360deg",
+                 Closed="True", Covered="True")
+    # half circle in the ZX plane with a wrong stored end point, closed by a line
+    d.add_object("CreatePolyline", Points="0,0,2;0,0,0;5,5,5", SegmentTypes="AngularArc:-180:ZX",
+                 Closed="True", Covered="True")
+    K.ensure_gmsh("test_angular_arc")
+    ctx = K.build_design(d, d.evaluator(p))
+    assert not ctx.errors
+    size = lambda name: sum(gmsh.model.occ.getMass(*x) for x in ctx.built[name])  # noqa: E731
+    assert size("Polyline1") == pytest.approx((np.pi / 2 + 2) * 1e-3)
+    assert size("Polyline2") == pytest.approx(np.pi * 1e-6)
+    assert size("Polyline3") == pytest.approx(2 * np.pi * 1e-6)
+    lo = gmsh.model.occ.getBoundingBox(*ctx.built["Polyline3"][0])
+    assert lo[0] == pytest.approx(-2e-3, abs=1e-6) and lo[3] == pytest.approx(0, abs=1e-6)   # -180 about +Y: -X
+
+
+def test_center_point_arc_drawing():
+    """Draw > Arc > Center Point: start, center, then the end angle follows the cursor around the center."""
+    import types
+    from hertzon.gui import viewer as Vw
+    names = ("add_draw_point", "finish_polyline", "_track_sweep", "_arc_plane", "_phase_hint")
+    View = type("View", (), {k: Vw.ModelerView.__dict__[k] for k in names})
+    got = []
+    v = View()
+    v.grid_plane, v.axis_lock = "XY", None
+    v.drawFinished = types.SimpleNamespace(emit=lambda kind, pts: got.append((kind, pts)))
+    v.drawPhaseChanged = types.SimpleNamespace(emit=lambda s: None)
+    v._update_preview = lambda: None
+    v.cancel_draw = lambda: setattr(v, "draw", None)
+    v.draw = Vw.DrawState("CreatePolyline", 3, seg_mode="CenterArc")
+    v.add_draw_point(np.array([1.0, 0, 0]))
+    v.add_draw_point(np.array([0.0, 0, 0]))
+    assert "end angle" in v._phase_hint()
+    for a in np.radians([60, 120, 179, 200, 270]):     # past 180 degrees counter-clockwise
+        v._track_sweep(np.array([np.cos(a), np.sin(a), 0]))
+    v.add_draw_point(np.array([0.0, -3.0, 0]))           # 270 deg; only the direction counts
+    kind, pts = got[0]
+    assert kind == "CreatePolyline" and v.last_segment_types == "AngularArc:270:XY"
+    assert np.allclose(pts[-1], [0, -1, 0])
+    # the spec and the preview of a clockwise arc
+    modes = ["CenterArc", "CenterArc:-90", "Line"]
+    assert Vw.segment_spec(modes, "XY") == "AngularArc:-90:XY,Line"
+    P = Vw.densify([np.array([1.0, 0, 0]), np.zeros(3), np.array([0, -1.0, 0]), np.array([0, -2.0, 0])], modes)
+    assert np.allclose(np.linalg.norm(P[:-1], axis=1), 1) and np.allclose(P[-1], [0, -2, 0])

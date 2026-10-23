@@ -28,7 +28,10 @@ HELP: dict[str, str] = {
     "RightHanded": "Winding sense: right handed (counter-clockwise looking against the axis) or left handed.",
     "WireRadius": "Radius of the round wire swept along the helix; 0 creates only the helix curve.",
     "InnerRadius": "Radius where the spiral starts.",
-    "SegmentTypes": "Edge types of the polyline segments: Line, Arc (3 point arc) or Spline:n. While drawing press L, A or S.",
+    "SegmentTypes": ("Edge types of the polyline segments: Line, Arc (3 point arc), Spline:n or "
+                     "AngularArc:angle:plane (center point arc: start, center and end point; the angle in degrees, "
+                     "counter-clockwise about the normal of the plane XY, YZ or ZX, decides the end point). "
+                     "While drawing press L, A, C or S."),
     "EndPosition": "End point of the bondwire (on the second pad).",
     "H1": "Bondwire loop height above the start point (JEDEC h1).",
     "H2": "Bondwire height above the end point (JEDEC h2).",

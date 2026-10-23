@@ -25,7 +25,8 @@ Legend: **✔** implemented and tested · **◐** implemented with limitations �
 |---|---|---|---|
 | Box, Cylinder, Sphere, Cone, Torus, Regular Polyhedron | Draw menu, interactive (click-click-height) or by dialog | ✔ | Snaps to grid and vertices, X/Y/Z entry in the status bar |
 | Rectangle, Circle, Ellipse, Regular Polygon | Draw menu | ✔ | Working plane XY / YZ / ZX |
-| Polyline (lines, closed and covered) | Draw > Polyline | ◐ | Straight segments only (no arcs / splines yet) |
+| Polyline (lines, closed and covered) | Draw > Polyline | ✔ | Straight, 3 point arc, center point arc (HFSS AngularArc), spline segments |
+| Arc (3 point, center point) | Draw > Arc | ✔ | A polyline of one arc segment, as in HFSS |
 | Region (padding % or absolute) | Draw > Region | ✔ | |
 | Unite, Subtract (blank/tool, clone), Intersect, Split | Modeler > Boolean | ✔ | |
 | Move, Rotate, Mirror, Scale, Duplicate along line / around axis / mirror | Edit > Arrange / Duplicate | ✔ | |
