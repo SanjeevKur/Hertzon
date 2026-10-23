@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hertzon – open-source 3D full-wave EM simulator (FEM, adaptive meshing)</title>
+<meta name="description" content="Hertzon is a free, open-source 3D full-wave electromagnetic simulator for antennas, filters, waveguides and RCS: finite-element solver (EMerge) with adaptive meshing, S-parameters, fields and radiation patterns. Windows and Linux.">
+<meta name="keywords" content="open-source electromagnetic simulator, FEM, finite element method, full-wave, adaptive meshing, antenna simulation, microwave, RF, S-parameters, radiation pattern, RCS, EMerge, HFSS alternative">
+<link rel="canonical" href="https://c8501024.github.io/Hertzon/">
+<!-- Google Search Console: replace the content value with your verification token, then uncomment. -->
+<!-- <meta name="google-site-verification" content="YOUR_TOKEN"> -->
+<meta property="og:type" content="website">
+<meta property="og:title" content="Hertzon – open-source 3D full-wave EM simulator">
+<meta property="og:description" content="Finite-element EM solver with adaptive meshing for antennas, filters and waveguides. Free and open source, built on EMerge.">
+<meta property="og:url" content="https://c8501024.github.io/Hertzon/">
+<meta property="og:image" content="https://c8501024.github.io/Hertzon/screenshots/patch_3d_gain.png">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="hertzon.png">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "Hertzon",
+  "applicationCategory": "EngineeringApplication",
+  "applicationSubCategory": "Electromagnetic simulation",
+  "operatingSystem": "Windows, Linux",
+  "description": "Open-source 3D full-wave electromagnetic simulator with adaptive meshing, built on the EMerge finite-element solver.",
+  "url": "https://c8501024.github.io/Hertzon/",
+  "downloadUrl": "https://github.com/c8501024/Hertzon/releases/latest",
+  "codeRepository": "https://github.com/c8501024/Hertzon",
+  "license": "https://spdx.org/licenses/GPL-2.0-or-later.html",
+  "offers": {"@type": "Offer", "price": "0", "priceCurrency": "EUR"}
+}
+</script>
+<style>
+:root{--bg:#fff;--fg:#1b1f24;--muted:#57606a;--accent:#d9480f;--card:#f6f8fa;--line:#d0d7de}
+@media (prefers-color-scheme:dark){:root{--bg:#0d1117;--fg:#e6edf3;--muted:#9da7b3;--accent:#ff8a4c;--card:#161b22;--line:#30363d}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.6 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+main{max-width:980px;margin:0 auto;padding:24px 16px 64px}
+h1{font-size:2.2rem;margin:.2em 0}
+h2{margin-top:2.2em;border-bottom:1px solid var(--line);padding-bottom:.2em}
+a{color:var(--accent)}
+.lead{font-size:1.15rem;color:var(--muted)}
+.btns a{display:inline-block;margin:8px 8px 0 0;padding:10px 16px;border-radius:6px;border:1px solid var(--line);text-decoration:none;background:var(--card)}
+.btns a.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px}
+figure{margin:0;background:var(--card);border:1px solid var(--line);border-radius:8px;overflow:hidden}
+figure img{width:100%;height:auto;display:block}
+figcaption{padding:8px 12px;font-size:.9rem;color:var(--muted)}
+img.hero{width:100%;height:auto;border-radius:8px}
+ul{padding-left:1.2em}
+footer{margin-top:48px;font-size:.85rem;color:var(--muted)}
+</style>
+</head>
+<body>
+<main>
+<img class="hero" src="splash.jpg" alt="Hertzon electromagnetic simulator splash screen">
+<h1>Hertzon</h1>
+<p class="lead">A free, open-source <strong>3D full-wave electromagnetic simulator</strong> with a classic engineering
+workflow: draw the model, assign boundaries and ports, solve with <strong>adaptive meshing</strong>, then look at
+S-parameters, fields and radiation patterns. The finite-element solver underneath is
+<a href="https://github.com/FennisRobert/EMerge">EMerge</a> (2nd-order Nédélec FEM).</p>
+<div class="btns">
+<a class="primary" href="https://github.com/c8501024/Hertzon/releases/latest">Download for Windows / Linux</a>
+<a href="https://github.com/c8501024/Hertzon">Source code on GitHub</a>
+<a href="https://github.com/c8501024/Hertzon/blob/main/docs/TUTORIAL.md">Tutorial</a>
+</div>
+
+<h2>What you can simulate</h2>
+<ul>
+<li><strong>Antennas:</strong> patch and dipole antennas with far field, gain, directivity, beamwidth and 3D radiation patterns</li>
+<li><strong>Microwave circuits:</strong> microstrip lines and filters with S-parameters, Smith charts and frequency sweeps</li>
+<li><strong>Waveguides and coaxial lines:</strong> wave ports, modes and field plots</li>
+<li><strong>Radar cross section (RCS)</strong> with incident plane waves</li>
+<li><strong>PCB designs:</strong> Gerber export of the simulated layout</li>
+</ul>
+
+<h2>Why Hertzon</h2>
+<ul>
+<li>Finite-element method (FEM) frequency-domain solver with <strong>adaptive mesh refinement</strong> until S-parameters converge</li>
+<li>Own mesher (hzmesh), curved elements, fast error estimator and faster assembly kernels on top of EMerge</li>
+<li>Desktop GUI (Qt + VTK) that stays responsive with large models; the solver runs in its own process</li>
+<li>Python scripting and an <strong>MCP server</strong>, so AI assistants can build and run simulations</li>
+<li>Free and open source under the GPL, for Windows and Linux</li>
+</ul>
+
+<h2>Screenshots</h2>
+<div class="grid">
+<figure><img src="screenshots/modeler.png" alt="Hertzon 3D modeler with a microwave structure" loading="lazy"><figcaption>3D modeler</figcaption></figure>
+<figure><img src="screenshots/patch_3d_gain.png" alt="3D gain pattern of a patch antenna simulated in Hertzon" loading="lazy"><figcaption>3D gain of a patch antenna</figcaption></figure>
+<figure><img src="screenshots/patch_pattern.png" alt="Radiation pattern plot of a patch antenna" loading="lazy"><figcaption>Radiation pattern</figcaption></figure>
+<figure><img src="screenshots/smith_chart.png" alt="Smith chart of simulated S-parameters" loading="lazy"><figcaption>Smith chart</figcaption></figure>
+<figure><img src="screenshots/microstrip_fields.png" alt="Electric field on a microstrip line" loading="lazy"><figcaption>Fields on a microstrip line</figcaption></figure>
+<figure><img src="screenshots/xy_plot.png" alt="S-parameter plot over frequency" loading="lazy"><figcaption>S-parameters over frequency</figcaption></figure>
+</div>
+
+<h2>Get started</h2>
+<p>Download the installer from the <a href="https://github.com/c8501024/Hertzon/releases/latest">releases page</a>, then follow the
+<a href="https://github.com/c8501024/Hertzon/blob/main/docs/TUTORIAL.md">step-by-step tutorial</a>: a waveguide with wave ports, a coaxial cable,
+a half-wave dipole and the RCS of a sphere, each from the empty window to the result.
+More: <a href="https://github.com/c8501024/Hertzon/blob/main/docs/FEATURE_MATRIX.md">feature matrix</a>,
+<a href="https://github.com/c8501024/Hertzon/blob/main/docs/BENCHMARKS.md">benchmarks</a>,
+<a href="https://github.com/c8501024/Hertzon/blob/main/CHANGELOG.md">changelog</a>.</p>
+
+<footer>Hertzon is an independent open-source project built on EMerge by Robert Fennis. It is not affiliated with any vendor of
+commercial simulation software. Product names mentioned are trademarks of their respective owners.</footer>
+</main>
+</body>
+</html>

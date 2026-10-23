@@ -61,6 +61,29 @@ lines follow.
 (F5) solves every enabled setup. Each adaptive pass appears in the Progress window, and **Results >
 Solution Data...** shows the convergence table, the mesh statistics and the matrix data.
 
+**Overlapping objects.** Hertzon treats overlapping solids exactly like HFSS. An object completely inside
+another (substrate in an air box, a via in the substrate) is the usual case and needs nothing: the inner
+object applies there, and the air region is always background. A partial overlap of two objects with
+different materials is an **error** that blocks the analysis until you resolve it, with one exception: with
+the design setting **Material override** (on by default, as in new HFSS designs) a metal overrides a
+dielectric (or air) whatever its size. You find the setting in the Properties window when the design is
+selected in the project tree. The **Validation Check** lists every overlap that matters:
+
+| Overlap | Example | Material override on (default) | Material override off |
+|---|---|---|---|
+| Conductor partly in a dielectric | via sticking out of the substrate, trace over the board edge | ✔ note: the conductor applies | ✖ error |
+| Two dielectrics (or two conductors) of different materials, partly | substrate and a glue layer shifted into each other | ✖ error | ✖ error |
+| Dielectric completely inside a conductor | dielectric inside a PEC bounding box | ⚠ warning: the dielectric has no effect | not listed (the dielectric applies) |
+| One object completely inside another otherwise | substrate in the air box | not listed (the inner object applies) | not listed |
+| Same material | two copper pieces touching | not listed (nothing changes) | not listed |
+
+Analyze, optimization and parametric runs (also from scripts and the AI link) stop with the Validation
+Check open when it finds an error; the solver checks the same rule once more.
+
+Select an overlap and click **Resolve Overlap**, or **Resolve All Overlaps**: Hertzon subtracts the object
+whose material applies (the conductor, otherwise the smaller object) from the other one (**Subtract** with *Clone tool objects before operation*, so both stay). The
+model then shows exactly what is solved, and the geometry is free of overlaps as HFSS expects it (for example before an export). Undo (Ctrl+Z) takes it back.
+
 > The very first analysis after installing or updating compiles EMerge's solver kernels and takes a few
 > minutes longer. The installer already does this once, so normally you do not notice it.
 

@@ -5,6 +5,18 @@ the GitHub release notes.
 
 ## Unreleased
 
+### New
+- **Overlapping objects exactly as in HFSS**: an exact geometry check in the Validation Check lists the
+  solids that overlap and how much. A partial overlap of two different dielectrics or two different metals
+  is now an **error** that blocks Analyze, optimization and parametric runs (also from scripts and the AI
+  link, and checked again in the solver). Objects completely inside another stay allowed (the inner one
+  applies); a dielectric completely inside a conductor is flagged as without effect.
+- **Design setting Material override** (on by default, as in new HFSS designs): a metal overrides a
+  dielectric where they overlap. Off: every partial overlap of different materials is an error and the
+  inner object always wins, also a dielectric inside a metal.
+- **Resolve Overlap** / **Resolve All Overlaps** in the Validation Check subtract the winning object from
+  the other one (Subtract with clone), so the model shows what is solved and is free of overlaps.
+  Described in the tutorial (basics).
 ### Changed
 - **Maximum Delta Energy defaults to 0.001** (was 0.1) for new setups, and the examples use it. It is the
   convergence criterion of incident wave designs (RCS); 0.1 stopped the adaptive passes far too early.
