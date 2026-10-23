@@ -831,6 +831,10 @@ def make_overlay(doc, view, quantity: str, solution: str, freq_index: int = 0, p
                     if solid and not len(sel[0]):
                         sel = _sheet_faces(mesh, full, False, face)
                     surf = _surface(work, mesh, *sel, both=True)
+                    if not solid and surf.area < 0.5 * cad.area:
+                        # a sheet the solver mesh does not follow (e.g. drawn after the solve): the few
+                        # element faces that happen to lie on it are no plot; interpolate like a non-model sheet
+                        return _refined(cad, mesh)
                 if surf.n_cells:
                     return surf
             except Exception as e:  # noqa: BLE001

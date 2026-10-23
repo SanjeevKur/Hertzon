@@ -3,7 +3,7 @@
 All notable changes of each release. The release workflow copies the section of the released version into
 the GitHub release notes.
 
-## Unreleased
+## 0.1.23 (2026-10-23)
 
 ### New
 - **Draw > Arc > 3 Point / Center Point** (as in HFSS), also in the ribbon next to Polyline: a polyline of
@@ -20,10 +20,23 @@ the GitHub release notes.
 - **NATO sphere example**: radiation boundary instead of PML and Max Delta E 0.001; the sphere RCS example
   and the tutorial name the radiation boundary as well (with a plane wave the radiation boundary is used
   in any case, the incident wave enters through it; the help of *Open boundary* now says so).
+- **Overlapping solids** as in HFSS with material override: a conductor wins over a dielectric (or air) in
+  the overlap whatever its size; otherwise the smaller object wins, regions stay background. Partial
+  overlaps HFSS rejects (two dielectrics or two conductors of different materials) give a warning.
 
 ### Fixed
 - **Tools > Keyboard Shortcuts** opens again: the dialog failed at once because its table widgets were not
   imported (NameError), so shortcuts could not be viewed or changed.
+- **RCS with air or vacuum objects** (e.g. a mesh refinement box): the far-field surface enclosed them too,
+  and its numerical floor grew to the level of the result (NATO sphere -15..-20 dBsm instead of -7). It now
+  encloses the scatterers only.
+- **Field and mesh plots of overlapping objects** cover the whole object (e.g. Jsurf over the whole sphere,
+  not only the part outside an overlapping box), and the per-object mesh statistics count each
+  tetrahedron once.
+- **Field plots on a sheet the mesh does not follow** (a model sheet drawn after the solve) interpolate
+  over the whole sheet instead of showing a few scattered element faces.
+- **Create as Non Model? > Don't ask again** keeps drawing Non Model objects; later objects were silently
+  created as Model objects.
 
 ## 0.1.22 (2026-10-22)
 
