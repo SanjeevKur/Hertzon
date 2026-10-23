@@ -6,6 +6,7 @@ import re
 import numpy as np
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg, NavigationToolbar2QT
 from matplotlib.figure import Figure
+from matplotlib.ticker import FuncFormatter
 import json
 
 from PySide6.QtCore import Signal, Qt, QSettings
@@ -303,6 +304,12 @@ def bandwidth(x: np.ndarray, y: np.ndarray, level: float) -> tuple[float, float,
     xl = cross(lo - 1, lo) if lo > 0 else x[0]
     xh = cross(hi, hi + 1) if hi < len(y) - 1 else x[-1]
     return float(xl), float(xh), float(x[k])
+
+
+def _signed_deg(x: float, _pos=None) -> str:
+    """Polar tick label of an angle x (rad) on -180..180 deg."""
+    d = round((float(np.degrees(x)) + 180) % 360 - 180, 6)
+    return "\u00b1180\u00b0" if abs(d) == 180 else f"{d:g}\u00b0"
 
 
 def beamwidth(x: np.ndarray, y: np.ndarray, rel: float) -> dict | None:
@@ -1688,6 +1695,8 @@ class ReportWindow(QWidget):
             ax = self.fig.add_subplot(111, projection="polar")
             ax.set_theta_zero_location("N")
             ax.set_theta_direction(-1)
+            if cut == "Phi":                # the Phi cut runs over theta -180..180, as in the rectangular plot
+                ax.xaxis.set_major_formatter(FuncFormatter(_signed_deg))
         curves = []
         for tr in self.report.traces:
             func, name = ff_trace(tr)

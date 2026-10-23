@@ -3,6 +3,13 @@
 All notable changes of each release. The release workflow copies the section of the released version into
 the GitHub release notes.
 
+## Unreleased
+
+### Fixed
+- **Radiation Pattern, polar plot**: a Phi cut is now labelled over theta -180..180 deg, as defined on the
+  far field sphere and shown in the rectangular plot, instead of 0..360 deg (#18). A Theta cut keeps phi
+  0..360 deg.
+
 ## 0.1.24 (2026-10-23)
 
 ### New

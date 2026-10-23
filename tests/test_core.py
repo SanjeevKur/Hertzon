@@ -515,6 +515,14 @@ def test_radiation_pattern_of_a_sweep_frequency_and_rectangular(tmp_path):
     w.marker_at("max")
     assert w.markers == [pytest.approx(x[np.argmax(y)])]
     assert w._from_ax(np.radians(350)) == pytest.approx(-10)
+    # the Phi cut is labelled over theta -180..180 (as defined on the sphere), the Theta cut over phi 0..360
+    fmt = w.fig.axes[0].xaxis.get_major_formatter()
+    assert [fmt(np.radians(a)) for a in (0, 90, 180, 270)] == ["0\u00b0", "90\u00b0", "\u00b1180\u00b0", "-90\u00b0"]
+    rep.props["cut"] = "Theta"
+    w.refresh()
+    assert w.fig.axes[0].xaxis.get_major_formatter()(np.radians(270)) == "270\u00b0"
+    rep.props["cut"] = "Phi"
+    w.refresh()
     rep.props.update(bandwidth="dB(GainTotal)", bw_level="-3")
     w.refresh()
     rows = [w.mtable.item(r, 0).text() for r in range(w.mtable.rowCount())]
