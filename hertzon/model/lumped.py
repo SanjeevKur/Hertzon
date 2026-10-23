@@ -1,14 +1,10 @@
 """SMD components (R, L, C) between two traces: package dimensions, land pattern, the geometry that is
-generated (pads, optional terminations, the element sheet with its integration line) and the component
-library of Touchstone files.
+generated (pads, optional terminations, the element sheet with its integration line).
 
 All lengths in this module are millimetres."""
 from __future__ import annotations
 
-import json
-import re
-import shutil
-from dataclasses import dataclass, asdict, field
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import numpy as np
@@ -37,7 +33,7 @@ GENERIC = [
     Package("1206", "1206", 3.20, 1.60, 0.85, 0.50),
 ]
 
-# RF series of the library (body dimensions from the data sheets: maximum length and height, nominal
+# RF series (body dimensions from the data sheets: maximum length and height, nominal
 # width, terminal wraparound)
 SERIES = [
     Package("Coilcraft 0402HP", "0402", 1.09, 0.61, 0.61, 0.18, "Coilcraft", "L", "0402HP",
@@ -68,7 +64,7 @@ PARASITICS = {"0201": (0.15, 0.05), "0402": (0.30, 0.05), "0603": (0.45, 0.05), 
 
 
 def series_for(part: str) -> Package | None:
-    """Library series of a part number (longest matching prefix)."""
+    """RF series of a part number (longest matching prefix), e.g. from the name of its Touchstone file."""
     p = part.upper()
     hits = [s for s in SERIES if p.startswith(s.prefix.upper())]
     return max(hits, key=lambda s: len(s.prefix)) if hits else None
@@ -211,104 +207,6 @@ def component_geometry(ends: TraceEnds, pkg: Package, land: Land, name: str, ter
         p0, p1 = p1, p0
     out.line = (tuple(p0), tuple(p1))
     return out
-
-
-# --------------------------------------------------------------------------------------------
-# Values from part numbers and the library of Touchstone files
-# --------------------------------------------------------------------------------------------
-def value_from_part(part: str) -> tuple[str, str]:
-    """(kind, value text) read from a part number: inductors '2N0' / '12N' (nH), Murata capacitors
-    'GJM1555C1H1R0...' (three digit pF code). ('', '') when unknown."""
-    p = part.upper()
-    m = re.match(r"^G[JR]M\d{4}\w\w\w(\d[R\d]\d)", p)
-    if m:
-        code = m.group(1)
-        if "R" in code:
-            return "C", f"{float(code.replace('R', '.')):g}pF"
-        return "C", f"{int(code[:2]) * 10 ** int(code[2]):g}pF"
-    m = re.search(r"(\d+)N(\d*)", p.split("-", 1)[-1]) or re.search(r"(\d+)N(\d*)", p)
-    if m:
-        return "L", f"{float(m.group(1) + '.' + (m.group(2) or '0')):g}nH"
-    m = re.search(r"R(\d+)N?", p.split("-", 1)[-1])
-    if m and series_for(p) is not None and series_for(p).kind == "L":
-        return "L", f"{float('0.' + m.group(1)):g}nH"
-    return "", ""
-
-
-@dataclass
-class LibraryPart:
-    part: str
-    vendor: str
-    series: str          # package name in PACKAGES ("" = unknown series)
-    kind: str            # L / C / R
-    value: str
-    file: str            # Touchstone file in the library folder
-    ports: int
-
-
-class Library:
-    """Touchstone files of components imported by the user (the vendor files are not shipped)."""
-
-    def __init__(self, folder: str | Path):
-        self.folder = Path(folder)
-        self.parts: list[LibraryPart] = []
-        idx = self.folder / "index.json"
-        if idx.exists():
-            try:
-                self.parts = [LibraryPart(**d) for d in json.loads(idx.read_text())]
-            except Exception:  # noqa: BLE001
-                self.parts = []
-
-    def save(self) -> None:
-        self.folder.mkdir(parents=True, exist_ok=True)
-        (self.folder / "index.json").write_text(json.dumps([asdict(p) for p in self.parts], indent=1))
-
-    def import_files(self, paths: list[Path]) -> tuple[int, list[str]]:
-        """Copies .s1p/.s2p files into the library. Returns the number of parts and the skipped files."""
-        from . import touchstone
-        skipped, n = [], 0
-        known = {p.part: p for p in self.parts}
-        for src in paths:
-            src = Path(src)
-            if src.suffix.lower() not in (".s1p", ".s2p"):
-                continue
-            try:
-                f, S, _ = touchstone.read(src)
-            except Exception as e:  # noqa: BLE001
-                skipped.append(f"{src.name}: {e}")
-                continue
-            part = src.stem
-            ser = series_for(part)
-            kind, value = value_from_part(part)
-            dst = self.folder / "files" / (ser.vendor if ser else "Other") / src.name
-            dst.parent.mkdir(parents=True, exist_ok=True)
-            if src.resolve() != dst.resolve():
-                shutil.copyfile(src, dst)
-            known[part] = LibraryPart(part, ser.vendor if ser else "", ser.name if ser else "",
-                                      kind or (ser.kind if ser else ""), value, str(dst), S.shape[1])
-            n += 1
-        self.parts = sorted(known.values(), key=lambda p: (p.vendor, p.series, p.part))
-        self.save()
-        return n, skipped
-
-    def import_folder(self, folder: str | Path) -> tuple[int, list[str]]:
-        """All Touchstone files of a folder (with subfolders) or of a ZIP archive."""
-        import tempfile
-        import zipfile
-        folder = Path(folder)
-        if folder.suffix.lower() == ".zip":
-            with tempfile.TemporaryDirectory() as tmp:
-                with zipfile.ZipFile(folder) as z:
-                    for m in z.namelist():
-                        if m.lower().endswith((".s1p", ".s2p")) and ".." not in Path(m).parts:
-                            z.extract(m, tmp)
-                return self.import_files(sorted(Path(tmp).rglob("*.s[12][pP]")))
-        return self.import_files(sorted(p for p in folder.rglob("*") if p.suffix.lower() in (".s1p", ".s2p")))
-
-    def search(self, text: str = "", kind: str = "") -> list[LibraryPart]:
-        t = text.strip().upper()
-        return [p for p in self.parts if (not kind or p.kind == kind)
-                and (not t or t in p.part.upper() or t in p.value.upper() or t in p.series.upper())]
 
 
 # --------------------------------------------------------------------------------------------

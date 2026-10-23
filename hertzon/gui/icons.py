@@ -1150,15 +1150,6 @@ def _chip(p):
     p.drawText(QRectF(20, 30, 24, 18), Qt.AlignCenter, "S")
 
 
-def _library(p):
-    for i, c in enumerate((QColor("#5b7fa6"), QColor("#c9952f"), QColor("#3c9a3c"))):
-        p.setPen(_pen(c.darker(150), 2))
-        p.setBrush(c)
-        p.drawRect(QRectF(8 + i * 14, 10 + (i % 2) * 4, 11, 46 - (i % 2) * 4))
-    p.setPen(_pen(GREY, 2.5))
-    p.drawLine(QPointF(4, 58), QPointF(60, 58))
-
-
 INK_C = QColor("#3b4558")
 
 
@@ -1195,7 +1186,7 @@ _DRAW = {
     "animate": _animate, "clear": _clear, "soldata": _soldata, "export": _export, "design": _design,
     "variables": _variables, "screenshot": _screenshot, "help": _help, "projection": _projection,
     "byname": _byname, "selall": _selall, "exit": _exit, "filter": _filter, "antenna": _antenna,
-    "resistor": _resistor, "inductor": _inductor, "capacitor": _capacitor, "chip": _chip, "library": _library,
+    "resistor": _resistor, "inductor": _inductor, "capacitor": _capacitor, "chip": _chip,
 }
 
 

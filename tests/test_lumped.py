@@ -1,6 +1,4 @@
-"""Lumped Elements: Touchstone components, SMD packages, the generated component geometry and the library."""
-import zipfile
-
+"""Lumped Elements: Touchstone components, SMD packages and the generated component geometry."""
 import numpy as np
 import pytest
 
@@ -94,14 +92,6 @@ def test_land_pattern_and_packages():
     assert LU.series_for("XYZ") is None
 
 
-@pytest.mark.parametrize("part,kind,value", [
-    ("GJM1555C1H1R0BB01", "C", "1pF"), ("GJM1555C1H100GB01", "C", "10pF"), ("GJM0335C1E2R2BB01", "C", "2.2pF"),
-    ("0402HP-2N0XJLW", "L", "2nH"), ("0402CS-12NXGLU", "L", "12nH"), ("LQW15AN3N9B00", "L", "3.9nH"),
-    ("unknown", "", "")])
-def test_value_from_part_number(part, kind, value):
-    assert LU.value_from_part(part) == (kind, value)
-
-
 def _trace(x0, x1, y0, y1, z):
     return np.array([[x0, y0, z], [x1, y0, z], [x1, y1, z], [x0, y1, z]], float)
 
@@ -184,27 +174,3 @@ def test_insert_touchstone_component(tmp_path):
     b, _, _ = LU.insert_component(p, d, "TraceA", "TraceB", ends, pkg, LU.land_pattern(pkg), "S", touchstone=str(f))
     assert b.props["Model"] == "Touchstone" and b.props["TouchstoneFile"] == str(f)
     assert b.props["Component"] == "Murata GJM15 (GJM1555C1H1R0BB01)"
-
-
-def test_library_import(tmp_path):
-    src = tmp_path / "dl"
-    src.mkdir()
-    _s2p(src / "0402HP-2N0XJLW.s2p", complex(0.2, 12))
-    _s2p(src / "GJM1555C1H1R0BB01.s2p", complex(0.1, -150))
-    (src / "broken.s2p").write_text("# GHz S RI R 50\n1 2 3\n")
-    (src / "readme.txt").write_text("x")
-    with zipfile.ZipFile(tmp_path / "parts.zip", "w") as z:
-        for f in src.iterdir():
-            z.write(f, "S-Params/" + f.name)
-    lib = LU.Library(tmp_path / "lib")
-    n, skipped = lib.import_folder(tmp_path / "parts.zip")
-    assert n == 2 and len(skipped) == 1 and "broken.s2p" in skipped[0]
-    lib = LU.Library(tmp_path / "lib")                        # read back from the index
-    parts = {p.part: p for p in lib.parts}
-    assert parts["0402HP-2N0XJLW"].series == "Coilcraft 0402HP" and parts["0402HP-2N0XJLW"].value == "2nH"
-    assert parts["GJM1555C1H1R0BB01"].kind == "C" and parts["GJM1555C1H1R0BB01"].value == "1pF"
-    assert (tmp_path / "lib" / "files" / "Coilcraft" / "0402HP-2N0XJLW.s2p").is_file()
-    assert [p.part for p in lib.search("2nh")] == ["0402HP-2N0XJLW"]
-    assert [p.part for p in lib.search("", "C")] == ["GJM1555C1H1R0BB01"]
-    n, _ = lib.import_folder(src)                             # again from the folder: no duplicates
-    assert n == 2 and len(lib.parts) == 2

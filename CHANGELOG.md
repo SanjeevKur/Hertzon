@@ -19,9 +19,6 @@ the GitHub release notes.
   dimensions. Hertzon adds the pads of the land pattern (made like the traces), the element sheet with its
   Lumped RLC boundary and integration line, and optionally a 3D body with metal terminations (the
   mounted inductance from the field solution). The ideal value can carry the typical ESL and ESR of the size.
-- **Component library**: imports the S-parameter files of the vendors (folder, ZIP or files; they are not
-  shipped with Hertzon; **Vendor Downloads** opens the official download pages), recognises series, kind and value from the part number and inserts a part with
-  its package.
 - **Lumped RLC: Model** Parallel RLC (as before), Series RLC or Touchstone (.s1p, or .s2p measured in
   series or as a shunt). The Validation Check reads the Touchstone file; the solver warns when a sweep
   leaves its frequency range.

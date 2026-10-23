@@ -1,42 +1,25 @@
-"""Lumped Elements tab: insert an SMD component between two traces, and the component library."""
+"""Lumped Elements tab: insert an SMD component between two traces."""
 from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QStandardPaths, QUrl
-from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (QDialog, QFormLayout, QLineEdit, QComboBox, QCheckBox, QDoubleSpinBox, QLabel,
-                               QPushButton, QHBoxLayout, QVBoxLayout, QDialogButtonBox, QFileDialog, QTableWidget,
-                               QTableWidgetItem, QHeaderView, QAbstractItemView, QMessageBox, QWidget, QMenu)
+                               QPushButton, QHBoxLayout, QVBoxLayout, QDialogButtonBox, QFileDialog, QMessageBox,
+                               QWidget)
 
 from ..model import lumped as LU
 
-# official S-parameter download pages (the files are downloaded by the user, Hertzon does not ship them)
-VENDOR_PAGES = (
-    ("Murata capacitors (MLCC)...", "https://www.murata.com/en-us/tool/data/sparameterdata/sparameter-mlcc"),
-    ("Murata inductors...", "https://www.murata.com/en-us/tool/data/sparameterdata/sparameter-inductor"),
-    ("Coilcraft inductors...", "https://coilcraft.com/models.cfm"),
-)
 KIND_NAMES = {"R": "Resistor", "L": "Inductor", "C": "Capacitor", "S": "Touchstone component"}
 VALUE_DEFAULTS = {"R": "50ohm", "L": "10nH", "C": "1pF"}
-
-
-def library_folder() -> Path:
-    base = QStandardPaths.writableLocation(QStandardPaths.AppDataLocation) or str(Path.home() / ".hertzon")
-    return Path(base) / "component_library"
-
-
-def open_library() -> LU.Library:
-    return LU.Library(library_folder())
 
 
 class ComponentDialog(QDialog):
     """Kind, value, package, model and land pattern of a component placed in a gap of ``gap`` mm."""
 
-    def __init__(self, parent, kind: str, gap: float, library: LU.Library, part: LU.LibraryPart | None = None):
+    def __init__(self, parent, kind: str, gap: float):
         super().__init__(parent)
         self.setWindowTitle("Insert Component")
-        self.library, self.gap = library, gap
+        self.gap = gap
         lay = QVBoxLayout(self)
         form = QFormLayout()
         lay.addLayout(form)
@@ -58,11 +41,8 @@ class ComponentDialog(QDialog):
         self.ts_file = QLineEdit()
         b1 = QPushButton("Browse...")
         b1.clicked.connect(self._browse)
-        b2 = QPushButton("Library...")
-        b2.clicked.connect(self._from_library)
         h.addWidget(self.ts_file, 1)
         h.addWidget(b1)
-        h.addWidget(b2)
         self.ts_label = QLabel("Touchstone file:")
         form.addRow(self.ts_label, self.ts_row)
         self.mount = QComboBox()
@@ -100,8 +80,6 @@ class ComponentDialog(QDialog):
         self.geometry.currentIndexChanged.connect(self._geometry_changed)
         self.G.valueChanged.connect(self._gap_text)
         self._kind_changed()
-        if part is not None:
-            self.use_part(part)
         self.resize(520, 0)
 
     # -- state --------------------------------------------------------------------------------------
@@ -161,20 +139,6 @@ class ComponentDialog(QDialog):
             if ser is not None:
                 self.package.setCurrentIndex(max(self.package.findData(ser.name), 0))
 
-    def _from_library(self):
-        dlg = LibraryDialog(self, self.library)
-        if dlg.exec() == QDialog.Accepted and dlg.selected is not None:
-            self.use_part(dlg.selected, keep_kind=True)
-
-    def use_part(self, part: LU.LibraryPart, keep_kind: bool = False):
-        if not keep_kind:
-            self.kind.setCurrentIndex(list(KIND_NAMES).index("S"))
-        self.ts_file.setText(part.file)
-        if part.series:
-            i = self.package.findData(part.series)
-            if i >= 0:
-                self.package.setCurrentIndex(i)
-
     def _ok(self):
         if self.k() == "S" and not Path(self.ts_file.text().strip()).is_file():
             QMessageBox.warning(self, "Insert Component", "Choose a Touchstone file (.s1p/.s2p).")
@@ -192,105 +156,3 @@ class ComponentDialog(QDialog):
                     land=LU.Land(G=self.G.value(), Z=max(land.Z, self.G.value()), X=self.X.value()),
                     terminations=bool(self.geometry.currentData()), parasitics=self.parasitics.isChecked(),
                     touchstone=self.ts_file.text().strip(), mount=self.mount.currentText())
-
-
-class LibraryDialog(QDialog):
-    """Touchstone files of components imported from vendor downloads (folder or ZIP)."""
-
-    def __init__(self, parent, library: LU.Library):
-        super().__init__(parent)
-        self.setWindowTitle("Component Library")
-        self.library = library
-        self.selected: LU.LibraryPart | None = None
-        lay = QVBoxLayout(self)
-        top = QHBoxLayout()
-        self.search = QLineEdit()
-        self.search.setPlaceholderText("Search part number, value or series (e.g. 0402HP, 10nH, GJM15)")
-        self.kind = QComboBox()
-        for t, k in (("All", ""), ("Inductors", "L"), ("Capacitors", "C"), ("Resistors", "R")):
-            self.kind.addItem(t, k)
-        top.addWidget(self.search, 1)
-        top.addWidget(self.kind)
-        lay.addLayout(top)
-        self.table = QTableWidget(0, 5)
-        self.table.setHorizontalHeaderLabels(["Part", "Value", "Series", "Ports", "File"])
-        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
-        self.table.horizontalHeader().setStretchLastSection(True)
-        self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
-        self.table.setSelectionMode(QAbstractItemView.SingleSelection)
-        self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
-        self.table.doubleClicked.connect(self._ok)
-        lay.addWidget(self.table, 1)
-        self.info = QLabel()
-        self.info.setWordWrap(True)
-        lay.addWidget(self.info)
-        row = QHBoxLayout()
-        for txt, fn in (("Import Folder...", self._import_folder), ("Import ZIP...", self._import_zip),
-                        ("Import Files...", self._import_files)):
-            b = QPushButton(txt)
-            b.clicked.connect(fn)
-            row.addWidget(b)
-        row.addStretch(1)
-        dl = QPushButton("Vendor Downloads")
-        dl.setToolTip("Opens the S-parameter download page of the vendor in the browser; import the downloaded "
-                      "ZIP afterwards")
-        m = QMenu(dl)
-        for txt, url in VENDOR_PAGES:
-            m.addAction(txt, lambda u=url: QDesktopServices.openUrl(QUrl(u)))
-        dl.setMenu(m)
-        row.addWidget(dl)
-        lay.addLayout(row)
-        bb = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        bb.button(QDialogButtonBox.Ok).setText("Use Part")
-        bb.accepted.connect(self._ok)
-        bb.rejected.connect(self.reject)
-        lay.addWidget(bb)
-        self.search.textChanged.connect(self._fill)
-        self.kind.currentIndexChanged.connect(self._fill)
-        self._fill()
-        self.resize(820, 520)
-
-    def _fill(self, *_):
-        parts = self.library.search(self.search.text(), self.kind.currentData())
-        self.table.setRowCount(len(parts))
-        for r, p in enumerate(parts):
-            for c, v in enumerate((p.part, p.value, p.series or "(unknown series)", str(p.ports), p.file)):
-                it = QTableWidgetItem(v)
-                it.setData(Qt.UserRole, p.part)
-                self.table.setItem(r, c, it)
-        self.info.setText(f"{len(parts)} of {len(self.library.parts)} parts. Download the S-parameter files "
-                          "(.s2p/.s1p) of the vendor (Coilcraft, Murata ...) and import the folder or ZIP; the "
-                          "files are copied to " + str(self.library.folder) + ". Series known to the library "
-                          "get their body dimensions automatically.")
-
-    def _imported(self, res):
-        n, skipped = res
-        self._fill()
-        msg = f"{n} part(s) imported."
-        if skipped:
-            msg += "\n\nSkipped:\n" + "\n".join(skipped[:20])
-        QMessageBox.information(self, "Component Library", msg)
-
-    def _import_folder(self):
-        d = QFileDialog.getExistingDirectory(self, "Folder with Touchstone files")
-        if d:
-            self._imported(self.library.import_folder(d))
-
-    def _import_zip(self):
-        f, _ = QFileDialog.getOpenFileName(self, "ZIP with Touchstone files", "", "ZIP (*.zip)")
-        if f:
-            self._imported(self.library.import_folder(f))
-
-    def _import_files(self):
-        fs, _ = QFileDialog.getOpenFileNames(self, "Touchstone files", "", "Touchstone (*.s1p *.s2p)")
-        if fs:
-            self._imported(self.library.import_files([Path(f) for f in fs]))
-
-    def _ok(self, *_):
-        r = self.table.currentRow()
-        if r < 0:
-            QMessageBox.information(self, "Component Library", "Select a part.")
-            return
-        name = self.table.item(r, 0).data(Qt.UserRole)
-        self.selected = next(p for p in self.library.parts if p.part == name)
-        self.accept()

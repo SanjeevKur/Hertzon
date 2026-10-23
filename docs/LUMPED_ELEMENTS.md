@@ -22,7 +22,7 @@ solver warns. A relative path is relative to the project file.
 
 1. Select the two traces (**O**) the component connects. They have to lie in one plane with a gap along X,
    Y or Z.
-2. **Resistor**, **Inductor**, **Capacitor** or **Touchstone** (or **From Library**).
+2. **Resistor**, **Inductor**, **Capacitor** or **Touchstone**.
 3. Choose the value or the Touchstone file, the package and the geometry:
    - **Planar**: the element sheet lies between the pads in the trace plane. *Typical ESL and ESR* adds
      the mounted inductance and loss of the size in series (0201 0.15 nH, 0402 0.3 nH, 0603 0.45 nH,
@@ -65,12 +65,6 @@ pads, which Hertzon reports.
 Coilcraft: maximum length and height and the terminal wraparound of the data sheets, nominal width.
 Murata: nominal dimensions; the terminal length is typical.
 
-## Component library
-
-The S-parameter files of the vendors are free to download but may not be passed on, so Hertzon does not ship
-them. **Lumped Elements > Import...** (or **Library...** in the component dialog) imports a folder, a ZIP or
-single .s1p/.s2p files into the library folder of the user. **Vendor Downloads** opens the official
-download pages (Murata capacitors and inductors: one ZIP per series; Coilcraft); the vendors allow the data
-for circuit simulation but not passing them on. The part number gives the series (and with it
-the package), the kind and the value: inductors `2N0` = 2.0 nH, Murata capacitors `1R0` = 1.0 pF and
-`100` = 10 pF. **From Library** inserts a part with its package and Touchstone file.
+The S-parameter files of the vendors are free to download for circuit simulation but may not be passed on,
+so Hertzon does not ship them. Choose the downloaded .s1p/.s2p file in the dialog; a part number in the file
+name (for example `0402HP-2N0XJLW.s2p`) selects the package of its series.
