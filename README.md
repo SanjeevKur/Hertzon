@@ -196,6 +196,16 @@ What changed in each release: [CHANGELOG.md](CHANGELOG.md).
 pip install pytest gerbonara pygerber && python -m pytest tests
 ```
 
+## Branches and releases
+
+- Work goes to the `dev` branch (pull requests target `dev`). Every push to `dev` builds test installers
+  for Windows and Linux, checks the Windows installation and keeps both as an artifact of the run
+  (Actions tab > Dev build > the run > Artifacts) for 30 days. They are not published as a release.
+- For a release, raise the version on `dev` (`pyproject.toml`, `hertzon/__init__.py`,
+  `hertzon/mcp/__main__.py`, `CITATION.cff`) and name the section in `CHANGELOG.md`, then merge `dev`
+  into `main` with a merge commit. A new version on `main` builds the installers and publishes the
+  release `v<version>`; merges without a new version publish nothing.
+
 ## Citing Hertzon
 
 If you use Hertzon in a publication, please cite it. GitHub shows a ready-made reference under
