@@ -3,7 +3,11 @@
 All notable changes of each release. The release workflow copies the section of the released version into
 the GitHub release notes.
 
-## Unreleased
+## 0.1.25 (2026-10-23)
+
+### Changed
+- **Contributors** section in the README (all-contributors convention, `.all-contributorsrc`): bug reports
+  and feature ideas are credited.
 
 ### Fixed
 - **Radiation Pattern, polar plot**: a Phi cut is now labelled over theta -180..180 deg, as defined on the
