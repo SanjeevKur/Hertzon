@@ -42,7 +42,7 @@ these pull requests start from `main`, never from `hertzon`.
 | Port mode solve ends the whole solve on `ArpackNoConvergence` | `emerge_patches._robust_eigs` | – | No PR: since 3.0.0b5 the port mode solvers factorize the shift once, use an oversampled Krylov space and skip a failing shift. Three waveport runs without Hertzon's retry and all benchmark runs: no failure. Dropped from Hertzon |
 | Error estimate counts the current jump at finite-conductivity sheets as error | `bridge._with_conductor_sheets` | Wrong refinement at conductor sheets; may overlap with the maintainer's thin trace fix (`c951924`) | Needs a model that shows the effect first; none of the benchmark models does |
 | gmsh fails on trimmed B-spline faces of CAD files | `emerge_patches.apply_mesh_fallback` | Meshing crash for imported CAD, not GUI specific | To do, low priority |
-| Far field with symmetry planes: radiated power scaled by `factor**2` although only the simulated part is integrated | – (Hertzon does not mirror yet) | Possible wrong radiated power for every user of `syms` | Check with a full and a half model first |
+| Far field with symmetry planes: radiated power scaled by `factor**2` although only the simulated part is integrated | – (Hertzon does not mirror yet) | Possible wrong radiated power for every user of `syms` | Open. EMerge's horn demo (quarter model) is no reference: 2.25 W cross its radiation boundary at the PML for 0.99 W into the port, so the check needs a model with the integration surface inside the air, as a full and a half model |
 
 ### Speed features in the solver core: `hertzon` branch (R4, R6)
 
