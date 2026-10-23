@@ -79,7 +79,7 @@ EMerge 3 ships its solver kernels compiled; the first solve only compiles Hertzo
    with **Auto Open** (radiation or PML chosen automatically) or **Auto Open - Filter**
    (air box with fixed margin and a radiation boundary, for filters and other closed-ish circuits).
 2. **Draw** boxes, cylinders, spheres, cones, tori, polyhedra, rectangles, circles, ellipses,
-   polygons, polylines, region. Click on the grid (snaps to grid and vertices) or type coordinates
+   polygons, polylines and arcs (3 point, center point), region. Click on the grid (snaps to grid and vertices) or type coordinates
    in the status bar; every parameter accepts expressions with **variables** and units.
    **Modeler > Boolean** unite / subtract / intersect / split, arrange, duplicate, thicken, sweep, import STEP.
 3. Select faces (**F**) or objects (**O**) and assign **Boundaries** (Perfect E/H, Finite

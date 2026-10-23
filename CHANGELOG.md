@@ -3,6 +3,20 @@
 All notable changes of each release. The release workflow copies the section of the released version into
 the GitHub release notes.
 
+## Unreleased
+
+### New
+- **Draw > Arc > 3 Point / Center Point** (as in HFSS), also in the ribbon next to Polyline: a polyline of
+  one arc. Center Point: click the start point, the center, then move the cursor around the center; the arc
+  follows it in both directions and past 180 degrees, the click sets the angle.
+- **Center Point Arc segments in polylines** (key **C** while drawing, like L / A / S): stored as the HFSS
+  segment type `AngularArc:<angle>:<plane>` in *Segment types*, so the angle can be edited (and be an
+  expression, e.g. `AngularArc:ang:XY`); the end point follows the angle. Closed arcs can be covered.
+
+### Fixed
+- **Tools > Keyboard Shortcuts** opens again: the dialog failed at once because its table widgets were not
+  imported (NameError), so shortcuts could not be viewed or changed.
+
 ## 0.1.22 (2026-10-22)
 
 ### Changed

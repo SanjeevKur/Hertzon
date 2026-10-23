@@ -12,7 +12,8 @@ from PySide6.QtGui import QAction, QKeySequence, QActionGroup
 from PySide6.QtWidgets import (QMainWindow, QDockWidget, QTabWidget, QSplitter, QMenu, QFileDialog, QMessageBox,
                                QLabel, QLineEdit, QComboBox, QInputDialog, QDialog, QFormLayout, QDialogButtonBox,
                                QListWidget, QAbstractItemView, QVBoxLayout,
-                               QSpinBox, QDoubleSpinBox, QApplication, QWidget)
+                               QSpinBox, QDoubleSpinBox, QApplication, QWidget, QTableWidget,
+                               QTableWidgetItem, QHeaderView)
 
 from .. import __version__
 from ..model import schema
@@ -311,6 +312,10 @@ class MainWindow(QMainWindow):
                 m.addSeparator()
                 continue
             m.addAction(label, lambda _=False, k=kind: self.start_draw(k))
+            if kind == "CreatePolyline":
+                arc = m.addMenu("Arc")      # HFSS Draw > Arc: polylines of one arc segment
+                arc.addAction("3 Point", lambda: self.start_draw("CreatePolyline:arc3"))
+                arc.addAction("Center Point", lambda: self.start_draw("CreatePolyline:arccenter"))
         m.addAction("Helix...", lambda: self.create_by_dialog("CreateHelix"))
         m.addAction("Spiral...", lambda: self.create_by_dialog("CreateSpiral"))
         m.addSeparator()
@@ -584,6 +589,8 @@ class MainWindow(QMainWindow):
         g.icon_only = True
         g.small("Line", "line", draw("CreatePolyline:line"))
         g.small("Polyline", "polyline", draw("CreatePolyline"))
+        g.small("3 Point Arc", "arc3", draw("CreatePolyline:arc3"))
+        g.small("Center Point Arc", "arc_center", draw("CreatePolyline:arccenter"))
         g.small("By Dialog", "polyline_dlg", lambda: self.create_by_dialog())
         g = pg.group("Region")
         g.icon_only = True
@@ -1595,7 +1602,7 @@ class MainWindow(QMainWindow):
         except ValueError:
             custom = {}
         for a in self.findChildren(QAction):
-            t = a.text().replace("&", "")
+            t = a.text().replace("&", "").strip()
             if t in custom:
                 a.setShortcut(QKeySequence(custom[t]))
 
@@ -1970,6 +1977,11 @@ class MainWindow(QMainWindow):
         self.view.start_draw(k)
         if self._line_only:
             self.view.draw.phases = 2
+        elif kind in ("CreatePolyline:arc3", "CreatePolyline:arccenter"):
+            # one arc: start, then middle and end (3 point) or center and end angle (center point)
+            self.view.draw.seg_mode = "Arc" if kind.endswith("arc3") else "CenterArc"
+            self.view.draw.phases = 3
+            self.view.drawPhaseChanged.emit(self.view._phase_hint())
         self.tabs.setCurrentIndex(0)
         self.view.plotter.interactor.setFocus()
 

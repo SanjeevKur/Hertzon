@@ -523,11 +523,20 @@ def _surface(work, mesh: dict, keys_sel, owner, local, both: bool, toward_owner:
     return _patches(P6, vals, curved, quad=npt == 10)
 
 
+def _object_tets(mesh: dict, obj_index: int) -> np.ndarray:
+    """Tetrahedra inside an object's geometry. Where volumes overlap they belong to every object there,
+    so a plot shows the whole object; tet_obj holds only the one that sets the material (old results)."""
+    if "obj_ptr" in mesh and "obj_tets" in mesh:
+        p = mesh["obj_ptr"]
+        return np.asarray(mesh["obj_tets"][p[obj_index]:p[obj_index + 1]], np.int64)
+    return np.where(mesh["tet_obj"] == obj_index)[0]
+
+
 def _object_faces(mesh: dict, obj_index: int, outside: bool = False):
     """Boundary faces of an object (keys, owners, local corners). outside=True takes the neighbouring
     tets as owners (conductors: the field inside a PEC is zero, the surface current lives on the outer side)."""
     tets = mesh["tets"]
-    sel = np.where(mesh["tet_obj"] == obj_index)[0]
+    sel = _object_tets(mesh, obj_index)
     keys, owner, local = _all_faces(tets[sel])
     owner = sel[owner]
     uk, cnt = np.unique(keys, return_counts=True)
@@ -535,7 +544,9 @@ def _object_faces(mesh: dict, obj_index: int, outside: bool = False):
     keys, owner, local = keys[outer], owner[outer], local[outer]
     if outside:
         ka, oa, la = _all_faces(tets)
-        nb = np.isin(ka, keys) & (mesh["tet_obj"][oa] != obj_index)
+        inside = np.zeros(len(tets), bool)
+        inside[sel] = True
+        nb = np.isin(ka, keys) & ~inside[oa]
         if nb.any():
             # faces on the outer domain boundary keep the inner side
             rest = ~np.isin(keys, ka[nb])
