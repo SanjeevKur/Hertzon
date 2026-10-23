@@ -146,7 +146,7 @@ def main() -> int:
         return 0
     if os.name == "nt":
         os.system("title Hertzon setup")  # noqa: S605
-    print("Hertzon setup: preparing the solver (once, a few minutes) ...", flush=True)
+    print("First start detected: compiling the solver kernels (once, a few minutes) ...", flush=True)
     logfile = Path(sys.prefix) / "hertzon_warmup.log"
     try:
         logfile.write_text(f"Hertzon warm-up {time.ctime()}\n", encoding="utf-8")

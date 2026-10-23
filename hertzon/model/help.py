@@ -175,7 +175,8 @@ HELP: dict[str, str] = {
     # ---- design settings ----------------------------------------------------------------------
     "SolutionType": "Modal (S-parameters by modes), Terminal or Eigenmode.",
     "AutoOpen": "Automatically add an air region with a radiation boundary around the model.",
-    "AutoOpenBoundary": "Boundary type of the automatic open region.",
+    "AutoOpenBoundary": "Boundary type of the automatic open region. With an incident plane wave the radiation boundary is "
+                        "always used (the incident wave enters through it).",
     "AutoOpenPadding": "Distance of the open region from the model.",
     "FilterAirMargin": "Air margin around filters for the open region.",
 }

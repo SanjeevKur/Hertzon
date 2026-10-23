@@ -628,3 +628,20 @@ def test_center_point_arc_drawing():
     assert Vw.segment_spec(modes, "XY") == "AngularArc:-90:XY,Line"
     P = Vw.densify([np.array([1.0, 0, 0]), np.zeros(3), np.array([0, -1.0, 0]), np.array([0, -2.0, 0])], modes)
     assert np.allclose(np.linalg.norm(P[:-1], axis=1), 1) and np.allclose(P[-1], [0, -2, 0])
+
+
+def test_first_start_note(monkeypatch):
+    """Solver kernels not compiled yet: the main window says so in the Message Manager and the status bar."""
+    import types
+    from hertzon.gui.main_window import MainWindow
+    from hertzon.solver import bridge
+    msgs, status = [], []
+    win = types.SimpleNamespace(msgs=types.SimpleNamespace(add=lambda kind, text: msgs.append((kind, text))),
+                                statusBar=lambda: types.SimpleNamespace(showMessage=lambda t, ms=0: status.append(t)))
+    monkeypatch.setattr(bridge, "_first_run", lambda: False)
+    MainWindow._first_start_note(win)
+    assert not msgs and not status
+    monkeypatch.setattr(bridge, "_first_run", lambda: True)
+    MainWindow._first_start_note(win)
+    assert msgs[0][0] == "warning" and "First start detected" in msgs[0][1]
+    assert "compiles the solver kernels" in status[0]

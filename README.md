@@ -118,12 +118,12 @@ solvers, openEMS (FDTD), electrostatics and magnetostatics, circuit co-simulatio
 | `examples/GPS_L1_RHCP.hzn` | 1.575 GHz GPS L1 ceramic patch (εr 20) with probe feed and stub on a feed board, circular polarization (RHCP) far field |
 | `examples/RotmanLens_24GHz.hzn` | 24 GHz Rotman lens beamformer on RO4350B in three designs: the lens with beam, array and dummy ports, the single array patch, and lens plus patch array with beam far fields |
 | `examples/PlaneWave.hzn` | Incident plane wave on a PEC sphere in a radiation box, and the same plane wave in an empty box |
-| `examples/NATO-Sphere.hzn` | RCS of a PEC sphere (radius 250 mm) at 1 GHz, plane wave, PML, curved second-order elements |
+| `examples/NATO-Sphere.hzn` | RCS of a PEC sphere (radius 250 mm) at 1 GHz, plane wave, radiation boundary, Max Delta E 0.001, curved second-order elements |
 | `examples/DroneRCS.hzn` | RCS of an imported drone STL model (`Delta_Composites_Demo_3_Layers/`) at 1 GHz, plane wave |
 | `examples/Coax.hzn` | 20 mm, 50 Ω PTFE coax with TEM wave ports, sweep 1-10 GHz ([tutorial](docs/TUTORIAL.md#2-coaxial-cable-with-wave-ports)) |
 | `examples/Dipole.hzn` | Half-wave dipole for 1 GHz with a lumped port, **Auto Open**, far field and gain ([tutorial](docs/TUTORIAL.md#3-half-wave-dipole)) |
 | `examples/GerberTestBoard.hzn` | Two-layer board with copper shapes, cut-outs, a via and holes: the test case of **File > Export > Gerber** ([docs](docs/GERBER_EXPORT.md)) |
-| `examples/SphereRCS.hzn` | RCS of a 100 mm PEC sphere at 1 GHz, plane wave, PML, checked against the Mie series ([tutorial](docs/TUTORIAL.md#4-radar-cross-section-of-a-sphere)) |
+| `examples/SphereRCS.hzn` | RCS of a 100 mm PEC sphere at 1 GHz, plane wave, radiation boundary, checked against the Mie series ([tutorial](docs/TUTORIAL.md#4-radar-cross-section-of-a-sphere)) |
 
 `examples/benchmark/` holds the validation and timing cases (patch antenna, waveguide post against a reference,
 sphere RCS against the Mie series, scaling from small to large models) with their scripts.
