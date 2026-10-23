@@ -1,12 +1,16 @@
-# Builds the Windows installer and the Linux package, installs the Windows one on a clean Windows
-# machine with Python 3.13 (the full setup a user gets, packages included) and only then attaches
-# both to a GitHub release.
-# Runs when a version tag (v0.1.0, ...) is pushed, or by hand from the Actions tab (Run workflow):
-# then the release is named after the version in pyproject.toml.
+# Builds the installers (build.yml, with the Windows installation check) and only then attaches both
+# to a GitHub release. Runs
+#  - when a push to main brings a version in pyproject.toml that has no tag v<version> yet, i.e. when
+#    dev is merged into main after the version was raised,
+#  - when a version tag (v0.1.0, ...) is pushed,
+#  - by hand from the Actions tab (Run workflow).
+# The release is named after the version in pyproject.toml (or the pushed tag).
 name: Release
 
 on:
   push:
+    branches: [main]
+    paths: ["pyproject.toml"]
     tags: ["v*"]
   workflow_dispatch:
 
@@ -14,55 +18,31 @@ permissions:
   contents: write
 
 jobs:
-  build:
+  check:
     runs-on: ubuntu-latest
+    outputs:
+      release: ${{ steps.check.outputs.release }}
     steps:
       - uses: actions/checkout@v4
-      - name: Install NSIS
-        run: sudo apt-get update && sudo apt-get install -y nsis
-      - name: Build installers
-        run: bash packaging/build_installer.sh
-      - uses: actions/upload-artifact@v4
-        with:
-          name: dist
-          path: |
-            dist/Hertzon-Setup-*.exe
-            dist/Hertzon-*-linux.tar.gz
+      - name: New version?
+        id: check
+        run: |
+          VER=$(python3 -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["project"]["version"])')
+          if [ "$GITHUB_REF_TYPE" = branch ] && [ "$GITHUB_EVENT_NAME" = push ] \
+              && git ls-remote --exit-code --tags origin "refs/tags/v$VER" > /dev/null; then
+            echo "v$VER is already released, nothing to do"
+            echo "release=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "release=true" >> "$GITHUB_OUTPUT"
+          fi
 
-  install-windows:
-    needs: build
-    runs-on: windows-latest
-    steps:
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.13"
-      - uses: actions/download-artifact@v4
-        with:
-          name: dist
-          path: dist
-      - name: Run the installer silently (it runs setup.ps1 like on a user's machine)
-        timeout-minutes: 40
-        shell: pwsh
-        run: |
-          $exe = (Get-ChildItem dist\Hertzon-Setup-*.exe).FullName
-          $dir = "$env:RUNNER_TEMP\Hertzon"
-          Start-Process -FilePath $exe -ArgumentList '/S', "/D=$dir" -Wait
-          if (-not (Test-Path "$dir\.venv\hertzon_installed.txt")) { throw 'setup.ps1 did not finish: the package installation failed' }
-      - name: Warm-up log
-        if: always()
-        shell: pwsh
-        run: Get-Content "$env:RUNNER_TEMP\Hertzon\.venv\hertzon_warmup.log" -ErrorAction SilentlyContinue
-      - name: Start check (imports of the main window and the solver)
-        shell: pwsh
-        env:
-          QT_QPA_PLATFORM: offscreen
-        run: |
-          $py = "$env:RUNNER_TEMP\Hertzon\.venv\Scripts\python.exe"
-          & $py -c "import hertzon, hertzon.gui.main_window, hertzon.solver.run, emerge, hfsynpy; print('Hertzon', hertzon.__version__, 'imports ok')"
-          if ($LASTEXITCODE -ne 0) { throw 'import check failed' }
+  build:
+    needs: check
+    if: needs.check.outputs.release == 'true'
+    uses: ./.github/workflows/build.yml
 
   publish:
-    needs: [build, install-windows]
+    needs: build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
