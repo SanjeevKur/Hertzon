@@ -995,6 +995,7 @@ class Bridge:
             # highest _priority, the later one on ties (build_model: smaller volume wins, regions lose)
             tet_obj = np.full(len(tets), -1, np.int32)
             tet_prio = np.full(len(tets), -np.inf)
+            members = []        # all tetrahedra inside each object's geometry, overlaps included
             names = []
             for name, g in groups.items():
                 try:
@@ -1008,6 +1009,7 @@ class Bridge:
                     tet_obj[own] = len(names)
                     tet_prio[own] = prio
                     names.append(name.split(" (")[0] if name.startswith("Region (") else name)
+                    members.append(ids)
                     stats.append({"object": name})
                 except Exception:  # noqa: BLE001
                     pass
@@ -1017,6 +1019,8 @@ class Bridge:
                 st.update(tet_statistics(nodes, own) if len(own) else {"tets": 0})
             self.store.save_npz("mesh.npz", nodes=nodes.astype(np.float64), tets=tets.astype(np.int32),
                                 tet_obj=tet_obj, obj_names=np.array(names or [""], dtype=str),
+                                obj_ptr=np.cumsum([0] + [len(i) for i in members]).astype(np.int64),
+                                obj_tets=np.concatenate(members or [np.zeros(0, int)]).astype(np.int32),
                                 **self.curved_mesh())
             stats.append({"object": "Total", **tet_statistics(nodes, tets)})
             self.store.write_json("mesh_stats.json", {"tets": int(tets.shape[0]), "nodes": int(nodes.shape[0]),
