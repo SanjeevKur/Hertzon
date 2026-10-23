@@ -350,7 +350,7 @@ That is the whole model: the air region and its radiation boundary come from Aut
 2. **Add Solution Setup...**:
    * Frequency `1GHz`, Maximum passes `8`.
    * With only an incident wave there are no S-parameters. Convergence uses **Maximum Delta Energy**
-     instead, the relative change of the scattered energy between passes. Use `0.001`.
+     instead, the relative change of the scattered energy between passes. The default `0.001` fits.
    * **Options** tab: **Order of basis functions: Second Order** and **Curved elements** on (default).
      Curved second-order elements follow the sphere surface exactly and give accurate RCS with
      few elements.

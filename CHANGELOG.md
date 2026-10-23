@@ -18,6 +18,11 @@ the GitHub release notes.
   the other one (Subtract with clone), so the model shows what is solved and is free of overlaps.
   Described in the tutorial (basics).
 
+### Changed
+- **Maximum Delta Energy defaults to 0.001** (was 0.1) for new setups, and the examples use it. It is the
+  convergence criterion of incident wave designs (RCS); 0.1 stopped the adaptive passes far too early.
+  Saved projects keep their value.
+
 ## 0.1.23 (2026-10-23)
 
 ### New

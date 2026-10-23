@@ -876,7 +876,7 @@ class Bridge:
         from emerge._emerge.physics.microwave.bcs.boundary_conditions import PEC
         m, p = self.m, self.setup.props
         maxp = max(1, int(p.get("MaximumPasses", "6")))
-        max_de = float(p.get("MaximumDeltaEnergy", "0.1") or 0.1)
+        max_de = float(p.get("MaximumDeltaEnergy", "0.001") or 0.001)
         min_passes = max(2, int(p.get("MinimumPasses", "2")))
         min_conv = max(1, int(p.get("MinimumConvergedPasses", "1")))
         max_tets = int(float(p.get("MaximumRefinement", "1000000")))

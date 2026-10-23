@@ -719,3 +719,10 @@ def test_solver_rejects_partial_overlaps():
     with pytest.raises(RuntimeError) as e:
         Bridge.check_overlaps(types.SimpleNamespace(design=fake.design, overlap_vols=[vols[0], vols[2]]))
     assert "Material override" in str(e.value)
+
+
+def test_maximum_delta_energy_default():
+    """Incident wave convergence: Maximum Delta Energy is 0.001 by default."""
+    from hertzon.model import schema
+    p = next(p for p in schema.SETUP if p.name == "MaximumDeltaEnergy")
+    assert p.default == "0.001"
