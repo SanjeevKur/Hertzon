@@ -86,6 +86,10 @@ def test_land_pattern_and_packages():
     land = LU.land_pattern(p)
     assert land.G == pytest.approx(0.5) and land.Z == pytest.approx(1.2) and land.X == pytest.approx(0.5)
     assert LU.land_pattern(LU.PACKAGES["0603"]).Z == pytest.approx(2.3)
+    assert LU.series_for("0402HP-2N0XJLW").name == "Coilcraft 0402HP"
+    assert LU.series_for("0402HPH-10NXGLU").name == "Coilcraft 0402HPH"
+    assert LU.series_for("GJM1555C1H1R0BB01").name == "Murata GJM15"
+    assert LU.series_for("XYZ") is None
 
 
 def _trace(x0, x1, y0, y1, z):
@@ -165,8 +169,8 @@ def test_insert_component_into_a_design():
 
 def test_insert_touchstone_component(tmp_path):
     p, d, ends = _design()
-    pkg = LU.PACKAGES["0402"]
+    pkg = LU.PACKAGES["Murata GJM15"]
     f = _s2p(tmp_path / "GJM1555C1H1R0BB01.s2p", complex(0.1, -150))
     b, _, _ = LU.insert_component(p, d, "TraceA", "TraceB", ends, pkg, LU.land_pattern(pkg), "S", touchstone=str(f))
     assert b.props["Model"] == "Touchstone" and b.props["TouchstoneFile"] == str(f)
-    assert b.props["Component"] == "0402 (GJM1555C1H1R0BB01)"
+    assert b.props["Component"] == "Murata GJM15 (GJM1555C1H1R0BB01)"

@@ -14,7 +14,9 @@ the GitHub release notes.
 
 ### New
 - **Lumped Elements tab**: inserts a chip resistor, inductor or capacitor, or a component measured by a
-  Touchstone file, between the two selected traces, in the sizes 0201, 0402, 0603, 0805 and 1206. Hertzon adds the pads of the land pattern (made like the traces), the element sheet with its
+  Touchstone file, between the two selected traces. Packages 0201, 0402, 0603, 0805, 1206 and the RF series
+  Coilcraft 0402HP/0402HPH/0402CS/0603HP/0603CS and Murata LQW15AN/LQP03TN/GJM03/GJM15 with their body
+  dimensions. Hertzon adds the pads of the land pattern (made like the traces), the element sheet with its
   Lumped RLC boundary and integration line, and optionally a 3D body with metal terminations (the
   mounted inductance from the field solution). The ideal value can carry the typical ESL and ESR of the size.
 - **Lumped RLC: Model** Parallel RLC (as before), Series RLC or Touchstone (.s1p, or .s2p measured in

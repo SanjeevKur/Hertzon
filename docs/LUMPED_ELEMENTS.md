@@ -52,7 +52,19 @@ pads, which Hertzon reports.
 | 0603 | 1.60 × 0.80 × 0.80 | 0.35 |
 | 0805 | 2.00 × 1.25 × 0.85 | 0.50 |
 | 1206 | 3.20 × 1.60 × 0.85 | 0.50 |
+| Coilcraft 0402HP | 1.09 × 0.61 × 0.61 | 0.18 |
+| Coilcraft 0402HPH | 1.12 × 0.66 × 0.66 | 0.18 |
+| Coilcraft 0402CS | 1.19 × 0.64 × 0.66 | 0.18 |
+| Coilcraft 0603HP | 1.75 × 0.98 × 0.94 | 0.24 |
+| Coilcraft 0603CS | 1.80 × 1.12 × 1.02 | 0.18 |
+| Murata LQW15AN | 1.00 × 0.60 × 0.50 | 0.20 |
+| Murata LQP03TN | 0.60 × 0.30 × 0.30 | 0.15 |
+| Murata GJM03 | 0.60 × 0.30 × 0.30 | 0.15 |
+| Murata GJM15 | 1.00 × 0.50 × 0.50 | 0.25 |
 
+Coilcraft: maximum length and height and the terminal wraparound of the data sheets, nominal width.
+Murata: nominal dimensions; the terminal length is typical.
 
 The S-parameter files of the vendors are free to download for circuit simulation but may not be passed on,
-so Hertzon does not ship them. Choose the downloaded .s1p/.s2p file in the dialog and the size of the part.
+so Hertzon does not ship them. Choose the downloaded .s1p/.s2p file in the dialog; a part number in the file
+name (for example `0402HP-2N0XJLW.s2p`) selects the package of its series.
