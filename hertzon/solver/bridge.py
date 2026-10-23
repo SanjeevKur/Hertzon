@@ -190,6 +190,7 @@ class Bridge:
         self.step("Geometry", t)
         t = time.time()
         m.commit_geometry()
+        self.check_overlaps()
         emit("progress", value=8, text="Mapping boundaries to the solver model")
         self.samples = facematch.final_face_samples()
         self.assign_mesh_ops()
@@ -236,8 +237,23 @@ class Bridge:
                 warn(f"Object '{n}': {e}")
         self.tess = K.tessellate(ctx, quality="normal")
         self.probe_bbox = K.model_bbox(ctx.built, self.design)
+        # the far field surface of a scattering problem encloses the scatterers only: air or vacuum objects
+        # (e.g. a mesh refinement box) are background, and a larger surface raises the far field noise floor
+        dts = [dt for o in self.design.live_objects() if o.model and o.history[0].kind != "CreateRegion"
+               and not self.free_space(o.material) for dt in ctx.built.get(o.name, [])]
+        self.scatter_bbox = K._bbox(dts) if dts else self.probe_bbox
         gmsh.model.remove()
         gmsh.model.setCurrent(sim_model)
+
+    def free_space(self, name: str) -> bool:
+        """Material indistinguishable from the air background (vacuum, air)."""
+        try:
+            mat = self.project.material(name)
+            ev = self.ev
+            return not mat.pec and abs(ev.value(mat.permittivity) - 1) < 1e-3 and ev.value(mat.permeability) == 1 \
+                and ev.value(mat.conductivity) == 0 and ev.value(mat.loss_tangent) == 0
+        except Exception:  # noqa: BLE001
+            return False
 
     def em_material(self, name: str):
         em = self.em
@@ -310,7 +326,7 @@ class Bridge:
                 g.set_material(self.em_material(obj.material))
                 if obj.history[0].kind == "CreateRegion":
                     g.background()
-                vols.append((g, obj, sum(K._occ().getMass(3, t) for d, t in dt if d == 3)))
+                vols.append((g, obj, sum(K._occ().getMass(3, t) for d, t in dt if d == 3), is_conductor(mat)))
                 if not obj.solve_inside and not is_conductor(mat):
                     warn(f"'{obj.name}': solve inside is off but material is not a conductor; solving inside.")
                 self.geos[obj.name] = g
@@ -319,13 +335,28 @@ class Bridge:
                 self.geos[obj.name] = g
             else:
                 K._occ().remove(dt, recursive=True)
-        # smaller (inner) volumes win where solids overlap, background regions lose
-        vols.sort(key=lambda v: -v[2])
-        for prio, (g, obj, _) in enumerate(vols):
+        # where solids overlap (as the reference tool with material override): conductors win over
+        # dielectrics, otherwise the smaller (inner) volume wins; background regions lose
+        vols.sort(key=lambda v: (v[3], -v[2]))
+        for prio, (g, obj, _, _) in enumerate(vols):
             if obj.history[0].kind != "CreateRegion":
                 g.prio_set(10 + prio)
+        self.overlap_vols = [(obj, g, cond) for g, obj, _, cond in vols if obj.history[0].kind != "CreateRegion"]
         self.build_auto_open()
         K._occ().synchronize()
+
+    def check_overlaps(self) -> None:
+        """Warn about partial overlaps the reference tool rejects: two dielectrics or two conductors of
+        different materials (one object inside the other, or a conductor in a dielectric, is fine)."""
+        vols = [(o, g, set(g.tags), c) for o, g, c in getattr(self, "overlap_vols", [])]
+        for i, (a, ga, ta, ca) in enumerate(vols):
+            for b, gb, tb, cb in vols[i + 1:]:
+                if ca != cb or a.material == b.material or not ta & tb or ta <= tb or tb <= ta:
+                    continue
+                win = a if ga._priority >= gb._priority else b
+                warn(f"'{a.name}' ({a.material}) and '{b.name}' ({b.material}) partially overlap; "
+                     f"the overlap takes the material of the smaller object '{win.name}'. "
+                     "Subtract one from the other to make this explicit.")
 
     # ----------------------------------------------------------------------------------------
     def plane_wave(self):
@@ -387,7 +418,9 @@ class Bridge:
                 # far-field integration surface between scatterer and the scattered-field ABC, where the
                 # scattered field is free of the boundary's reflection error
                 h = margin / 2
-                self.ff_box = em.geo.Box(W - 2 * h, D - 2 * h, H - 2 * h, position=(pos[0] + h, pos[1] + h, pos[2] + h))
+                sx0, sy0, sz0, sx1, sy1, sz1 = self.scatter_bbox
+                self.ff_box = em.geo.Box(sx1 - sx0 + 2 * h, sy1 - sy0 + 2 * h, sz1 - sz0 + 2 * h,
+                                         position=(sx0 - h, sy0 - h, sz0 - h))
                 self.ff_box.set_material(em.lib.AIR).background()
         self.store.write_json("auto_open.json", {"kind": kind, "padding": margin, "lambda_low": lam,
                                                  "box": [*pos, W, D, H]})
