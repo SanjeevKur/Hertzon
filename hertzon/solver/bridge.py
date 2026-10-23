@@ -145,7 +145,12 @@ class Bridge:
         except OSError:
             pass
         self.store.write_json("status.json", {"state": "running", "started": time.time()})
-        emit("progress", value=1, text="Starting EMerge")
+        if _first_run():
+            note = "First start detected: compiling the solver kernels (once, a few minutes)"
+            info(note)
+            emit("progress", value=1, text=note)
+        else:
+            emit("progress", value=1, text="Starting EMerge")
         t = time.time()
         with em.Simulation(f"hertzon_{os.getpid()}", save_file=False) as m:
             info(f"Solver start: EMerge simulation ready in {time.time() - t:.1f} s")

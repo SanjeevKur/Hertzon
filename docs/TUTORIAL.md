@@ -300,16 +300,17 @@ to check an RCS setup. The finished project is `examples/SphereRCS.hzn`, and the
 
 ### 4.1 Design
 
-1. **Insert Design**, **Solution Type**: **Modal**, **Auto Open**, **Open boundary: PML**.
-   PML absorbs the scattered wave better than a first-order radiation boundary at all angles, which
-   matters for low RCS values.
+1. **Insert Design**, **Solution Type**: **Modal**, **Auto Open**, **Open boundary: Radiation**.
+   With an incident plane wave Hertzon solves for the scattered field, and the incident wave enters
+   through the radiation boundary. It is used for plane waves whatever boundary is picked here, and
+   the region gets λ/2 of air around the object, room for the far-field surface.
 2. **Design Properties**: `R = 100mm`.
 
 ### 4.2 Geometry
 
 1. **Draw > Sphere**: CenterPosition `0,0,0`, Radius `R`. Name `Sphere`, material **pec**.
 
-That is the whole model: the air region and the PML come from Auto Open.
+That is the whole model: the air region and its radiation boundary come from Auto Open.
 
 ### 4.3 Incident plane wave
 

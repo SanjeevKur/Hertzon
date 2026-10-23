@@ -7,7 +7,7 @@
    "settings": {
     "SolutionType": "Modal",
     "AutoOpen": "Auto Open",
-    "AutoOpenBoundary": "PML",
+    "AutoOpenBoundary": "Radiation",
     "AutoOpenPadding": "",
     "FilterAirMargin": "12mm"
    },
