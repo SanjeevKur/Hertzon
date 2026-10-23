@@ -5,8 +5,9 @@ run-time replacements for parts of EMerge, mostly for speed. This page lists eve
 a measurement against EMerge's own code, so that each can either move into EMerge or be dropped from
 Hertzon. It is written for the EMerge maintainer and for Hertzon developers.
 
-Changes to EMerge are made in the `hertzon` branch of the EMerge repository, after agreeing on them, and not
-as new run-time patches in Hertzon. The proposals below are candidates for that branch.
+Changes to EMerge are agreed first and made in EMerge (bug fixes as pull requests to `main`, everything else
+on its `hertzon` branch), not as new run-time patches in Hertzon. [EMERGE_CHANGES.md](EMERGE_CHANGES.md)
+decides where each item goes.
 
 Measured on 23 October 2026 with EMerge 3.0.0a25 and 3.0.0b5 (PyPI), Hertzon `dev` at `13647d2` plus
 the commits on this branch.
@@ -93,7 +94,8 @@ worker thread its own PARDISO instance with `mkl_set_num_threads_local`. Two EMe
 way:
 
 1. `AutomaticRoutine` is a singleton (`__new__`), so `SolveRoutine.duplicate()` returns the same object and
-   the worker threads share one solver (and can factorize in one PARDISO handle at the same time).
+   the worker threads share one solver (and can factorize in one PARDISO handle at the same time). Fixed on
+   EMerge `main` in `e80e840` (after 3.0.0b5).
 2. After a threaded sweep, `thread_local.__dict__.clear()` drops the routines without `reset()`, so the
    PARDISO factorizations of every batch stay allocated.
 
