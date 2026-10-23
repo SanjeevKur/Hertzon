@@ -1,0 +1,41 @@
+# Publishes the project website (site/) to GitHub Pages: https://c8501024.github.io/Hertzon/
+# Needs Settings > Pages > Source: "GitHub Actions" once. Screenshots and the splash come from the repo,
+# so the site has no copies of its own.
+name: Website
+
+on:
+  push:
+    branches: [main]
+    paths: ["site/**", "docs/screenshots/**", "hertzon/gui/splash.jpg", ".github/workflows/pages.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Assemble site
+        run: |
+          mkdir -p _site/screenshots
+          cp -r site/. _site/
+          cp docs/screenshots/*.png _site/screenshots/
+          cp hertzon/gui/splash.jpg _site/
+          cp hertzon/gui/*.png _site/ 2>/dev/null || true
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+      - id: deployment
+        uses: actions/deploy-pages@v4

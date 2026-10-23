@@ -645,3 +645,84 @@ def test_first_start_note(monkeypatch):
     MainWindow._first_start_note(win)
     assert msgs[0][0] == "warning" and "First start detected" in msgs[0][1]
     assert "compiles the solver kernels" in status[0]
+
+
+def test_solid_overlaps_and_resolve():
+    """Exact overlap check as the reference tool: with material override a metal partially in a dielectric is
+    fine, two different dielectrics (or metals) partially overlapping are an error, contained objects are only
+    listed when a conductor swallows them; without material override every partial overlap of different
+    materials is an error and the inner object always wins. Resolve subtracts the winner from the loser."""
+    import os
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    import types
+    from PySide6.QtWidgets import QApplication
+    from hertzon.gui import main_window as MW
+    from hertzon.model.validate import classify_overlaps
+    app = QApplication.instance() or QApplication([])  # noqa: F841
+    p = Project()
+    d = p.designs[0]
+    d.add_object("CreateBox", "Sub", Position="0,0,0", XSize="20", YSize="20", ZSize="2").material = "FR4_epoxy"
+    d.add_object("CreateBox", "Glue", Position="15,0,0", XSize="10", YSize="10", ZSize="2").material = "Teflon (tm)"
+    d.add_object("CreateCylinder", "Via", CenterPosition="5,5,-1", Axis="Z", Radius="0.5", Height="4").material = "copper"
+    d.add_object("CreateBox", "Shield", Position="40,0,0", XSize="10", YSize="10", ZSize="10").material = "pec"
+    d.add_object("CreateBox", "Inner", Position="42,2,2", XSize="2", YSize="2", ZSize="2").material = "FR4_epoxy"
+    d.add_object("CreateBox", "Air", Position="-5,-5,-5", XSize="70", YSize="30", ZSize="30").material = "vacuum"
+    ev = d.evaluator(p)
+    names = ["Sub", "Glue", "Via", "Shield", "Inner", "Air"]
+    ovs = classify_overlaps(p, d, K.solid_overlaps(d, ev, names))
+    got = {(o.winner, o.loser): o for o in ovs}
+    assert set(got) == {("Glue", "Sub"), ("Via", "Sub"), ("Shield", "Inner")}, [o.message for o in ovs]
+    assert got["Glue", "Sub"].level == "error" and got["Via", "Sub"].level == "ok"
+    assert "two different dielectrics" in got["Glue", "Sub"].message
+    assert got["Shield", "Inner"].contained and "no effect" in got["Shield", "Inner"].message
+    checks = validate(p, d, None, {}, ovs)
+    assert sum(c.message in {o.message for o in ovs} for c in checks) == 3
+    assert [c.message for c in checks if c.level == "error" and c.category == "3D Model"] == [got["Glue", "Sub"].message]
+    d.settings["MaterialOverride"] = "False"
+    strict = {(o.winner, o.loser): o.level for o in classify_overlaps(p, d, K.solid_overlaps(d, ev, names))}
+    assert strict == {("Glue", "Sub"): "error", ("Via", "Sub"): "error"}
+    del d.settings["MaterialOverride"]
+    win = types.SimpleNamespace(des=d, msgs=types.SimpleNamespace(add=lambda *a: None), validation_check=lambda: None,
+                                doc=types.SimpleNamespace(checkpoint=lambda: None, commit=lambda w: None,
+                                                          select=lambda picks: None))
+    MW.MainWindow.resolve_overlaps(win, [o for o in ovs if not o.contained])
+    assert d.obj("Sub").history[-1].kind == "Subtract" and d.obj("Sub").history[-2].kind == "Subtract"
+    assert {d.obj(n).consumed_by for n in ("Glue_tool", "Via_tool")} == {"Sub"}
+    names = [o.name for o in d.live_objects()]
+    left = classify_overlaps(p, d, K.solid_overlaps(d, ev, names))
+    assert [(o.winner, o.loser) for o in left] == [("Shield", "Inner")]
+    from PySide6.QtWidgets import QPushButton
+    from hertzon.gui.dialogs import ValidationDialog
+    done = []
+    dlg = ValidationDialog(types.SimpleNamespace(project=p, design=d, tess=None, errors={}), None, ovs, done.append)
+    every = next(b for b in dlg.findChildren(QPushButton) if b.text().startswith("Resolve All"))
+    assert every.text() == "Resolve All Overlaps (2)"
+    every.click()
+    assert len(done) == 1 and {(o.winner, o.loser) for o in done[0]} == {("Glue", "Sub"), ("Via", "Sub")}
+
+
+def test_solver_rejects_partial_overlaps():
+    """The solver refuses partial overlaps of different materials the same way (script and MCP runs)."""
+    import types
+    import pytest
+    from hertzon.solver.bridge import Bridge
+    obj = lambda n, m: types.SimpleNamespace(name=n, material=m)  # noqa: E731
+    geo = lambda *t: types.SimpleNamespace(tags=list(t))  # noqa: E731
+    vols = [(obj("Sub", "FR4_epoxy"), geo(1, 2, 3), False), (obj("Glue", "Teflon (tm)"), geo(3, 4), False),
+            (obj("Via", "copper"), geo(2, 5), True), (obj("Core", "FR4_epoxy"), geo(1), False)]
+    fake = types.SimpleNamespace(design=types.SimpleNamespace(settings={}), overlap_vols=vols)
+    with pytest.raises(RuntimeError) as e:
+        Bridge.check_overlaps(fake)
+    assert "'Sub' (FR4_epoxy) and 'Glue' (Teflon (tm))" in str(e.value) and "Via" not in str(e.value)
+    Bridge.check_overlaps(types.SimpleNamespace(design=fake.design, overlap_vols=vols[2:]))
+    fake.design.settings["MaterialOverride"] = "False"
+    with pytest.raises(RuntimeError) as e:
+        Bridge.check_overlaps(types.SimpleNamespace(design=fake.design, overlap_vols=[vols[0], vols[2]]))
+    assert "Material override" in str(e.value)
+
+
+def test_maximum_delta_energy_default():
+    """Incident wave convergence: Maximum Delta Energy is 0.001 by default."""
+    from hertzon.model import schema
+    p = next(p for p in schema.SETUP if p.name == "MaximumDeltaEnergy")
+    assert p.default == "0.001"

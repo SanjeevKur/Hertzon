@@ -240,8 +240,8 @@ SETUP: list[Prop] = [
     P("HighFrequency", "freq", "10GHz", visible_if=("SolutionFrequencyMode", "Broadband")),
     P("MaximumPasses", "int", "6", label="Maximum number of passes"),
     P("MaximumDeltaS", "float", "0.02", label="Maximum Delta S"),
-    P("MaximumDeltaEnergy", "float", "0.1", label="Maximum Delta Energy",
-      help="Incident wave designs (no ports): relative change of the scattered energy between passes"),
+    P("MaximumDeltaEnergy", "float", "0.001", label="Maximum Delta Energy",
+      help="Incident wave designs (no ports): relative change of the scattered energy between passes (default 0.001)"),
     P("UseMatrixConvergence", "bool", "False", label="Use matrix convergence"),
     P("MaxDeltaMag", "float", "0.02", label="Max delta |S|", visible_if=("UseMatrixConvergence", "True")),
     P("MaxDeltaPhase", "float", "2", label="Max delta phase S (deg)", visible_if=("UseMatrixConvergence", "True")),
@@ -365,7 +365,13 @@ DESIGN_SETTINGS: list[Prop] = [
       visible_if=("AutoOpen", "!Off")),
     P("AutoOpenPadding", "length", "", label="Padding (empty = automatic)", visible_if=("AutoOpen", "!Off")),
     P("FilterAirMargin", "length", "12mm", label="Filter air margin", visible_if=("AutoOpen", "Auto Open - Filter")),
+    P("MaterialOverride", "bool", "True", label="Material override"),
 ]
+
+
+def material_override(design) -> bool:
+    """design setting "Material override": a metal overrides a dielectric where solids overlap."""
+    return str(design.settings.get("MaterialOverride", "True")) == "True"
 
 EIGEN_SETUP: list[Prop] = [
     P("MinimumFrequency", "freq", "2GHz"), P("NumberOfModes", "int", "3"),

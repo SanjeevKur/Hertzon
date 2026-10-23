@@ -1169,6 +1169,45 @@ def build_design(design: Design, ev: Evaluator, names: list[str] | None = None,
     return ctx
 
 
+def solid_overlaps(design: Design, ev: Evaluator, names: list[str]) -> list[tuple[str, str, float, float, float]]:
+    """Pairs of the named solids that share volume: (a, b, overlap volume, volume of a, volume of b), in m^3.
+    Built in a scratch model (the current model is restored); pairs whose bounding boxes do not overlap are
+    skipped without a boolean operation."""
+    if not gmsh.isInitialized():
+        ensure_gmsh()
+    cur = gmsh.model.getCurrent()
+    gmsh.model.add("hertzon_overlap")
+    try:
+        ctx = build_design(design, ev, names=names)
+        occ = _occ()
+        solids = {n: [d for d in ctx.built.get(n, []) if d[0] == 3] for n in names}
+        solids = {n: dt for n, dt in solids.items() if dt}
+        vol = {n: sum(occ.getMass(3, t) for _, t in dt) for n, dt in solids.items()}
+        box = {n: _bbox(dt) for n, dt in solids.items()}
+        out = []
+        ns = list(solids)
+        for i, a in enumerate(ns):
+            for b in ns[i + 1:]:
+                if not all(box[a][k] < box[b][k + 3] and box[b][k] < box[a][k + 3] for k in range(3)):
+                    continue
+                try:
+                    r, _ = occ.intersect(solids[a], solids[b], removeObject=False, removeTool=False)
+                except Exception:  # noqa: BLE001
+                    continue
+                v = sum(occ.getMass(3, t) for d, t in r if d == 3)
+                if r:
+                    occ.remove(r, recursive=True)
+                if v > 1e-6 * min(vol[a], vol[b]):
+                    out.append((a, b, v, vol[a], vol[b]))
+        return out
+    finally:
+        gmsh.model.remove()
+        try:
+            gmsh.model.setCurrent(cur)
+        except Exception:  # noqa: BLE001
+            pass
+
+
 # ------------------------------------------------------------------------------------------------
 # Topology enumeration (stable order = gmsh boundary order)
 # ------------------------------------------------------------------------------------------------

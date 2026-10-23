@@ -14,7 +14,10 @@
 > ⚠️ **Hertzon is under active development. It can still contain bugs, which are being fixed step by step.
 > Please verify important results independently and report problems as GitHub issues.**
 
-An open-source 3D full-wave electromagnetic simulator with a **classic engineering workflow**:
+🌐 **Website:** [c8501024.github.io/Hertzon](https://c8501024.github.io/Hertzon/)
+
+An open-source 3D full-wave electromagnetic simulator (FEM, frequency domain) for **antennas, microwave
+filters, waveguides, PCB structures and radar cross section**, with a **classic engineering workflow**:
 draw the model, assign boundaries and excitations, add an analysis setup with
 **adaptive meshing**, add frequency sweeps, analyze, then look at S-parameters, fields
 and radiation patterns. The finite-element solver underneath is
@@ -89,7 +92,9 @@ EMerge 3 ships its solver kernels compiled; the first solve only compiles Hertzo
    passes, maximum Delta S, matrix convergence, minimum (converged) passes, percent refinement,
    maximum refinement, lambda refinement, solver choice. **Add Frequency Sweep**: discrete or
    interpolating, linear step / count / log / single points.
-5. **Validation Check**, then **Analyze All** (F5). The progress window shows each adaptive pass;
+5. **Validation Check** (also checks overlapping solids exactly like HFSS: partial overlaps of different
+   materials are errors, except a metal in a dielectric with the design setting *Material override*; one
+   click resolves them), then **Analyze All** (F5). The progress window shows each adaptive pass;
    **Solution Data** shows the convergence table and plot, matrix data and mesh statistics.
 6. **Results**: rectangular plots, Smith chart, data table, radiation pattern, 3D polar plot;
    **Fields**: magnitude, complex magnitude and vector plots of E, H and surface current on faces,

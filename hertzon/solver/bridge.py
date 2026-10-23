@@ -340,9 +340,10 @@ class Bridge:
                 self.geos[obj.name] = g
             else:
                 K._occ().remove(dt, recursive=True)
-        # where solids overlap (as the reference tool with material override): conductors win over
-        # dielectrics, otherwise the smaller (inner) volume wins; background regions lose
-        vols.sort(key=lambda v: (v[3], -v[2]))
+        # where solids overlap the smaller (inner) volume wins, with material override (as the reference
+        # tool) conductors first win over dielectrics; background regions lose
+        override = schema.material_override(self.design)
+        vols.sort(key=lambda v: (v[3] and override, -v[2]))
         for prio, (g, obj, _, _) in enumerate(vols):
             if obj.history[0].kind != "CreateRegion":
                 g.prio_set(10 + prio)
@@ -351,17 +352,22 @@ class Bridge:
         K._occ().synchronize()
 
     def check_overlaps(self) -> None:
-        """Warn about partial overlaps the reference tool rejects: two dielectrics or two conductors of
-        different materials (one object inside the other, or a conductor in a dielectric, is fine)."""
-        vols = [(o, g, set(g.tags), c) for o, g, c in getattr(self, "overlap_vols", [])]
-        for i, (a, ga, ta, ca) in enumerate(vols):
-            for b, gb, tb, cb in vols[i + 1:]:
-                if ca != cb or a.material == b.material or not ta & tb or ta <= tb or tb <= ta:
+        """Partial overlaps the reference tool rejects are errors: two dielectrics or two conductors of
+        different materials, and without material override any two materials. One object inside the other,
+        or with material override a conductor in a dielectric, is fine."""
+        override = schema.material_override(self.design)
+        vols = [(o, set(g.tags), c) for o, g, c in getattr(self, "overlap_vols", [])]
+        bad = []
+        for i, (a, ta, ca) in enumerate(vols):
+            for b, tb, cb in vols[i + 1:]:
+                if a.material == b.material or not ta & tb or ta <= tb or tb <= ta or (override and ca != cb):
                     continue
-                win = a if ga._priority >= gb._priority else b
-                warn(f"'{a.name}' ({a.material}) and '{b.name}' ({b.material}) partially overlap; "
-                     f"the overlap takes the material of the smaller object '{win.name}'. "
-                     "Subtract one from the other to make this explicit.")
+                bad.append(f"'{a.name}' ({a.material}) and '{b.name}' ({b.material})")
+        if bad:
+            raise RuntimeError("Objects of different materials partially overlap: " + "; ".join(bad) +
+                               ". Resolve the overlaps in Validation Check (or subtract one object from the "
+                               "other)" + ("" if override else ", or turn on Material override in the design "
+                                           "settings to let metals override dielectrics"))
 
     # ----------------------------------------------------------------------------------------
     def plane_wave(self):
@@ -870,7 +876,7 @@ class Bridge:
         from emerge._emerge.physics.microwave.bcs.boundary_conditions import PEC
         m, p = self.m, self.setup.props
         maxp = max(1, int(p.get("MaximumPasses", "6")))
-        max_de = float(p.get("MaximumDeltaEnergy", "0.1") or 0.1)
+        max_de = float(p.get("MaximumDeltaEnergy", "0.001") or 0.001)
         min_passes = max(2, int(p.get("MinimumPasses", "2")))
         min_conv = max(1, int(p.get("MinimumConvergedPasses", "1")))
         max_tets = int(float(p.get("MaximumRefinement", "1000000")))

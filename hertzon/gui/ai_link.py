@@ -179,7 +179,8 @@ class AiLink(QObject):
             if not doc.project.path:
                 raise RuntimeError("save the project first (save_project with a path)")
             if not a.get("sweep"):
-                bad = [c.message for c in validate(doc.project, doc.design, doc.tess, doc.errors) if c.level == "error"]
+                bad = [c.message for c in validate(doc.project, doc.design, doc.tess, doc.errors,
+                                                        w.solid_overlaps()) if c.level == "error"]
                 if bad:
                     raise RuntimeError("validation failed: " + "; ".join(bad))
             if doc.dirty:
