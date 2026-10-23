@@ -19,7 +19,63 @@ CATEGORIES = ["Design Settings", "3D Model", "Boundaries and Excitations", "Mesh
               "Radiation"]
 
 
-def validate(project: Project, design: Design, tess: dict | None = None, errors: dict | None = None) -> list[Check]:
+@dataclass
+class Overlap:
+    a: str
+    b: str
+    winner: str             # the object whose material applies in the overlap
+    loser: str              # resolving subtracts the winner from it
+    contained: bool         # the loser lies completely inside the winner
+    level: str
+    message: str
+
+
+def classify_overlaps(project: Project, design: Design, overlaps) -> list[Overlap]:
+    """Overlapping solids (kernel.occ.solid_overlaps) checked as the reference tool does. An object completely
+    inside another wins (substrate in an air box) and is not listed. With the design setting "Material
+    override" (default) a metal also overrides a dielectric, so a dielectric inside a metal vanishes (warning).
+    Every other partial overlap of different materials is an error: two dielectrics, two metals, and without
+    material override any two materials. Overlaps of the same material change nothing."""
+    from .materials import is_conductor
+    override = schema.material_override(design)
+    out = []
+    for a, b, v, va, vb in overlaps:
+        oa, ob = design.obj(a), design.obj(b)
+        try:
+            ca, cb = is_conductor(project.material(oa.material)), is_conductor(project.material(ob.material))
+        except KeyError:
+            continue
+        if override:
+            win = a if (ca, -va) > (cb, -vb) else b
+        else:
+            win = a if va < vb else b
+        lose = b if win == a else a
+        mw, ml = design.obj(win).material, design.obj(lose).material
+        if mw == ml:
+            continue
+        if v >= (1 - 1e-6) * min(va, vb):              # one object completely inside the other
+            if win == (a if va < vb else b):
+                continue                                # the inner object wins, as everywhere
+            out.append(Overlap(a, b, win, lose, True, "warning",
+                               f"'{lose}' ({ml}) lies completely inside conductor '{win}' ({mw}) and has no effect: "
+                               "the conductor wins in the overlap (material override)"))
+            continue
+        pct = 100 * v / min(va, vb)
+        what = f"'{a}' ({oa.material}) and '{b}' ({ob.material}) partially overlap ({pct:.3g}% of the smaller)"
+        if override and ca != cb:
+            out.append(Overlap(a, b, win, lose, False, "ok",
+                               f"{what}: {mw} of '{win}' applies there (material override: the metal wins)"))
+        else:
+            why = ("two different metals" if ca and cb else "two different dielectrics" if override
+                   else "different materials without material override")
+            out.append(Overlap(a, b, win, lose, False, "error",
+                               f"{what}: {why} must not intersect. Resolve the overlap (subtracts '{win}' from "
+                               f"'{lose}') or change the model"))
+    return out
+
+
+def validate(project: Project, design: Design, tess: dict | None = None, errors: dict | None = None,
+             overlaps: list[Overlap] | None = None) -> list[Check]:
     out: list[Check] = []
     ev = design.evaluator(project)
     add = lambda c, l, m: out.append(Check(c, l, m))  # noqa: E731
@@ -53,7 +109,10 @@ def validate(project: Project, design: Design, tess: dict | None = None, errors:
                         add("3D Model", "error", f"'{o.name}' {c.kind}.{k}: {err}")
     for n, e in (errors or {}).items():
         add("3D Model", "error", f"'{n}': {e}")
-    if tess is not None:
+    if overlaps is not None:
+        for ov in overlaps:
+            add("3D Model", ov.level, ov.message)
+    elif tess is not None:
         solids = [(o.name, tess[o.name]) for o in live if o.name in tess and tess[o.name].dim == 3
                   and o.history[0].kind != "CreateRegion"]
         for i in range(len(solids)):
@@ -61,8 +120,9 @@ def validate(project: Project, design: Design, tess: dict | None = None, errors:
                 a, ta = solids[i]
                 b, tb = solids[j]
                 if _boxes_overlap(ta.bbox, tb.bbox) and not _contains(ta.bbox, tb.bbox) and not _contains(tb.bbox, ta.bbox):
-                    add("3D Model", "warning", f"Objects '{a}' and '{b}' may intersect; the smaller object takes "
-                                               "precedence in the overlap")
+                    add("3D Model", "warning", f"Objects '{a}' and '{b}' may intersect; partial overlaps of "
+                                               "different materials are only allowed for a metal in a dielectric "
+                                               "(material override)")
     if not any(c.level == "error" for c in out if c.category == "3D Model"):
         add("3D Model", "ok", f"{len(live)} objects")
 

@@ -179,6 +179,10 @@ HELP: dict[str, str] = {
                         "always used (the incident wave enters through it).",
     "AutoOpenPadding": "Distance of the open region from the model.",
     "FilterAirMargin": "Air margin around filters for the open region.",
+    "MaterialOverride": "Where solids overlap, a metal overrides a dielectric and an object completely inside "
+                        "another overrides it. Any other partial overlap of different materials is an error. "
+                        "Off: every partial overlap of different materials is an error and an object inside "
+                        "another always wins, also a dielectric inside a metal.",
 }
 
 
