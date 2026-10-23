@@ -3,6 +3,15 @@
 All notable changes of each release. The release workflow copies the section of the released version into
 the GitHub release notes.
 
+## Unreleased
+
+### Fixed
+- **Solver process crash at exit (code -1073741819 / 0xC0000005 after the solution was saved)**: the
+  TerminateProcess exit of 0.1.19 never took effect. Called through ctypes without HANDLE types, the
+  process handle was cut to 32 bits (or, once the memory query had typed the shared kernel32, did not convert
+  at all), so the process still ended through os._exit and the crashing DLL teardown. The calls are typed
+  now; the same fix makes the opt-out of Windows efficiency mode for the solver process work.
+
 ## 0.1.23 (2026-10-23)
 
 ### New

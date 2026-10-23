@@ -16,7 +16,12 @@ def full_speed() -> None:
 
         # PROCESS_POWER_THROTTLING_CURRENT_VERSION, PROCESS_POWER_THROTTLING_EXECUTION_SPEED, off
         st = State(1, 1, 0)
-        k32 = ctypes.windll.kernel32
+        # typed: untyped, ctypes truncates the pseudo handle of GetCurrentProcess to 32 bits (invalid handle)
+        k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        k32.GetCurrentProcess.restype = wintypes.HANDLE
+        k32.GetCurrentProcess.argtypes = []
+        k32.SetProcessInformation.restype = wintypes.BOOL
+        k32.SetProcessInformation.argtypes = [wintypes.HANDLE, ctypes.c_int, ctypes.c_void_p, wintypes.DWORD]
         k32.SetProcessInformation(k32.GetCurrentProcess(), 4, ctypes.byref(st), ctypes.sizeof(st))  # ProcessPowerThrottling
     except Exception:  # noqa: BLE001
         pass
