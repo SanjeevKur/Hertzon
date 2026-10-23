@@ -69,6 +69,8 @@ Murata: nominal dimensions; the terminal length is typical.
 
 The S-parameter files of the vendors are free to download but may not be passed on, so Hertzon does not ship
 them. **Lumped Elements > Import...** (or **Library...** in the component dialog) imports a folder, a ZIP or
-single .s1p/.s2p files into the library folder of the user. The part number gives the series (and with it
+single .s1p/.s2p files into the library folder of the user. **Vendor Downloads** opens the official
+download pages (Murata capacitors and inductors: one ZIP per series; Coilcraft); the vendors allow the data
+for circuit simulation but not passing them on. The part number gives the series (and with it
 the package), the kind and the value: inductors `2N0` = 2.0 nH, Murata capacitors `1R0` = 1.0 pF and
 `100` = 10 pF. **From Library** inserts a part with its package and Touchstone file.

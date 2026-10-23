@@ -3,13 +3,20 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QStandardPaths
+from PySide6.QtCore import Qt, QStandardPaths, QUrl
+from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (QDialog, QFormLayout, QLineEdit, QComboBox, QCheckBox, QDoubleSpinBox, QLabel,
                                QPushButton, QHBoxLayout, QVBoxLayout, QDialogButtonBox, QFileDialog, QTableWidget,
-                               QTableWidgetItem, QHeaderView, QAbstractItemView, QMessageBox, QWidget)
+                               QTableWidgetItem, QHeaderView, QAbstractItemView, QMessageBox, QWidget, QMenu)
 
 from ..model import lumped as LU
 
+# official S-parameter download pages (the files are downloaded by the user, Hertzon does not ship them)
+VENDOR_PAGES = (
+    ("Murata capacitors (MLCC)...", "https://www.murata.com/en-us/tool/data/sparameterdata/sparameter-mlcc"),
+    ("Murata inductors...", "https://www.murata.com/en-us/tool/data/sparameterdata/sparameter-inductor"),
+    ("Coilcraft inductors...", "https://coilcraft.com/models.cfm"),
+)
 KIND_NAMES = {"R": "Resistor", "L": "Inductor", "C": "Capacitor", "S": "Touchstone component"}
 VALUE_DEFAULTS = {"R": "50ohm", "L": "10nH", "C": "1pF"}
 
@@ -224,6 +231,14 @@ class LibraryDialog(QDialog):
             b.clicked.connect(fn)
             row.addWidget(b)
         row.addStretch(1)
+        dl = QPushButton("Vendor Downloads")
+        dl.setToolTip("Opens the S-parameter download page of the vendor in the browser; import the downloaded "
+                      "ZIP afterwards")
+        m = QMenu(dl)
+        for txt, url in VENDOR_PAGES:
+            m.addAction(txt, lambda u=url: QDesktopServices.openUrl(QUrl(u)))
+        dl.setMenu(m)
+        row.addWidget(dl)
         lay.addLayout(row)
         bb = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         bb.button(QDialogButtonBox.Ok).setText("Use Part")
