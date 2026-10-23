@@ -645,3 +645,10 @@ def test_first_start_note(monkeypatch):
     MainWindow._first_start_note(win)
     assert msgs[0][0] == "warning" and "First start detected" in msgs[0][1]
     assert "compiles the solver kernels" in status[0]
+
+
+def test_maximum_delta_energy_default():
+    """Incident wave convergence: Maximum Delta Energy is 0.001 by default."""
+    from hertzon.model import schema
+    p = next(p for p in schema.SETUP if p.name == "MaximumDeltaEnergy")
+    assert p.default == "0.001"

@@ -3,6 +3,13 @@
 All notable changes of each release. The release workflow copies the section of the released version into
 the GitHub release notes.
 
+## Unreleased
+
+### Changed
+- **Maximum Delta Energy defaults to 0.001** (was 0.1) for new setups, and the examples use it. It is the
+  convergence criterion of incident wave designs (RCS); 0.1 stopped the adaptive passes far too early.
+  Saved projects keep their value.
+
 ## 0.1.23 (2026-10-23)
 
 ### New

@@ -184,7 +184,7 @@
       "HighFrequency": "10GHz",
       "MaximumPasses": "6",
       "MaximumDeltaS": "0.02",
-      "MaximumDeltaEnergy": "0.1",
+      "MaximumDeltaEnergy": "0.001",
       "UseMatrixConvergence": "False",
       "MaxDeltaMag": "0.02",
       "MaxDeltaPhase": "2",
