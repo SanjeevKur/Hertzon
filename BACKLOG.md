@@ -7,4 +7,5 @@ Small improvements collected for a future release. Items move to `CHANGELOG.md` 
 - **NATO sphere with a Radiation boundary instead of PML** (`examples/NATO-Sphere.hzn`): switch the
   open region of the example to a Radiation boundary, check the RCS result, and update README.md and
   docs/TUTORIAL.md (section on the RCS example), which name PML for it. Also check that the warm-up still
-  covers the kernels it needs.
+  covers the kernels it needs. Note: tutorial section 4 and `examples/SphereRCS.hzn` also use PML and the
+  tutorial says PML absorbs better than a first-order radiation boundary; decide whether they change too.
