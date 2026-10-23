@@ -3,7 +3,7 @@
 All notable changes of each release. The release workflow copies the section of the released version into
 the GitHub release notes.
 
-## Unreleased
+## 0.1.24 (2026-10-23)
 
 ### New
 - **Overlapping objects exactly as in HFSS**: an exact geometry check in the Validation Check lists the
