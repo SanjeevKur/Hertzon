@@ -3201,6 +3201,20 @@ class MainWindow(QMainWindow):
         self.doc.select([Pick(n) for n in dict.fromkeys(o.loser for o in order)])
         self.validation_check()
 
+    def preflight(self) -> bool:
+        """Validation before a solve, with the exact overlap check; on errors (e.g. overlapping objects of
+        different materials) the Validation Check dialog opens and nothing is solved."""
+        from ..model.validate import validate
+        ovs = self.solid_overlaps()
+        checks = validate(self.doc.project, self.des, self.doc.tess, self.doc.errors, ovs)
+        if not any(c.level == "error" for c in checks):
+            return True
+        self.msgs.add("error", "Validation check failed; see the Validation Check dialog")
+        dlg = ValidationDialog(self.doc, self, ovs, self.resolve_overlaps)
+        dlg.messageActivated.connect(self.goto_message)
+        dlg.exec()
+        return False
+
     def validation_check(self) -> bool:
         dlg = ValidationDialog(self.doc, self, self.solid_overlaps(), self.resolve_overlaps)
         dlg.messageActivated.connect(self.goto_message)
@@ -3279,11 +3293,7 @@ class MainWindow(QMainWindow):
         if not setups:
             QMessageBox.information(self, "Analyze", "No enabled solution setup.")
             return
-        from ..model.validate import validate
-        checks = validate(self.doc.project, self.des, self.doc.tess, self.doc.errors)
-        if any(c.level == "error" for c in checks):
-            self.msgs.add("error", "Validation check failed; see the Validation Check dialog")
-            ValidationDialog(self.doc, self).exec()
+        if not self.preflight():
             return
         if not self.doc.project.path or self.doc.dirty:
             if not self.file_save():
@@ -3351,11 +3361,7 @@ class MainWindow(QMainWindow):
         except Exception as e:  # noqa: BLE001
             QMessageBox.warning(self, "Optimization", f"{name}: {e}")
             return
-        from ..model.validate import validate
-        checks = validate(self.doc.project, self.des, self.doc.tess, self.doc.errors)
-        if any(c.level == "error" for c in checks):
-            self.msgs.add("error", "Validation check failed; see the Validation Check dialog")
-            ValidationDialog(self.doc, self).exec()
+        if not self.preflight():
             return
         if not self.doc.project.path or self.doc.dirty:
             if not self.file_save():
@@ -3434,11 +3440,7 @@ class MainWindow(QMainWindow):
         except Exception as e:  # noqa: BLE001
             QMessageBox.warning(self, "Parametric", f"{name}: {e}")
             return False
-        from ..model.validate import validate
-        checks = validate(self.doc.project, self.des, self.doc.tess, self.doc.errors)
-        if any(c.level == "error" for c in checks):
-            self.msgs.add("error", "Validation check failed; see the Validation Check dialog")
-            ValidationDialog(self.doc, self).exec()
+        if not self.preflight():
             return False
         if not self.doc.project.path or self.doc.dirty:
             if not self.file_save():

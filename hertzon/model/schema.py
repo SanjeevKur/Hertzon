@@ -365,7 +365,13 @@ DESIGN_SETTINGS: list[Prop] = [
       visible_if=("AutoOpen", "!Off")),
     P("AutoOpenPadding", "length", "", label="Padding (empty = automatic)", visible_if=("AutoOpen", "!Off")),
     P("FilterAirMargin", "length", "12mm", label="Filter air margin", visible_if=("AutoOpen", "Auto Open - Filter")),
+    P("MaterialOverride", "bool", "True", label="Material override"),
 ]
+
+
+def material_override(design) -> bool:
+    """design setting "Material override": a metal overrides a dielectric where solids overlap."""
+    return str(design.settings.get("MaterialOverride", "True")) == "True"
 
 EIGEN_SETUP: list[Prop] = [
     P("MinimumFrequency", "freq", "2GHz"), P("NumberOfModes", "int", "3"),

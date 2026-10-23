@@ -648,9 +648,10 @@ def test_first_start_note(monkeypatch):
 
 
 def test_solid_overlaps_and_resolve():
-    """Exact overlap check: partial overlaps are listed with the material that applies (conductor wins,
-    otherwise the smaller object), contained objects only when a conductor swallows them; Resolve subtracts
-    the winner from the loser and the overlap is gone."""
+    """Exact overlap check as the reference tool: with material override a metal partially in a dielectric is
+    fine, two different dielectrics (or metals) partially overlapping are an error, contained objects are only
+    listed when a conductor swallows them; without material override every partial overlap of different
+    materials is an error and the inner object always wins. Resolve subtracts the winner from the loser."""
     import os
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
     import types
@@ -671,10 +672,16 @@ def test_solid_overlaps_and_resolve():
     ovs = classify_overlaps(p, d, K.solid_overlaps(d, ev, names))
     got = {(o.winner, o.loser): o for o in ovs}
     assert set(got) == {("Glue", "Sub"), ("Via", "Sub"), ("Shield", "Inner")}, [o.message for o in ovs]
-    assert got["Glue", "Sub"].level == "warning" and got["Via", "Sub"].level == "ok"
+    assert got["Glue", "Sub"].level == "error" and got["Via", "Sub"].level == "ok"
+    assert "two different dielectrics" in got["Glue", "Sub"].message
     assert got["Shield", "Inner"].contained and "no effect" in got["Shield", "Inner"].message
     checks = validate(p, d, None, {}, ovs)
     assert sum(c.message in {o.message for o in ovs} for c in checks) == 3
+    assert [c.message for c in checks if c.level == "error" and c.category == "3D Model"] == [got["Glue", "Sub"].message]
+    d.settings["MaterialOverride"] = "False"
+    strict = {(o.winner, o.loser): o.level for o in classify_overlaps(p, d, K.solid_overlaps(d, ev, names))}
+    assert strict == {("Glue", "Sub"): "error", ("Via", "Sub"): "error"}
+    del d.settings["MaterialOverride"]
     win = types.SimpleNamespace(des=d, msgs=types.SimpleNamespace(add=lambda *a: None), validation_check=lambda: None,
                                 doc=types.SimpleNamespace(checkpoint=lambda: None, commit=lambda w: None,
                                                           select=lambda picks: None))
@@ -692,3 +699,23 @@ def test_solid_overlaps_and_resolve():
     assert every.text() == "Resolve All Overlaps (2)"
     every.click()
     assert len(done) == 1 and {(o.winner, o.loser) for o in done[0]} == {("Glue", "Sub"), ("Via", "Sub")}
+
+
+def test_solver_rejects_partial_overlaps():
+    """The solver refuses partial overlaps of different materials the same way (script and MCP runs)."""
+    import types
+    import pytest
+    from hertzon.solver.bridge import Bridge
+    obj = lambda n, m: types.SimpleNamespace(name=n, material=m)  # noqa: E731
+    geo = lambda *t: types.SimpleNamespace(tags=list(t))  # noqa: E731
+    vols = [(obj("Sub", "FR4_epoxy"), geo(1, 2, 3), False), (obj("Glue", "Teflon (tm)"), geo(3, 4), False),
+            (obj("Via", "copper"), geo(2, 5), True), (obj("Core", "FR4_epoxy"), geo(1), False)]
+    fake = types.SimpleNamespace(design=types.SimpleNamespace(settings={}), overlap_vols=vols)
+    with pytest.raises(RuntimeError) as e:
+        Bridge.check_overlaps(fake)
+    assert "'Sub' (FR4_epoxy) and 'Glue' (Teflon (tm))" in str(e.value) and "Via" not in str(e.value)
+    Bridge.check_overlaps(types.SimpleNamespace(design=fake.design, overlap_vols=vols[2:]))
+    fake.design.settings["MaterialOverride"] = "False"
+    with pytest.raises(RuntimeError) as e:
+        Bridge.check_overlaps(types.SimpleNamespace(design=fake.design, overlap_vols=[vols[0], vols[2]]))
+    assert "Material override" in str(e.value)
