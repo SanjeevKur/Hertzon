@@ -12,7 +12,8 @@ from PySide6.QtGui import QAction, QKeySequence, QActionGroup
 from PySide6.QtWidgets import (QMainWindow, QDockWidget, QTabWidget, QSplitter, QMenu, QFileDialog, QMessageBox,
                                QLabel, QLineEdit, QComboBox, QInputDialog, QDialog, QFormLayout, QDialogButtonBox,
                                QListWidget, QAbstractItemView, QVBoxLayout,
-                               QSpinBox, QDoubleSpinBox, QApplication, QWidget)
+                               QSpinBox, QDoubleSpinBox, QApplication, QWidget, QTableWidget,
+                               QTableWidgetItem, QHeaderView)
 
 from .. import __version__
 from ..model import schema
@@ -1601,7 +1602,7 @@ class MainWindow(QMainWindow):
         except ValueError:
             custom = {}
         for a in self.findChildren(QAction):
-            t = a.text().replace("&", "")
+            t = a.text().replace("&", "").strip()
             if t in custom:
                 a.setShortcut(QKeySequence(custom[t]))
 

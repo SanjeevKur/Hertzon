@@ -13,6 +13,10 @@ the GitHub release notes.
   segment type `AngularArc:<angle>:<plane>` in *Segment types*, so the angle can be edited (and be an
   expression, e.g. `AngularArc:ang:XY`); the end point follows the angle. Closed arcs can be covered.
 
+### Fixed
+- **Tools > Keyboard Shortcuts** opens again: the dialog failed at once because its table widgets were not
+  imported (NameError), so shortcuts could not be viewed or changed.
+
 ## 0.1.22 (2026-10-22)
 
 ### Changed
