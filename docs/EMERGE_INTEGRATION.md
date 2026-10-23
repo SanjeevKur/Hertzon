@@ -20,7 +20,7 @@ the commits on this branch.
   the S-parameters (last adaptive pass and sweeps) and the far fields.
 - Every case runs a fixed number of adaptive passes (4), so two runs solve the same meshes; the tetrahedra
   per pass are compared too. Before a series, Hertzon's warm-up compiles all numba kernels.
-- `HERTZON_EMERGE_NATIVE=mt_pardiso,thin_conductor,sheet_error,eigs_retry,mesh_fallback`,
+- `HERTZON_EMERGE_NATIVE=mt_pardiso,thin_conductor,sheet_error,mesh_fallback`,
   `HERTZON_SLOW_ASSEMBLY=1`, `HERTZON_PARDISO_STRUCT=1` and `HERTZON_HYBRID_SWEEP=0` switch single
   replacements off, so EMerge's own code runs instead.
 - `examples/benchmark/tools/farfield_kernels.py HUYGENS_NPZ` compares the far field kernels on stored
@@ -153,14 +153,15 @@ the benchmark models the meshes came out identical with and without it.
 
 ### Robustness only (no effect unless something fails)
 
-- `_robust_eigs`: the port mode solve retries ARPACK with a fixed start vector and a larger Krylov space
-  instead of ending the solve on `ArpackNoConvergence`.
 - `apply_mesh_fallback`: when gmsh fails on trimmed B-spline faces of CAD files, mesh again without
   curvature based sizing.
 
 ## Removed
 
 - `_thin_conductor_new_mesh` (fixed in EMerge 3.0.0b5).
+- `_robust_eigs`, the ARPACK retry of the port mode solve: since 3.0.0b5 EMerge factorizes the shift once,
+  oversamples the Krylov space and skips a failing shift. No failure in three waveport runs without it nor
+  in any benchmark run.
 - Replacements written for EMerge 2.8.9 that never run on EMerge 3, because EMerge 3 has the code in its
   compiled core: parallel error estimate (`fast_error.py`), vectorised mesh import (`Mesh3D._pre_update`),
   element matrices and CSC pattern (`fast_assembly`), `AMRPoints` size field patch. About 1300 lines.

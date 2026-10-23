@@ -1,5 +1,5 @@
-"""Run-time fixes for EMerge 3 (applied once in the solver worker): thin conductor DoF numbering, port mode
-solve retry, mesh retry for broken CAD faces, curved elements, and the grid accelerated size field of
+"""Run-time fixes for EMerge 3 (applied once in the solver worker): thin conductor DoF numbering, mesh retry
+for broken CAD faces, curved elements, and the grid accelerated size field of
 Hertzon's re-mesh refinement. docs/EMERGE_INTEGRATION.md lists each one with its status upstream."""
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ _DONE = False
 
 def native(name: str) -> bool:
     """True when the Hertzon replacement ``name`` is switched off for a comparison with plain EMerge:
-    HERTZON_EMERGE_NATIVE=mt_pardiso,thin_conductor,sheet_error,eigs_retry,mesh_fallback"""
+    HERTZON_EMERGE_NATIVE=mt_pardiso,thin_conductor,sheet_error,mesh_fallback"""
     return name in os.environ.get("HERTZON_EMERGE_NATIVE", "").replace(" ", "").split(",")
 
 
@@ -43,8 +43,6 @@ def apply() -> None:
     apply_curved()
     if not native("mesh_fallback"):
         apply_mesh_fallback()
-    if not native("eigs_retry"):
-        apply_eigs_retry()
     if not native("thin_conductor"):
         apply_thin_conductor()
 
@@ -151,47 +149,6 @@ def amr_size_at(amr, gr: float, _qf: float, pts: np.ndarray, lc: float = 1e300) 
         return np.full(pts.shape[1], lc)
     q = _kernel()
     return np.array([q(x, y, z, lc, *args) for x, y, z in pts.T.tolist()])
-
-
-def _robust_eigs(eigs):
-    """scipy eigs for the port mode solve: ARPACK starts from a random vector and now and then stops
-    without convergence (seen in sweeps of the waveguide example, with EMerge's own code too), which
-    ended the whole solve. Retried with a fixed start vector and a larger Krylov space, then densely
-    for small port problems."""
-    def robust(A, k=6, M=None, sigma=None, which="LM", **kw):
-        from scipy.sparse.linalg import ArpackError, ArpackNoConvergence
-        try:
-            return eigs(A, k=k, M=M, sigma=sigma, which=which, **kw)
-        except (ArpackNoConvergence, ArpackError) as ex:
-            first = ex
-        n = A.shape[0]
-        for ncv in (min(n - 1, max(2 * k + 1, 40)), min(n - 1, max(4 * k + 1, 120))):
-            try:
-                return eigs(A, k=k, M=M, sigma=sigma, which=which, ncv=ncv, maxiter=20 * n,
-                            v0=np.ones(n, dtype=complex) / np.sqrt(n))
-            except (ArpackNoConvergence, ArpackError):
-                pass
-        if sigma is None or n > 4000:
-            raise first
-        import scipy.linalg as sl
-        Ad = A.toarray() if hasattr(A, "toarray") else np.asarray(A)
-        Md = np.eye(n) if M is None else (M.toarray() if hasattr(M, "toarray") else np.asarray(M))
-        w, v = sl.eig(Ad, Md)
-        ok = np.isfinite(w)
-        w, v = w[ok], v[:, ok]
-        idx = np.argsort(np.abs(w - sigma))[:k]      # shift-invert "LM" = closest to sigma
-        return w[idx], v[:, idx]
-    robust._hertzon_robust = True
-    return robust
-
-
-def apply_eigs_retry() -> None:
-    try:
-        from emerge._emerge import solver
-        if not getattr(solver.eigs, "_hertzon_robust", False):
-            solver.eigs = _robust_eigs(solver.eigs)
-    except Exception:  # noqa: BLE001
-        pass
 
 
 def apply_thin_conductor() -> None:

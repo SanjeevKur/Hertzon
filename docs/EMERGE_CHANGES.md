@@ -37,9 +37,9 @@ these pull requests start from `main`, never from `hertzon`.
 | Item | Hertzon code today | Why `main` | Status |
 |---|---|---|---|
 | Parallel sweep threads share one solver (`AutomaticRoutine` singleton) | `mt_pardiso._duplicate` | Crashes in MKL; affects every user of parallel sweeps | Fixed on `main` (`e80e840`); drop `_duplicate` once Hertzon runs on a version with it |
-| PARDISO factorizations of worker threads are never released | `mt_pardiso.release` | Memory leak in every threaded sweep | To do |
-| Thin conductor DoF numbering differs between assembly and post-processing | `emerge_patches.apply_thin_conductor` | Noise in fields, surface currents and the error estimate at every thin conductor; the intended design needs the maintainer's view, so the PR explains both readings | To do |
-| Port mode solve ends the whole solve on `ArpackNoConvergence` | `emerge_patches._robust_eigs` | Random crash of wave port solves | To do; check against the b5 mode fixes first |
+| Factorizations of sweep worker threads are never released | `mt_pardiso.release` (for its own PARDISO threads) | Memory leak in every threaded sweep: scipy's SuperLU frees a factorization only in the thread that created it, and EMerge drops the worker routines in the main thread (+350 MB per batch of 4 frequencies on a 15k unknown matrix) | PR prepared: reset each routine on its own worker thread, with test |
+| Thin conductor DoF numbering differs between assembly and post-processing | `emerge_patches.apply_thin_conductor` | Small: S identical, E within 1e-4, H at the sheet up to 1.4 % of its peak (Hertzon microstrip), the current across a trace within 0.03 % (EMerge's thin conductor test model) | No bug fix PR for now: a question to the maintainer which numbering is intended. Hertzon keeps the patch until then |
+| Port mode solve ends the whole solve on `ArpackNoConvergence` | `emerge_patches._robust_eigs` | – | No PR: since 3.0.0b5 the port mode solvers factorize the shift once, use an oversampled Krylov space and skip a failing shift. Three waveport runs without Hertzon's retry and all benchmark runs: no failure. Dropped from Hertzon |
 | Error estimate counts the current jump at finite-conductivity sheets as error | `bridge._with_conductor_sheets` | Wrong refinement at conductor sheets; may overlap with the maintainer's thin trace fix (`c951924`) | Needs a model that shows the effect first; none of the benchmark models does |
 | gmsh fails on trimmed B-spline faces of CAD files | `emerge_patches.apply_mesh_fallback` | Meshing crash for imported CAD, not GUI specific | To do, low priority |
 | Far field with symmetry planes: radiated power scaled by `factor**2` although only the simulated part is integrated | – (Hertzon does not mirror yet) | Possible wrong radiated power for every user of `syms` | Check with a full and a half model first |
@@ -87,7 +87,7 @@ The maintainer may later take any of them into `main` in his own way.
 ### Removed from Hertzon
 
 Fixed in EMerge 3.0.0b5 or dead on EMerge 3, nothing to send: thin conductor split after a re-mesh
-(`_thin_conductor_new_mesh`), the welcome prompt workaround in `setup.ps1`, and the replacements for
+(`_thin_conductor_new_mesh`), the ARPACK retry (`_robust_eigs`), the welcome prompt workaround in `setup.ps1`, and the replacements for
 EMerge 2.8.9 (`fast_error.py`, vectorised `_pre_update`, 2.8.9 assembly, `AMRPoints` patch).
 
 ## Open: how Hertzon depends on the `hertzon` branch
