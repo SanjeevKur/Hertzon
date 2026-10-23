@@ -392,7 +392,7 @@ def test_worker_routines_are_independent():
 
 
 def test_subtract_dialog_moves_single_objects():
-    """Subtract: the arrow buttons move the selected objects between Blank Parts and Tool Parts (as in HFSS)."""
+    """Subtract: the arrow buttons move the selected objects between Blank Parts and Tool Parts."""
     import os
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
     from PySide6.QtWidgets import QApplication, QAbstractItemView, QDialogButtonBox
@@ -579,7 +579,7 @@ def test_keyboard_shortcuts_dialog_opens_and_saves(monkeypatch):
 
 
 def test_center_point_arc_polyline():
-    """HFSS AngularArc segments: start, center and angle; the angle decides the end point (the stored one is a copy)."""
+    """AngularArc segments: start, center and angle; the angle decides the end point (the stored one is a copy)."""
     import gmsh
     p = Project()
     d = p.designs[0]

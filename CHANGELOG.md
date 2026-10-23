@@ -6,12 +6,12 @@ the GitHub release notes.
 ## 0.1.24 (2026-10-23)
 
 ### New
-- **Overlapping objects exactly as in HFSS**: an exact geometry check in the Validation Check lists the
+- **Exact overlap check of solids**: an exact geometry check in the Validation Check lists the
   solids that overlap and how much. A partial overlap of two different dielectrics or two different metals
   is now an **error** that blocks Analyze, optimization and parametric runs (also from scripts and the AI
   link, and checked again in the solver). Objects completely inside another stay allowed (the inner one
   applies); a dielectric completely inside a conductor is flagged as without effect.
-- **Design setting Material override** (on by default, as in new HFSS designs): a metal overrides a
+- **Design setting Material override** (on by default): a metal overrides a
   dielectric where they overlap. Off: every partial overlap of different materials is an error and the
   inner object always wins, also a dielectric inside a metal.
 - **Resolve Overlap** / **Resolve All Overlaps** in the Validation Check subtract the winning object from
@@ -33,10 +33,10 @@ the GitHub release notes.
 ## 0.1.23 (2026-10-23)
 
 ### New
-- **Draw > Arc > 3 Point / Center Point** (as in HFSS), also in the ribbon next to Polyline: a polyline of
+- **Draw > Arc > 3 Point / Center Point**, also in the ribbon next to Polyline: a polyline of
   one arc. Center Point: click the start point, the center, then move the cursor around the center; the arc
   follows it in both directions and past 180 degrees, the click sets the angle.
-- **Center Point Arc segments in polylines** (key **C** while drawing, like L / A / S): stored as the HFSS
+- **Center Point Arc segments in polylines** (key **C** while drawing, like L / A / S): stored as the
   segment type `AngularArc:<angle>:<plane>` in *Segment types*, so the angle can be edited (and be an
   expression, e.g. `AngularArc:ang:XY`); the end point follows the angle. Closed arcs can be covered.
 - **First start note**: when the solver kernels are not compiled yet (Hertzon started without the setup's
@@ -47,9 +47,9 @@ the GitHub release notes.
 - **NATO sphere example**: radiation boundary instead of PML and Max Delta E 0.001; the sphere RCS example
   and the tutorial name the radiation boundary as well (with a plane wave the radiation boundary is used
   in any case, the incident wave enters through it; the help of *Open boundary* now says so).
-- **Overlapping solids** as in HFSS with material override: a conductor wins over a dielectric (or air) in
+- **Overlapping solids** with material override: a conductor wins over a dielectric (or air) in
   the overlap whatever its size; otherwise the smaller object wins, regions stay background. Partial
-  overlaps HFSS rejects (two dielectrics or two conductors of different materials) give a warning.
+  overlaps of two dielectrics or two conductors of different materials give a warning.
 
 ### Fixed
 - **Tools > Keyboard Shortcuts** opens again: the dialog failed at once because its table widgets were not
@@ -98,7 +98,7 @@ the GitHub release notes.
 ## 0.1.21 (2026-10-22)
 
 ### New
-- **Subtract** dialog as in HFSS: arrow buttons **→ / ←** move the selected objects between Blank Parts and
+- **Subtract** dialog: arrow buttons **→ / ←** move the selected objects between Blank Parts and
   Tool Parts; several objects are selected by dragging with the mouse, Ctrl or Shift. Several blank parts are
   each cut by all tool parts. Swap exchanges all blank and tool parts.
 - **Radiation Pattern** of a sweep with saved fields: the report shows the far field of the chosen solution
