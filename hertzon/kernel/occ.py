@@ -67,7 +67,7 @@ def _polygon_surface(pts: list[tuple[float, float, float]]) -> list[tuple[int, i
 def _segment_types(spec: str, n: int) -> list[tuple[str, int, list[str]]]:
     """'Line,Arc,Spline:4,AngularArc:90:XY' -> [(kind, number of points incl. shared start, extra arguments)].
 
-    AngularArc (HFSS center point arc) uses start, center and end point; its arguments are the sweep angle
+    AngularArc (center point arc) uses start, center and end point; its arguments are the sweep angle
     (unitless = degrees, counter-clockwise about the plane normal) and the plane (XY, YZ or ZX, default XY)."""
     out = []
     for tok in (spec or "").split(","):
@@ -470,7 +470,7 @@ def _create(cmd: Command, ctx: BuildContext) -> list[tuple[int, int]]:
             if j <= i:
                 break
             if kind == "AngularArc" and j - i == 2:
-                # HFSS AngularArc: the angle decides the end point, the stored end point is only a copy of it
+                # AngularArc: the angle decides the end point, the stored end point is only a copy of it
                 ang = ev.angle(args[0]) if args and args[0] else 0.0
                 plane = args[1] if len(args) > 1 else "XY"
                 arc = angular_arc(pts[i], pts[i + 1], ang, plane)

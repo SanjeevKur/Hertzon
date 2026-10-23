@@ -185,7 +185,7 @@ def edit_sphere(parent, doc, sp: InfiniteSphere) -> bool:
 
 
 class SubtractDialog(QDialog):
-    """Modeler > Boolean > Subtract: Blank Parts and Tool Parts as in HFSS. The arrow buttons move the selected
+    """Modeler > Boolean > Subtract: Blank Parts and Tool Parts. The arrow buttons move the selected
     objects from one list to the other; several objects are selected by dragging, Ctrl or Shift."""
 
     def __init__(self, blanks: list[str], tools: list[str], parent=None):

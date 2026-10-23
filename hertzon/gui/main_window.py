@@ -314,7 +314,7 @@ class MainWindow(QMainWindow):
                 continue
             m.addAction(label, lambda _=False, k=kind: self.start_draw(k))
             if kind == "CreatePolyline":
-                arc = m.addMenu("Arc")      # HFSS Draw > Arc: polylines of one arc segment
+                arc = m.addMenu("Arc")      # Draw > Arc: polylines of one arc segment
                 arc.addAction("3 Point", lambda: self.start_draw("CreatePolyline:arc3"))
                 arc.addAction("Center Point", lambda: self.start_draw("CreatePolyline:arccenter"))
         m.addAction("Helix...", lambda: self.create_by_dialog("CreateHelix"))

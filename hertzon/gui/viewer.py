@@ -1972,12 +1972,12 @@ class ModelerView(QWidget):
         self.plotter.render()
 
     def _arc_plane(self) -> str:
-        """Plane of center point arcs: the grid plane (HFSS ArcPlane)."""
+        """Plane of center point arcs: the grid plane (ArcPlane)."""
         return ARC_PLANE[PLANE_NORMAL[self.grid_plane]]
 
     def _track_sweep(self, p) -> None:
         """Center point arc: add the cursor's turn about the center since the last call to the swept angle,
-        so the arc follows the mouse past 180 degrees and in both directions (as in HFSS)."""
+        so the arc follows the mouse past 180 degrees and in both directions."""
         d = self.draw
         a = _plane_angle(d.points[-2], d.points[-1], p, PLANE_NORMAL[self.grid_plane])
         if a is None:
@@ -2011,7 +2011,7 @@ class ModelerView(QWidget):
 
 SEG_KEYS = {"l": "Line", "a": "Arc", "c": "CenterArc", "s": "Spline"}
 SEG_NAMES = {"Line": "Straight", "Arc": "3 Point Arc", "CenterArc": "Center Point Arc", "Spline": "Spline"}
-ARC_PLANE = {2: "XY", 0: "YZ", 1: "ZX"}      # plane normal index -> HFSS ArcPlane
+ARC_PLANE = {2: "XY", 0: "YZ", 1: "ZX"}      # plane normal index -> ArcPlane
 
 
 def _center_pending(d) -> bool:

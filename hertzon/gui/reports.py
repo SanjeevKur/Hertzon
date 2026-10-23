@@ -458,7 +458,7 @@ class ReportWindow(QWidget):
             self.sol.addItems(ff_solution_list(doc) or [report.solution])
             self.sol.setCurrentText(report.solution)
             self.sol.blockSignals(False)
-            # a sweep with fields has a far field at every frequency: pick one (HFSS: Families > Freq)
+            # a sweep with fields has a far field at every frequency: pick one (Families > Freq)
             self.ff_freq = QComboBox()
             self.ff_freq.currentIndexChanged.connect(self._ff_freq_changed)
             form.addRow("Frequency:", self.ff_freq)
