@@ -1,0 +1,180 @@
+# Hertzon on EMerge: what is replaced, why, and what it costs to drop it
+
+Hertzon runs its solves with [EMerge](https://github.com/FennisRobert/EMerge). Over time it added
+run-time replacements for parts of EMerge, mostly for speed. This page lists every one of them with
+a measurement against EMerge's own code, so that each can either move upstream (a pull request to
+EMerge) or be dropped from Hertzon. It is written for the EMerge maintainer and for Hertzon developers.
+
+Measured on 23 October 2026 with EMerge 3.0.0a25 and 3.0.0b5 (PyPI), Hertzon `dev` at `13647d2` plus
+the commits on this branch.
+
+## How it was measured
+
+- `examples/benchmark/tools/emerge_bench.py run OUTDIR [CASE ...] [--env NAME=VALUE]` solves each case in a
+  fresh process with timers around the expensive phases and stores the result folder.
+  `emerge_bench.py compare A B` prints the times side by side and the largest relative difference of
+  the S-parameters (last adaptive pass and sweeps) and the far fields.
+- Every case runs a fixed number of adaptive passes (4), so two runs solve the same meshes; the tetrahedra
+  per pass are compared too. Before a series, Hertzon's warm-up compiles all numba kernels.
+- `HERTZON_EMERGE_NATIVE=mt_pardiso,thin_conductor,sheet_error,eigs_retry,mesh_fallback`,
+  `HERTZON_SLOW_ASSEMBLY=1`, `HERTZON_PARDISO_STRUCT=1` and `HERTZON_HYBRID_SWEEP=0` switch single
+  replacements off, so EMerge's own code runs instead.
+- `examples/benchmark/tools/farfield_kernels.py HUYGENS_NPZ` compares the far field kernels on stored
+  boundary fields.
+- Computer: Linux container, 4 cores, 15 GB memory. Absolute times are not representative of a workstation;
+  the ratios are. Repeated runs of the same configuration differ by about ±3–8 %.
+
+| Case | Model | Elements | Ports | Sweep |
+|---|---|---|---|---|
+| microstrip | `scaling/small_microstrip.hzn`, thin conductor trace | 1st order, 4k → 12k tets | 2 lumped | interpolating, 101 points |
+| hairpin | `scaling/medium_hairpin.hzn` | 2nd order, 6k → 15k tets | 2 lumped | interpolating, 101 points |
+| patch | `scaling/large_patch.hzn`, far field sphere | 2nd order, 5k → 12k tets | 1 lumped | interpolating, 101 points |
+| waveport | `waveguide_post/post_pec_stable.hzn` | 2nd order, 1k → 2.4k tets | 2 wave ports | interpolating 5–12 GHz (201), discrete 9 points |
+| rotman | `RotmanLens_24GHz.hzn`, design RotmanArray, far field sphere | 1st order, 21k → 49k tets | 11 lumped | none (see open issues) |
+
+## Step 1: EMerge 3.0.0a25 → 3.0.0b5
+
+Same Hertzon code, then with the b5 changes (pin, setup without the welcome prompt workaround,
+`_thin_conductor_new_mesh` removed because b5 splits the thin conductor DoFs for every new basis).
+
+| Case | a25 total | b5 total | S-parameters, far field |
+|---|---|---|---|
+| microstrip | 22.1 s | 22.8 s | bit-identical |
+| hairpin | 78.4 s | 77.8 s | bit-identical |
+| patch | 63.0 s | 61.5 s | bit-identical |
+| waveport | 21.2 s | see below | adaptive and discrete: identical to 1e-14 |
+| rotman | 64.6 s | 64.7 s | bit-identical |
+
+No phase got slower. The waveport interpolating sweep takes either about 18 s or about 150 s, on a25 as
+on b5 (2 of 4 a25 runs hit the 250 solution limit). That is a Hertzon issue, see open issues.
+
+## Step 2: `MWField.interpolate(mapping=...)`
+
+Hertzon evaluates fields at points whose tetrahedron is already known (corners and edge midpoints of every
+tetrahedron, the far field surface). It used to replace `basis.interpolate_index` for the call; EMerge 3
+takes the mapping directly. Same times, bit-identical results. Done.
+
+## Replacements that stay for now (candidates for EMerge pull requests)
+
+Each row: the replacement switched off, i.e. EMerge's own code, relative to Hertzon with all replacements
+on (EMerge 3.0.0b5).
+
+| Replacement | microstrip | hairpin | patch | rotman | Results |
+|---|---|---|---|---|---|
+| All of `fast_assembly` off (`HERTZON_SLOW_ASSEMBLY=1`) | +8 % | +40 % | +44 % | +17 % | same |
+| Only PARDISO LDLT off (`HERTZON_PARDISO_STRUCT=1`) | +9 % | +34 % | +34 % | +7 % | same |
+| Reduced basis in the interpolating sweep off | +30 % | +48 % | +30 % | – | same within tolerance |
+| `mt_pardiso` off, sweep frequencies in parallel | +442 % | out of memory | out of memory | – | – |
+| Thin conductor DoF numbering off | ±0 | ±0 | ±0 | ±0 | S identical |
+| Conductor sheets in the error estimate off | ±0 | ±0 | ±0 | ±0 | same meshes |
+
+### PARDISO: complex symmetric LDL^T (`fast_assembly._pardiso_solve`)
+
+EMerge factorizes the complex symmetric system matrix with PARDISO mtype 3 (structurally symmetric LU).
+mtype 6 (complex symmetric, upper triangle) needs about half the factor memory and is 20–40 % faster on the
+second order cases. Hertzon uses it only when EMerge classifies the matrix as symmetric and a random
+bilinear test confirms it, and falls back to LU on any PARDISO error.
+**Proposal:** pull request to EMerge's PARDISO interface, with this benchmark.
+
+### Removing the PEC rows and columns (`fast_assembly.submatrix`)
+
+`SolveRoutine.solve` builds `A[:, solve_ids][solve_ids, :]` with scipy fancy indexing on one core. Hertzon
+does it in a parallel two-pass CSC copy. Worth 5–10 % (difference of the two `fast_assembly` rows).
+**Proposal:** pull request, small.
+
+### PARDISO in parallel sweeps (`mt_pardiso`)
+
+With parallel sweeps, EMerge's worker threads use SuperLU. On the microstrip the sweep took 120 s instead of
+14 s; hairpin and patch (15k and 12k second order tetrahedra) ran out of 15 GB memory. Hertzon gives every
+worker thread its own PARDISO instance with `mkl_set_num_threads_local`. Two EMerge bugs are fixed on the
+way:
+
+1. `AutomaticRoutine` is a singleton (`__new__`), so `SolveRoutine.duplicate()` returns the same object and
+   the worker threads share one solver (and can factorize in one PARDISO handle at the same time).
+2. After a threaded sweep, `thread_local.__dict__.clear()` drops the routines without `reset()`, so the
+   PARDISO factorizations of every batch stay allocated.
+
+**Proposal:** first a pull request with the two bug fixes, then PARDISO per worker thread.
+
+### Reduced basis in the interpolating sweep (`hybrid_sweep`)
+
+Check frequencies of the interpolating sweep are first solved in the span of the earlier solutions (no
+factorization); only those that the basis cannot reach are factorized. 30–48 % of the total time.
+**Proposal:** compare with EMerge's `run_adaptive_sweep` (AAA) before deciding whether this goes upstream
+or Hertzon switches to it.
+
+### Far field for many ports (`farfield_post.stratton_chu_multi`)
+
+EMerge's `MWField.farfield` calls the Rust kernel `emr.sc.stratton_chu_ff` once per excitation, and each call
+computes all phase factors exp(jk r·x) again. Hertzon computes them once per frequency and multiplies them
+with all excitations in one BLAS call. Rotman lens, 11 ports, 2907 surface points:
+
+| Angular step | Directions | Hertzon, all ports | EMerge Rust, per port | Ratio |
+|---|---|---|---|---|
+| 5° | 2701 | 0.26 s | 1.08 s | 4.2× |
+| 2° | 16471 | 1.56 s | 6.06 s | 3.9× |
+| 1° | 65341 | 6.27 s | 22.9 s | 3.7× |
+
+Largest difference 4e-10 relative to the peak field.
+**Proposal:** a multi-excitation variant of `stratton_chu_ff` (phases once, then all E/H sets), and a public
+function that returns the integration points and weighted normals, so Hertzon can call the Rust kernel on
+its stored boundary fields.
+
+### Error estimate with many excitations
+
+EMerge 3 computes the error estimate in Rust (`emr.adaptive_mesh.compute_error_single`), in parallel over
+the tetrahedra, and calls it once per excitation. Rotman lens, pass 3 (35872 tetrahedra, 11 excitations):
+2.5 s with 4 threads, 7.9 s with `RAYON_NUM_THREADS=1` (3.1×). The time grows linearly with the number of
+excitations (about 6 µs per tetrahedron and excitation on one core, the same on the 2-port microstrip), and
+it is about 9 % of the Rotman run time. Hertzon's former parallel kernel for EMerge 2.8.9 also evaluated all
+excitations in one pass over the tetrahedra (geometry and neighbour data once).
+**Proposal (low priority):** a multi-excitation variant of `compute_error_single`; nothing to keep in Hertzon.
+
+### Thin conductor DoF numbering (`emerge_patches.apply_thin_conductor`)
+
+`Nedelec2.partition_dof` remaps `tet_to_field` for the split tetrahedra (one side, chosen from an unoriented
+normal). The assembly reads the original numbering through `get_tet_to_field()`, while fields, far field and
+the error estimate read the remapped `tet_to_field`. The S-parameters are not affected (identical in the
+benchmark), but surface currents and field plots show noise at every sheet. Hertzon restores the original
+numbering after the split. No speed effect.
+**Proposal:** needs the maintainer's view on the intended design.
+
+### Conductor sheets in the error estimate (`bridge._with_conductor_sheets`)
+
+Faces with a finite conductivity (surface impedance with material, thin conductor) are passed to the error
+estimate like PEC faces, because the jump of tangential H across them is the physical surface current. In
+the benchmark models the meshes came out identical with and without it.
+**Proposal:** check against EMerge's thin trace changes; otherwise a small pull request.
+
+### Robustness only (no effect unless something fails)
+
+- `_robust_eigs`: the port mode solve retries ARPACK with a fixed start vector and a larger Krylov space
+  instead of ending the solve on `ArpackNoConvergence`.
+- `apply_mesh_fallback`: when gmsh fails on trimmed B-spline faces of CAD files, mesh again without
+  curvature based sizing.
+
+## Removed
+
+- `_thin_conductor_new_mesh` (fixed in EMerge 3.0.0b5).
+- Replacements written for EMerge 2.8.9 that never run on EMerge 3, because EMerge 3 has the code in its
+  compiled core: parallel error estimate (`fast_error.py`), vectorised mesh import (`Mesh3D._pre_update`),
+  element matrices and CSC pattern (`fast_assembly`), `AMRPoints` size field patch. About 1300 lines.
+  After the removal: same meshes, S-parameters and far fields, times within the noise (−7 % to −0 %).
+
+## Hertzon features built on EMerge (stay in Hertzon)
+
+Curved (isoparametric) elements, Hertzon's own refinement methods, lazy field evaluation, stored boundary
+fields for far fields after the solve, far field quantities (realized gain, efficiency, superposition of
+ports), face matching. Curved elements patch `Assembler.assemble_*` and keep a numba copy of the 2.8.9
+basis functions; the plan is to implement them natively in EMerge.
+
+## Open issues found on the way (Hertzon)
+
+- **Interpolating sweep not reproducible**: the same waveport run needs either 25–29 or 250 solutions
+  (limit), with up to 0.13 difference in S above cutoff. Below the waveguide cutoff the fit does not
+  converge, and whether the reduced basis accepts a check point depends on the run.
+- **Fast sweep memory**: the Rotman lens sweep (11 ports, 49k tetrahedra, 9 frequencies) grows past 14 GB.
+- **Symmetry planes and far fields**: the far field does not mirror the boundary fields at symmetry planes,
+  and the port impedance factor of a symmetry plane (`ImpedanceMultiplier`) is not applied in the solver.
+  EMerge's `farfield(..., syms=...)` has the mirror logic; its radiated power is scaled by `factor**2`
+  although it is integrated only over the simulated half, which should be checked with a full/half model.
