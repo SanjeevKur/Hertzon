@@ -2200,11 +2200,25 @@ def hard_exit() -> None:
     if os.name == "nt":
         try:
             import ctypes
-            k32 = ctypes.windll.kernel32
-            k32.TerminateProcess(k32.GetCurrentProcess(), 0)
+            terminate_self(ctypes.WinDLL("kernel32", use_last_error=True))
         except Exception:  # noqa: BLE001
             pass
     os._exit(0)
+
+
+def terminate_self(k32) -> bool:
+    """TerminateProcess on this process with exit code 0; False if Windows refused it.
+
+    The functions need their HANDLE types: untyped, ctypes passes the pseudo handle of GetCurrentProcess
+    as a 32 bit int (an invalid handle on 64 bit Windows), and once _win_memory has set restype on the
+    shared windll.kernel32 the 64 bit value no longer converts at all (ArgumentError). Either way
+    TerminateProcess never ran and os._exit crashed as before; a private WinDLL keeps other callers apart."""
+    from ctypes import wintypes
+    k32.GetCurrentProcess.restype = wintypes.HANDLE
+    k32.GetCurrentProcess.argtypes = []
+    k32.TerminateProcess.restype = wintypes.BOOL
+    k32.TerminateProcess.argtypes = [wintypes.HANDLE, wintypes.UINT]
+    return bool(k32.TerminateProcess(k32.GetCurrentProcess(), 0))
 
 
 def _mark_compiled() -> None:
