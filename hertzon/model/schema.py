@@ -151,10 +151,27 @@ BOUNDARIES: dict[str, list[Prop]] = {
     ],
     "Impedance": [P("Resistance", "expr", "50", label="Resistance (ohm/sq)"),
                   P("Reactance", "expr", "0", label="Reactance (ohm/sq)")],
-    "Lumped RLC": [P("UseResistance", "bool", "True"), P("Resistance", "expr", "50ohm"),
-                   P("UseInductance", "bool", "False"), P("Inductance", "expr", "1nH"),
-                   P("UseCapacitance", "bool", "False"), P("Capacitance", "expr", "1pF"),
-                   P("IntegrationLine", "points", "", help="Start;End point of the current flow line")],
+    "Lumped RLC": [P("Model", "choice", "Parallel RLC", choices=("Parallel RLC", "Series RLC", "Touchstone"),
+                     help="Parallel RLC: R, L and C in parallel. Series RLC: R, L and C in series (a chip "
+                          "component with its ESR and ESL). Touchstone: the measured impedance of a component "
+                          "from a .s1p/.s2p file"),
+                   P("UseResistance", "bool", "True", visible_if=("Model", "!Touchstone")),
+                   P("Resistance", "expr", "50ohm", visible_if=("Model", "!Touchstone")),
+                   P("UseInductance", "bool", "False", visible_if=("Model", "!Touchstone")),
+                   P("Inductance", "expr", "1nH", visible_if=("Model", "!Touchstone")),
+                   P("UseCapacitance", "bool", "False", visible_if=("Model", "!Touchstone")),
+                   P("Capacitance", "expr", "1pF", visible_if=("Model", "!Touchstone")),
+                   P("TouchstoneFile", "text", "", label="Touchstone file", visible_if=("Model", "Touchstone"),
+                     help="Path of the .s1p/.s2p file (absolute or relative to the project file)"),
+                   P("TouchstoneMount", "choice", "Series", choices=("Series", "Shunt"), label="2-port measured as",
+                     visible_if=("Model", "Touchstone"),
+                     help="How the component sat in the 2-port test fixture: in series between the ports (usual "
+                          "for chip inductors and capacitors) or as a shunt to ground. Ignored for .s1p files"),
+                   P("Component", "text", "", help="Package or part number of a component inserted from the "
+                                                    "Lumped Elements tab (information only)"),
+                   P("IntegrationLine", "points", "", help="Start;End point of the current flow line, from one conductor to the other. Set "
+                     "automatically between the two conductors touching the sheet; right click the boundary to "
+                     "draw it in the 3D view or to place it automatically again")],
     "Radiation": [P("Order", "choice", "First order", choices=("First order", "Second order")),
                   P("FarFieldReference", "bool", "True", label="Include for near/far field calculation")],
     "PML": [P("Thickness", "length", "", help="Empty = lambda/4 at lowest frequency"),
@@ -185,7 +202,9 @@ EXCITATIONS: dict[str, list[Prop]] = {
                   P("Deembed", "bool", "False", tab="Post Processing"),
                   P("DeembedDistance", "length", "0", tab="Post Processing", visible_if=("Deembed", "True"))],
     "Lumped Port": [P("PortNumber", "int", "1"), P("Impedance", "expr", "50ohm", label="Full port impedance"),
-                    P("IntegrationLine", "points", "", help="Start;End of the voltage line. Empty = auto")],
+                    P("IntegrationLine", "points", "", help="Start;End of the voltage line, from one conductor to the other. Set "
+                     "automatically between the two conductors touching the sheet (empty = auto); right click the "
+                     "port to draw it in the 3D view or to place it automatically again")],
     "Floquet Port": [P("PortNumber", "int", "1"), P("NumberOfModes", "int", "2"),
                      P("Permittivity", "expr", "1", label="Medium permittivity")],
     "Incident Plane Wave": [P("VectorInput", "choice", "Cartesian", label="Vector input format",

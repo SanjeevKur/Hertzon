@@ -3,6 +3,29 @@
 All notable changes of each release. The release workflow copies the section of the released version into
 the GitHub release notes.
 
+## Unreleased
+
+### Changed
+- **Integration line of Lumped Port and Lumped RLC**: placed automatically between the two conductors
+  that touch the sheet, from the centre of one contact to the centre of the other (conductors: objects of a
+  metal material and faces or objects with a Perfect E or Finite Conductivity boundary). A gap longer than
+  the traces are wide or a sheet wider than the traces now gets the right line. Without two touching
+  conductors the line runs across the shorter side of the sheet as before.
+
+### New
+- **Lumped Elements tab**: inserts a chip resistor, inductor or capacitor, or a component measured by a
+  Touchstone file, between the two selected traces. Packages 0201, 0402, 0603, 0805, 1206 and the RF series
+  Coilcraft 0402HP/0402HPH/0402CS/0603HP/0603CS and Murata LQW15AN/LQP03TN/GJM03/GJM15 with their body
+  dimensions. Hertzon adds the pads of the land pattern (made like the traces), the element sheet with its
+  Lumped RLC boundary and integration line, and optionally a 3D body with metal terminations (the
+  mounted inductance from the field solution). The ideal value can carry the typical ESL and ESR of the size.
+- **Lumped RLC: Model** Parallel RLC (as before), Series RLC or Touchstone (.s1p, or .s2p measured in
+  series or as a shunt). The Validation Check reads the Touchstone file; the solver warns when a sweep
+  leaves its frequency range.
+- **Draw Integration Line** (right click a Lumped Port or Lumped RLC in the project tree): start and end
+  point picked with two clicks in the 3D view, with snapping to vertices and edge centers.
+  **Auto Integration Line** places it between the conductors again.
+
 ## 0.1.25 (2026-10-23)
 
 ### Changed

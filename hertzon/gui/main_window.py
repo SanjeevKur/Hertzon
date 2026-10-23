@@ -730,6 +730,20 @@ class MainWindow(QMainWindow):
         g.large("Analyze All", "analyze", self.a_analyze)
         self._variation_group(pg)
 
+        # ---- Lumped Elements ---------------------------------------------------------------
+        pg = rb.page("Lumped Elements")
+        g = pg.group("Components")
+        g.large("Resistor", "resistor", lambda: self.insert_component("R"),
+                tip="Insert a chip resistor between the two selected traces")
+        g.large("Inductor", "inductor", lambda: self.insert_component("L"),
+                tip="Insert a chip inductor between the two selected traces")
+        g.large("Capacitor", "capacitor", lambda: self.insert_component("C"),
+                tip="Insert a chip capacitor between the two selected traces")
+        g.large("Touchstone", "chip", lambda: self.insert_component("S"),
+                tip="Insert a component measured by a Touchstone file (.s1p/.s2p) between the two selected traces")
+        g = pg.group("Boundary")
+        g.large("Lumped RLC", "boundary", bnd("Lumped RLC"), tip="Lumped RLC boundary on the selected sheet")
+
         # ---- Results -----------------------------------------------------------------------
         pg = rb.page("Results")
         self._variation_group(pg)
@@ -2043,6 +2057,9 @@ class MainWindow(QMainWindow):
 
     def _draw_finished(self, kind: str, pts: list) -> None:
         P = [np.asarray(p, float) for p in pts]
+        if kind == "IntegrationLine":
+            self._line_drawn(P)
+            return
         if kind.startswith("Op"):
             self._op_finished(kind, P)
             return
@@ -2964,8 +2981,59 @@ class MainWindow(QMainWindow):
         self.view.show_assignments([a])
         self.msgs.add("info", f"Assigned {kind} '{a.name}'")
 
+    def _face_triangles(self, obj: str, face: int = -1):
+        """points and triangles of one face (face < 0: the whole object) of the display tessellation."""
+        t = self.doc.tess.get(obj)
+        if t is None:
+            return None
+        tris = t.tris if face < 0 else t.tris[t.tri_face == face]
+        return np.asarray(t.points, float), tris
+
+    def _conductor_surfaces(self, skip: set[str]) -> dict[str, np.ndarray]:
+        """surface triangles of every conductor: objects of a conducting material and faces/objects with a
+        Perfect E or Finite Conductivity boundary."""
+        out: dict[str, list] = {}
+
+        def add(obj, face=-1):
+            if obj in skip:
+                return
+            ft = self._face_triangles(obj, face)
+            if ft is not None and len(ft[1]):
+                out.setdefault(obj, []).append(ft[0][ft[1]])
+        for o in self.des.live_objects():
+            try:
+                if o.model and is_conductor(self.doc.project.material(o.material)):
+                    add(o.name)
+            except KeyError:
+                pass
+        for b in self.des.boundaries:
+            if b.enabled and b.kind in ("Perfect E", "Finite Conductivity"):
+                for f in b.faces:
+                    add(f.obj, f.face)
+                for o in b.objects:
+                    add(o)
+        return {k: np.concatenate(v) for k, v in out.items()}
+
     def _auto_integration_line(self, faces, objs) -> str:
-        """Integration line across the shorter side of a rectangular port sheet (centre to centre)."""
+        """Integration line of a lumped port/RLC sheet: from the centre of its contact with one conductor to
+        the centre of its contact with the other; without two touching conductors across the shorter side of
+        the sheet (centre to centre)."""
+        from ..model.portline import between_conductors
+        parts = [self._face_triangles(f.obj, f.face) for f in faces] + [self._face_triangles(o) for o in objs]
+        parts = [p for p in parts if p is not None and len(p[1])]
+        if parts:
+            pts, tris, n = [], [], 0
+            for P, T in parts:
+                pts.append(P)
+                tris.append(T + n)
+                n += len(P)
+            try:
+                line = between_conductors(np.concatenate(pts), np.concatenate(tris),
+                                          self._conductor_surfaces({f.obj for f in faces} | set(objs)))
+            except Exception:  # noqa: BLE001
+                line = None
+            if line is not None:
+                return f"{self._pt(line[0])};{self._pt(line[1])}"
         boxes = []
         for f in faces:
             t = self.doc.tess.get(f.obj)
@@ -4265,6 +4333,11 @@ class MainWindow(QMainWindow):
             m.addAction("Disable" if a.enabled else "Enable", lambda: self._toggle_enabled(data[1]))
             if kind != "meshop":
                 m.addAction("Reassign to Selection", lambda: self._reassign(data[1]))
+            if a.kind in ("Lumped Port", "Lumped RLC"):
+                m.addSeparator()
+                m.addAction("Draw Integration Line", lambda: self.draw_integration_line(data[1]))
+                m.addAction("Auto Integration Line", lambda: self.auto_integration_line(data[1]))
+                m.addSeparator()
             m.addAction("Delete", self._delete_project_items)
         elif kind == "setup":
             m.addAction("Properties...", lambda: self._project_activated(data))
@@ -4330,6 +4403,78 @@ class MainWindow(QMainWindow):
         a = self.des.assignment(name)
         a.enabled = not a.enabled
         self.doc.commit("boundaries", geometry=False)
+
+    # ---- lumped components (Lumped Elements tab) ---------------------------------------------
+    def _trace_points_mm(self, name: str) -> np.ndarray:
+        t = self.doc.tess.get(name)
+        if t is None:
+            raise ValueError(f"'{name}' has no geometry")
+        return np.asarray(t.points, float) * 1e3
+
+    def insert_component(self, kind: str) -> None:
+        """SMD component between the two selected traces: pads, element sheet, Lumped RLC boundary."""
+        from ..model import lumped as LU
+        from .lumped_dialogs import ComponentDialog
+        objs = self.doc.selected_objects()
+        if len(objs) != 2:
+            QMessageBox.information(self, "Insert Component", "Select the two traces (O) the component connects.")
+            return
+        try:
+            ends = LU.trace_ends(self._trace_points_mm(objs[0]), self._trace_points_mm(objs[1]))
+        except ValueError as e:
+            QMessageBox.warning(self, "Insert Component", str(e))
+            return
+        dlg = ComponentDialog(self, kind, ends.gap)
+        if dlg.exec() != QDialog.Accepted:
+            return
+        v = dlg.result_values()
+        self.doc.checkpoint()
+        try:
+            b, made, warns = LU.insert_component(
+                self.doc.project, self.des, objs[0], objs[1], ends, v["pkg"], v["land"], v["kind"], v["value"],
+                v["name"], parasitics=v["parasitics"], terminations=v["terminations"], touchstone=v["touchstone"],
+                mount=v["mount"])
+        except Exception as e:  # noqa: BLE001
+            self.doc.undo()
+            QMessageBox.warning(self, "Insert Component", str(e))
+            return
+        self.doc.commit("model")
+        self.view.show_assignments([b])
+        for w in warns:
+            self.msgs.add("warning", f"{b.name}: {w}")
+        self.msgs.add("info", f"Inserted {v['pkg'].name} '{made[-1].name if made else b.name}' between "
+                              f"{objs[0]} and {objs[1]} ({', '.join(o.name for o in made)})")
+
+    def draw_integration_line(self, name: str) -> None:
+        """Start and end point of the integration line picked in the 3D view (two clicks, with snapping)."""
+        self._line_target = name
+        self.start_draw("IntegrationLine")
+
+    def _line_drawn(self, P: list) -> None:
+        name, self._line_target = getattr(self, "_line_target", None), None
+        if not name or len(P) < 2 or name not in {a.name for a in self.des.excitations + self.des.boundaries}:
+            return
+        if np.linalg.norm(P[1] - P[0]) < 1e-15:
+            self.msgs.add("warning", "Integration line: start and end point are the same")
+            return
+        self._set_integration_line(name, f"{self._pt(P[0])};{self._pt(P[1])}")
+
+    def auto_integration_line(self, name: str) -> None:
+        """Integration line placed again between the conductors that touch the sheet."""
+        a = self.des.assignment(name)
+        line = self._auto_integration_line(a.faces, a.objects)
+        if not line:
+            self.msgs.add("warning", f"{name}: no integration line found, draw it or enter it in the properties")
+            return
+        self._set_integration_line(name, line)
+
+    def _set_integration_line(self, name: str, line: str) -> None:
+        self.doc.checkpoint()
+        a = self.des.assignment(name)
+        a.props["IntegrationLine"] = line
+        self.doc.commit("boundaries" if any(b is a for b in self.des.boundaries) else "excitations", geometry=False)
+        self.view.show_assignments([a])
+        self.msgs.add("info", f"{name}: integration line {line}")
 
     def _reassign(self, name: str) -> None:
         faces, objs = self._selection_refs()

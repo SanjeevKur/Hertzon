@@ -114,6 +114,7 @@ class Bridge:
     store: ResultStore = None  # type: ignore[assignment]
     t0: float = field(default_factory=time.time)
     profile: list = field(default_factory=list)
+    touchstone_elements: list = field(default_factory=list)     # (boundary name, ComponentImpedance)
 
     def __post_init__(self):
         self.ev = self.design.evaluator(self.project)
@@ -556,21 +557,7 @@ class Bridge:
                 mw.bc.SurfaceImpedance(sel, impedance_function=lambda f, Zs=Zs: Zs)
             elif b.kind == "Lumped RLC":
                 w, h, _ = self.port_geometry(b, tags)
-                R = ev.value(p["Resistance"]) if p.get("UseResistance") == "True" else None
-                L = ev.value(p["Inductance"]) if p.get("UseInductance") == "True" else None
-                C = ev.value(p["Capacitance"]) if p.get("UseCapacitance") == "True" else None
-
-                def zfun(f, R=R, L=L, C=C):
-                    # parallel RLC as in the reference tool
-                    w_ = 2 * np.pi * f
-                    y = 0j
-                    if R:
-                        y += 1 / R
-                    if L:
-                        y += 1 / (1j * w_ * L)
-                    if C:
-                        y += 1j * w_ * C
-                    return 1 / y if y != 0 else 1e12
+                zfun = self.lumped_impedance(b)
                 mw.bc.LumpedElement(sel, impedance_function=zfun, width=w, height=h)
             elif b.kind == "Radiation":
                 order = 2 if p.get("Order") == "Second order" else 1
@@ -603,6 +590,56 @@ class Bridge:
         info(f"Incident plane wave k = ({k[0]:.3g}, {k[1]:.3g}, {k[2]:.3g}), "
              f"E0 = ({e[0]:.3g}, {e[1]:.3g}, {e[2]:.3g}), zero phase at ({origin[0] * 1e3:.4g}, {origin[1] * 1e3:.4g}, {origin[2] * 1e3:.4g}) mm")
         self.pw_bcs = getattr(self, "pw_bcs", []) + [bc]
+
+    def lumped_impedance(self, b: Assignment):
+        """Z(f) of a lumped RLC boundary: parallel or series R, L, C, or a Touchstone component."""
+        p, ev = b.props, self.ev
+        model = p.get("Model", "Parallel RLC") or "Parallel RLC"
+        if model == "Touchstone":
+            from ..model.touchstone import ComponentImpedance
+            path = Path(p.get("TouchstoneFile", "").strip())
+            if not str(path) or str(path) == ".":
+                raise ValueError(f"{b.name}: no Touchstone file given")
+            if not path.is_absolute() and self.project.path:
+                path = Path(self.project.path).parent / path
+            z = ComponentImpedance(path, p.get("TouchstoneMount", "Series"))
+            info(f"{b.name}: Touchstone {path.name}, {z.f[0] / 1e9:g} to {z.f[-1] / 1e9:g} GHz")
+            try:
+                f0 = ev.freq(self.setup.props.get("Frequency", ""))
+                if not z.f[0] <= f0 <= z.f[-1]:
+                    warn(f"{b.name}: the solution frequency {f0 / 1e9:g} GHz is outside the Touchstone data")
+            except Exception:  # noqa: BLE001
+                pass
+            self.touchstone_elements.append((b.name, z))
+            return z
+        R = ev.value(p["Resistance"]) if p.get("UseResistance") == "True" else None
+        L = ev.value(p["Inductance"]) if p.get("UseInductance") == "True" else None
+        C = ev.value(p["Capacitance"]) if p.get("UseCapacitance") == "True" else None
+        if model == "Series RLC":
+            def zfun(f, R=R, L=L, C=C):
+                w_ = 2 * np.pi * f
+                z = 0j
+                if R:
+                    z += R
+                if L:
+                    z += 1j * w_ * L
+                if C:
+                    z += 1 / (1j * w_ * C)
+                return z if z != 0 else 1e-6
+            return zfun
+
+        def zfun(f, R=R, L=L, C=C):
+            # parallel RLC as in the reference tool
+            w_ = 2 * np.pi * f
+            y = 0j
+            if R:
+                y += 1 / R
+            if L:
+                y += 1 / (1j * w_ * L)
+            if C:
+                y += 1j * w_ * C
+            return 1 / y if y != 0 else 1e12
+        return zfun
 
     def port_geometry(self, a: Assignment, tags: list[int]):
         """width, height, direction of a lumped port/element from its integration line or bounding box."""
@@ -1283,6 +1320,10 @@ class Bridge:
                 mt_pardiso = None
             p = sw.props
             fr = sweep_frequencies(p, ev)
+            for nm, z in self.touchstone_elements:
+                if len(fr) and (fr.min() < z.f[0] * (1 - 1e-9) or fr.max() > z.f[-1] * (1 + 1e-9)):
+                    warn(f"{nm}: sweep '{sw.name}' goes beyond the Touchstone data ({z.f[0] / 1e9:g} to "
+                         f"{z.f[-1] / 1e9:g} GHz); outside it the nearest data point is used")
             par = p.get("Parallel") == "True"
             nw = max(1, int(os.environ.get("HERTZON_SWEEP_WORKERS", "2") or 2))
             prog = SweepProgress(sw.name, 65 + 30 * i / max(1, len(sweeps)), 30 / max(1, len(sweeps)))

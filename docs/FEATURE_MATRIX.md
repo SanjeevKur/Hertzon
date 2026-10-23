@@ -49,7 +49,8 @@ Legend: **✔** implemented and tested · **◐** implemented with limitations �
 | Perfect H | Perfect H | `PMC` | ✔ |
 | Finite Conductivity (material / σ, roughness, thickness) | Finite Conductivity | `SurfaceImpedance` / `ThinConductor` | ✔ |
 | Impedance (R + jX) | Impedance | `SurfaceImpedance` | ✔ |
-| Lumped RLC | Lumped RLC | `LumpedElement` (parallel RLC) | ✔ |
+| Lumped RLC (parallel or series RLC, Touchstone component) | Lumped RLC | `LumpedElement` with Z(f) | ✔ |
+| SMD components between two traces (0201 to 1206, vendor series, pads, optional 3D terminations, Touchstone parts) | Lumped Elements tab | `LumpedElement` | ✔ |
 | Radiation (first order) | Radiation | `AbsorbingBoundary` | ✔ (second order ◐) |
 | PML | PML (on region faces) and Auto Open | `pmlbox` | ✔ |
 | Symmetry (Perfect E / Perfect H) | Symmetry | `PEC` / `PMC` | ✔ (impedance multiplier ✖) |
@@ -61,7 +62,7 @@ Legend: **✔** implemented and tested · **◐** implemented with limitations �
 | Function | In Hertzon | Status | Notes |
 |---|---|---|---|
 | Wave Port (modes, Zpi/Zpv/Zvi, renormalize, de-embed) | Wave Port | ✔ | De-embedding uses the solved port propagation constant |
-| Lumped Port (impedance, integration line) | Lumped Port | ✔ | Integration line is filled in automatically for rectangular sheets |
+| Lumped Port (impedance, integration line) | Lumped Port | ✔ | Integration line placed automatically between the touching conductors, or drawn in the 3D view |
 | Floquet Port | Floquet Port | ◐ | Needs periodic boundaries, which are not available yet |
 | Incident Plane Wave | Incident Plane Wave | ✖ | Can be assigned, solver warns |
 
