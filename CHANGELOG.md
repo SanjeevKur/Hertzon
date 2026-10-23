@@ -3,6 +3,12 @@
 All notable changes of each release. The release workflow copies the section of the released version into
 the GitHub release notes.
 
+## Unreleased
+
+### Fixed
+- **Tools > Keyboard Shortcuts** opens again: the dialog failed at once because its table widgets were not
+  imported (NameError), so shortcuts could not be viewed or changed.
+
 ## 0.1.22 (2026-10-22)
 
 ### Changed

@@ -547,3 +547,32 @@ def test_beamwidth_and_side_lobes():
     u = 4 * np.sin(np.radians(x))
     b = beamwidth(x, 20 * np.log10(np.abs(np.sinc(u)) + 1e-12), -3)
     assert b["sll"] == pytest.approx(-13.26, abs=0.1) and abs(b["sll_at"]) == pytest.approx(21, abs=1)
+
+
+def test_keyboard_shortcuts_dialog_opens_and_saves(monkeypatch):
+    """Tools > Keyboard Shortcuts: the dialog opens, a new key is set on the command and kept in the settings,
+    and it is applied again at the next start."""
+    import os
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    from PySide6.QtCore import QSettings
+    from PySide6.QtGui import QKeySequence
+    from PySide6.QtWidgets import QApplication, QDialog, QKeySequenceEdit, QMainWindow
+    from hertzon.gui import main_window as MW
+    app = QApplication.instance() or QApplication([])  # noqa: F841
+    win = QMainWindow()
+    win.settings = QSettings(QSettings.IniFormat, QSettings.UserScope, "hertzon-test", "shortcuts")
+    win.settings.clear()
+    m = win.menuBar().addMenu("&Tools")
+    act = m.addAction("Edit Materials...")
+
+    def accept(dlg):
+        for e in dlg.findChildren(QKeySequenceEdit):
+            e.setKeySequence(QKeySequence("Ctrl+Shift+M"))
+        return QDialog.Accepted
+    monkeypatch.setattr(QDialog, "exec", accept)
+    MW.MainWindow.edit_shortcuts(win)
+    assert act.shortcut().toString() == "Ctrl+Shift+M"
+    act.setShortcut(QKeySequence())
+    MW.MainWindow._apply_shortcuts(win)
+    assert act.shortcut().toString() == "Ctrl+Shift+M"
+    win.settings.clear()
