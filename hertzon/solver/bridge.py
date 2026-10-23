@@ -936,7 +936,6 @@ class Bridge:
             self._pw_fields = None
             pec = [int(t) for bc in m.mw.bc.oftype(PEC) for t in m.mesh.get_triangles(bc.tags)]
             pec = _with_conductor_sheets(m, pec)
-            _parallel_error_estimate(step)
             errors, lengths = [], None
             for fl in fields:
                 fl.set_field_vector()
@@ -1612,9 +1611,8 @@ def adaptive_loop(m, fa: list[float], p: dict, out: Path, on_pass=None, key: str
         # ---- refine ----------------------------------------------------------------------------
         emit("progress", value=12 + 40 * (step - 0.5) / maxp,
              text=f"Pass {step}: estimating solution error" + (" (first run compiles solver kernels, "
-                                                                 "this can take a few minutes)" if _first_run() or not _error_kernel_cached() else ""))
+                                                                 "this can take a few minutes)" if _first_run() else ""))
         info(f"Pass {step}: estimating solution error and refining the mesh")
-        _parallel_error_estimate(step)
         t_err = time.time()
         errors = np.empty((m.mesh.n_tets, len(fa)))
         lengths = None
@@ -1624,7 +1622,6 @@ def adaptive_loop(m, fa: list[float], p: dict, out: Path, on_pass=None, key: str
             errors[:, i] = err
         error = errors.max(axis=1)
         info(f"Pass {step}: error estimate {time.time() - t_err:.2f} s ({m.mesh.n_tets} tetrahedra)")
-        _log_error_threads()
         emit("progress", value=12 + 40 * (step - 0.4) / maxp, text=f"Pass {step}: refining the mesh")
         t_ref = time.time()
         ids = select_refinement_indices(error, incl)[::-1]
@@ -2109,36 +2106,6 @@ def _with_conductor_sheets(m, pec_tris):
     except Exception as e:  # noqa: BLE001
         warn(f"Conductor faces not excluded from the error estimate ({e})")
         return pec_tris
-
-
-def _parallel_error_estimate(step: int) -> None:
-    """Multi-threaded error estimate (hertzon.solver.fast_error); compiled once per machine and EMerge
-    version, EMerge's serial kernel otherwise."""
-    from . import fast_error
-    if "active" in fast_error._STATE:
-        return
-    if not fast_error.cached():
-        info(f"Pass {step}: compiling the parallel error estimate (once per machine, about 1-2 minutes)")
-    ok = fast_error._STATE["active"] = fast_error.apply()
-    if not ok:
-        info("Parallel error estimate not available; using EMerge's serial one")
-
-
-def _log_error_threads() -> None:
-    from . import fast_error
-    tr = fast_error._STATE.pop("threads", None)
-    if tr:
-        best, trials = tr
-        info("Error estimate threads: " + ", ".join(f"{n}: {t * 1e5:.2f} s/100k tets" for n, t in trials.items())
-             + f" -> using {best}")
-
-
-def _error_kernel_cached() -> bool:
-    try:
-        from . import fast_error
-        return fast_error.cached()
-    except Exception:  # noqa: BLE001
-        return True
 
 
 def kernel_tag() -> str:

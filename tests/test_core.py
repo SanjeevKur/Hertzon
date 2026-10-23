@@ -176,20 +176,6 @@ def test_far_field_follows_edit_sources(tmp_path):
         {**ff, "E_0_9": a[0] * E1 + a[1] * E2, "Prad_0_9": np.array([1.0])}, 9, 0)["rETotal"]) ** 2))
 
 
-def test_parallel_error_kernel_source():
-    """The parallel error estimate is generated from EMerge's kernel: the tet loop must become a prange
-    without exits (else numba runs it serially), everything else unchanged."""
-    from hertzon.solver import fast_error
-    from hertzon.solver.emerge_compat import EMERGE3
-    if EMERGE3:
-        pytest.skip("EMerge 3 has its own compiled error estimate")
-    src = fast_error._source()
-    assert src is not None
-    assert "for itet in prange(N_TETS):" in src and "parallel=True" in src
-    assert "adj_tets = [" not in src and "raise ValueError" not in src
-    compile(src, "error_estimate.py", "exec")
-
-
 def test_edit_sources_apply_keeps_dialog_open():
     import os
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
@@ -209,16 +195,11 @@ def test_edit_sources_apply_keeps_dialog_open():
 
 
 def test_fast_assembly_patches_and_sparse_helpers():
-    """The faster assembly replaces EMerge's code by source patterns; they must still match, and the
-    sparse helpers must give scipy's results."""
+    """The faster solve replaces EMerge's code by a source pattern; it must still match, and the sparse
+    helpers must give scipy's results."""
     import scipy.sparse as sp
     from hertzon.solver import fast_assembly as FA
-    from hertzon.solver.emerge_compat import EMERGE3
-    from emerge._emerge.physics.microwave.assembly import assembler
     from emerge._emerge import solver
-    if not EMERGE3:             # EMerge 3 assembles in its compiled library: only the solve is patched
-        n = sum(FA._patched(assembler.Assembler.assemble_freq_matrix, FA._ASSEMBLER_SUBS)[1:])
-        assert n == 5
     assert FA._patched(solver.SolveRoutine.solve, [(FA.re.compile(r"Asel = A\[:, solve_ids\]\[solve_ids, :\]"),
                                                     "x")])[1] == 1
     rng = np.random.default_rng(0)
@@ -233,7 +214,6 @@ def test_fast_assembly_patches_and_sparse_helpers():
     U = FA.upper_symmetric(A)
     assert U is not None and abs(U - sp.triu(A)).max() == 0
     assert FA.upper_symmetric((A + sp.random(300, 300, density=0.01, random_state=3)).tocsc()) is None
-    assert np.array_equal(FA.free_ids(10, {3, 7, 0}), [1, 2, 4, 5, 6, 8, 9])
 
 
 def test_curved_kernels_match_emerge_element_matrices():
