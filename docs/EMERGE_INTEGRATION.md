@@ -2,8 +2,11 @@
 
 Hertzon runs its solves with [EMerge](https://github.com/FennisRobert/EMerge). Over time it added
 run-time replacements for parts of EMerge, mostly for speed. This page lists every one of them with
-a measurement against EMerge's own code, so that each can either move upstream (a pull request to
-EMerge) or be dropped from Hertzon. It is written for the EMerge maintainer and for Hertzon developers.
+a measurement against EMerge's own code, so that each can either move into EMerge or be dropped from
+Hertzon. It is written for the EMerge maintainer and for Hertzon developers.
+
+Changes to EMerge are made in the `hertzon` branch of the EMerge repository, after agreeing on them, and not
+as new run-time patches in Hertzon. The proposals below are candidates for that branch.
 
 Measured on 23 October 2026 with EMerge 3.0.0a25 and 3.0.0b5 (PyPI), Hertzon `dev` at `13647d2` plus
 the commits on this branch.
@@ -54,7 +57,7 @@ Hertzon evaluates fields at points whose tetrahedron is already known (corners a
 tetrahedron, the far field surface). It used to replace `basis.interpolate_index` for the call; EMerge 3
 takes the mapping directly. Same times, bit-identical results. Done.
 
-## Replacements that stay for now (candidates for EMerge pull requests)
+## Replacements that stay for now (candidates for EMerge's `hertzon` branch)
 
 Each row: the replacement switched off, i.e. EMerge's own code, relative to Hertzon with all replacements
 on (EMerge 3.0.0b5).
@@ -74,13 +77,13 @@ EMerge factorizes the complex symmetric system matrix with PARDISO mtype 3 (stru
 mtype 6 (complex symmetric, upper triangle) needs about half the factor memory and is 20–40 % faster on the
 second order cases. Hertzon uses it only when EMerge classifies the matrix as symmetric and a random
 bilinear test confirms it, and falls back to LU on any PARDISO error.
-**Proposal:** pull request to EMerge's PARDISO interface, with this benchmark.
+**Proposal:** move into EMerge's PARDISO interface, with this benchmark.
 
 ### Removing the PEC rows and columns (`fast_assembly.submatrix`)
 
 `SolveRoutine.solve` builds `A[:, solve_ids][solve_ids, :]` with scipy fancy indexing on one core. Hertzon
 does it in a parallel two-pass CSC copy. Worth 5–10 % (difference of the two `fast_assembly` rows).
-**Proposal:** pull request, small.
+**Proposal:** move into `SolveRoutine.solve`, small.
 
 ### PARDISO in parallel sweeps (`mt_pardiso`)
 
@@ -94,7 +97,7 @@ way:
 2. After a threaded sweep, `thread_local.__dict__.clear()` drops the routines without `reset()`, so the
    PARDISO factorizations of every batch stay allocated.
 
-**Proposal:** first a pull request with the two bug fixes, then PARDISO per worker thread.
+**Proposal:** first the two bug fixes, then PARDISO per worker thread.
 
 ### Reduced basis in the interpolating sweep (`hybrid_sweep`)
 
@@ -144,7 +147,7 @@ numbering after the split. No speed effect.
 Faces with a finite conductivity (surface impedance with material, thin conductor) are passed to the error
 estimate like PEC faces, because the jump of tangential H across them is the physical surface current. In
 the benchmark models the meshes came out identical with and without it.
-**Proposal:** check against EMerge's thin trace changes; otherwise a small pull request.
+**Proposal:** check against EMerge's thin trace changes; otherwise a small change in EMerge.
 
 ### Robustness only (no effect unless something fails)
 
