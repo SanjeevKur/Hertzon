@@ -74,6 +74,21 @@ def classify_overlaps(project: Project, design: Design, overlaps) -> list[Overla
     return out
 
 
+def _check_touchstone(project: Project, a, add) -> None:
+    from pathlib import Path
+    from .touchstone import ComponentImpedance
+    path = Path(a.props.get("TouchstoneFile", "").strip())
+    if not str(path) or str(path) == ".":
+        add("Boundaries and Excitations", "error", f"'{a.name}': no Touchstone file given")
+        return
+    if not path.is_absolute() and project.path:
+        path = Path(project.path).parent / path
+    try:
+        ComponentImpedance(path, a.props.get("TouchstoneMount", "Series"))
+    except Exception as e:  # noqa: BLE001
+        add("Boundaries and Excitations", "error", f"'{a.name}': Touchstone file {path}: {e}")
+
+
 def validate(project: Project, design: Design, tess: dict | None = None, errors: dict | None = None,
              overlaps: list[Overlap] | None = None) -> list[Check]:
     out: list[Check] = []
@@ -137,6 +152,8 @@ def validate(project: Project, design: Design, tess: dict | None = None, errors:
             add("Boundaries and Excitations", "error", f"'{a.name}' has no assignment")
         if a.kind in schema.UNSUPPORTED_BOUNDARIES:
             add("Boundaries and Excitations", "warning", f"'{a.name}': {schema.UNSUPPORTED_BOUNDARIES[a.kind]}")
+        if a.kind == "Lumped RLC" and a.enabled and a.props.get("Model") == "Touchstone":
+            _check_touchstone(project, a, add)
         for k, v in a.props.items():
             p = next((p for p in schema.BOUNDARIES.get(a.kind, []) + schema.EXCITATIONS.get(a.kind, [])
                       if p.name == k), None)

@@ -87,7 +87,10 @@ EMerge 3 ships its solver kernels compiled; the first solve only compiles Hertzo
    **Modeler > Boolean** unite / subtract / intersect / split, arrange, duplicate, thicken, sweep, import STEP.
 3. Select faces (**F**) or objects (**O**) and assign **Boundaries** (Perfect E/H, Finite
    Conductivity, Impedance, Lumped RLC, Radiation, PML, Symmetry) and **Excitations** (Wave Port,
-   Lumped Port, Floquet Port).
+   Lumped Port, Floquet Port). The **Lumped Elements** tab inserts chip resistors, inductors and capacitors
+   (0201 to 1206 and RF series of Coilcraft and Murata) between two traces: pads, element sheet and
+   Lumped RLC boundary with an ideal value, typical ESL/ESR or a Touchstone file, also from a component
+   library of imported vendor S-parameter files ([docs/LUMPED_ELEMENTS.md](docs/LUMPED_ELEMENTS.md)).
 4. **Analysis > Add Solution Setup**: solution frequency (single / multi / broadband), maximum
    passes, maximum Delta S, matrix convergence, minimum (converged) passes, percent refinement,
    maximum refinement, lambda refinement, solver choice. **Add Frequency Sweep**: discrete or

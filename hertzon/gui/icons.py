@@ -1104,6 +1104,64 @@ def _orbit(p):
     _arrow(p, 50, 18, 56, 24, GREEN, 3.5, 10)
 
 
+def _chip_body(p, label_color=ORANGE):
+    """SMD chip on two traces: the body with its two metal terminations."""
+    p.setPen(_pen(GREY, 2))
+    p.setBrush(LGREY)
+    p.drawRect(QRectF(2, 44, 18, 8))
+    p.drawRect(QRectF(44, 44, 18, 8))
+    p.setPen(_pen(GREY.darker(130), 2))
+    p.setBrush(QColor("#d8d8d8"))
+    p.drawRect(QRectF(12, 30, 8, 18))
+    p.drawRect(QRectF(44, 30, 8, 18))
+    p.setBrush(label_color)
+    p.drawRect(QRectF(20, 30, 24, 18))
+
+
+def _resistor(p):
+    _chip_body(p, QColor("#3a3a3a"))
+    p.setPen(_pen(QColor("#f0f0f0"), 2))
+    xs = [22, 25, 28, 31, 34, 37, 40, 42]
+    pts = [(x, 39 + (4 if i % 2 else -4) * (0 < i < len(xs) - 1)) for i, x in enumerate(xs)]
+    for a, b in zip(pts, pts[1:]):
+        p.drawLine(QPointF(*a), QPointF(*b))
+
+
+def _inductor(p):
+    _chip_body(p, QColor("#f2e3c2"))
+    p.setPen(_pen(QColor("#b5651d"), 2.2))
+    p.setBrush(Qt.NoBrush)
+    for i in range(4):
+        p.drawArc(QRectF(21 + i * 5.5, 33, 7, 12), 0, 180 * 16)
+
+
+def _capacitor(p):
+    _chip_body(p, QColor("#c9a46a"))
+    p.setPen(_pen(INK_C, 2.5))
+    p.drawLine(QPointF(30, 33), QPointF(30, 45))
+    p.drawLine(QPointF(34, 33), QPointF(34, 45))
+    p.drawLine(QPointF(22, 39), QPointF(30, 39))
+    p.drawLine(QPointF(34, 39), QPointF(42, 39))
+
+
+def _chip(p):
+    _chip_body(p, QColor("#5b7fa6"))
+    p.setPen(_pen(QColor("#f0f0f0"), 1.6))
+    p.drawText(QRectF(20, 30, 24, 18), Qt.AlignCenter, "S")
+
+
+def _library(p):
+    for i, c in enumerate((QColor("#5b7fa6"), QColor("#c9952f"), QColor("#3c9a3c"))):
+        p.setPen(_pen(c.darker(150), 2))
+        p.setBrush(c)
+        p.drawRect(QRectF(8 + i * 14, 10 + (i % 2) * 4, 11, 46 - (i % 2) * 4))
+    p.setPen(_pen(GREY, 2.5))
+    p.drawLine(QPointF(4, 58), QPointF(60, 58))
+
+
+INK_C = QColor("#3b4558")
+
+
 _DRAW = {
     "cs_rel": _cs_rel, "cs_face": _cs_face, "cs_global": _cs_global, "cs_obj": lambda p: _cs_obj(p),
     "show_sel": _hf_show, "hide_sel": _hf_hide,
@@ -1137,6 +1195,7 @@ _DRAW = {
     "animate": _animate, "clear": _clear, "soldata": _soldata, "export": _export, "design": _design,
     "variables": _variables, "screenshot": _screenshot, "help": _help, "projection": _projection,
     "byname": _byname, "selall": _selall, "exit": _exit, "filter": _filter, "antenna": _antenna,
+    "resistor": _resistor, "inductor": _inductor, "capacitor": _capacitor, "chip": _chip, "library": _library,
 }
 
 

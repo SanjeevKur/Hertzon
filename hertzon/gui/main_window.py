@@ -730,6 +730,24 @@ class MainWindow(QMainWindow):
         g.large("Analyze All", "analyze", self.a_analyze)
         self._variation_group(pg)
 
+        # ---- Lumped Elements ---------------------------------------------------------------
+        pg = rb.page("Lumped Elements")
+        g = pg.group("Components")
+        g.large("Resistor", "resistor", lambda: self.insert_component("R"),
+                tip="Insert a chip resistor between the two selected traces")
+        g.large("Inductor", "inductor", lambda: self.insert_component("L"),
+                tip="Insert a chip inductor between the two selected traces")
+        g.large("Capacitor", "capacitor", lambda: self.insert_component("C"),
+                tip="Insert a chip capacitor between the two selected traces")
+        g.large("Touchstone", "chip", lambda: self.insert_component("S"),
+                tip="Insert a component measured by a Touchstone file (.s1p/.s2p) between the two selected traces")
+        g = pg.group("Library")
+        g.large("From Library", "library", self.insert_from_library,
+                tip="Pick a part of the component library and insert it between the two selected traces")
+        g.small("Import...", "import", self.component_library)
+        g = pg.group("Boundary")
+        g.large("Lumped RLC", "boundary", bnd("Lumped RLC"), tip="Lumped RLC boundary on the selected sheet")
+
         # ---- Results -----------------------------------------------------------------------
         pg = rb.page("Results")
         self._variation_group(pg)
@@ -4389,6 +4407,62 @@ class MainWindow(QMainWindow):
         a = self.des.assignment(name)
         a.enabled = not a.enabled
         self.doc.commit("boundaries", geometry=False)
+
+    # ---- lumped components (Lumped Elements tab) ---------------------------------------------
+    def _trace_points_mm(self, name: str) -> np.ndarray:
+        t = self.doc.tess.get(name)
+        if t is None:
+            raise ValueError(f"'{name}' has no geometry")
+        return np.asarray(t.points, float) * 1e3
+
+    def insert_component(self, kind: str, part=None) -> None:
+        """SMD component between the two selected traces: pads, element sheet, Lumped RLC boundary."""
+        from ..model import lumped as LU
+        from .lumped_dialogs import ComponentDialog, open_library
+        objs = self.doc.selected_objects()
+        if len(objs) != 2:
+            QMessageBox.information(self, "Insert Component", "Select the two traces (O) the component connects.")
+            return
+        try:
+            ends = LU.trace_ends(self._trace_points_mm(objs[0]), self._trace_points_mm(objs[1]))
+        except ValueError as e:
+            QMessageBox.warning(self, "Insert Component", str(e))
+            return
+        dlg = ComponentDialog(self, kind, ends.gap, open_library(), part)
+        if dlg.exec() != QDialog.Accepted:
+            return
+        v = dlg.result_values()
+        self.doc.checkpoint()
+        try:
+            b, made, warns = LU.insert_component(
+                self.doc.project, self.des, objs[0], objs[1], ends, v["pkg"], v["land"], v["kind"], v["value"],
+                v["name"], parasitics=v["parasitics"], terminations=v["terminations"], touchstone=v["touchstone"],
+                mount=v["mount"])
+        except Exception as e:  # noqa: BLE001
+            self.doc.undo()
+            QMessageBox.warning(self, "Insert Component", str(e))
+            return
+        self.doc.commit("model")
+        self.view.show_assignments([b])
+        for w in warns:
+            self.msgs.add("warning", f"{b.name}: {w}")
+        self.msgs.add("info", f"Inserted {v['pkg'].name} '{made[-1].name if made else b.name}' between "
+                              f"{objs[0]} and {objs[1]} ({', '.join(o.name for o in made)})")
+
+    def insert_from_library(self) -> None:
+        from .lumped_dialogs import LibraryDialog, open_library
+        if len(self.doc.selected_objects()) != 2:
+            QMessageBox.information(self, "Insert Component", "Select the two traces (O) the component connects.")
+            return
+        dlg = LibraryDialog(self, open_library())
+        if dlg.exec() == QDialog.Accepted and dlg.selected is not None:
+            self.insert_component("S", dlg.selected)
+
+    def component_library(self) -> None:
+        from .lumped_dialogs import LibraryDialog, open_library
+        dlg = LibraryDialog(self, open_library())
+        dlg.findChild(QDialogButtonBox).button(QDialogButtonBox.Ok).setText("Close")
+        dlg.exec()
 
     def draw_integration_line(self, name: str) -> None:
         """Start and end point of the integration line picked in the 3D view (two clicks, with snapping)."""
