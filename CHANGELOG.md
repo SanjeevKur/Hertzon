@@ -3,7 +3,7 @@
 All notable changes of each release. The release workflow copies the section of the released version into
 the GitHub release notes.
 
-## Unreleased
+## 0.1.23 (2026-10-23)
 
 ### New
 - **Draw > Arc > 3 Point / Center Point** (as in HFSS), also in the ribbon next to Polyline: a polyline of
@@ -20,8 +20,6 @@ the GitHub release notes.
 - **NATO sphere example**: radiation boundary instead of PML and Max Delta E 0.001; the sphere RCS example
   and the tutorial name the radiation boundary as well (with a plane wave the radiation boundary is used
   in any case, the incident wave enters through it; the help of *Open boundary* now says so).
-
-### Changed
 - **Overlapping solids** as in HFSS with material override: a conductor wins over a dielectric (or air) in
   the overlap whatever its size; otherwise the smaller object wins, regions stay background. Partial
   overlaps HFSS rejects (two dielectrics or two conductors of different materials) give a warning.
