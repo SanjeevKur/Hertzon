@@ -88,7 +88,7 @@ EMerge 3 ships its solver kernels compiled; the first solve only compiles Hertzo
 3. Select faces (**F**) or objects (**O**) and assign **Boundaries** (Perfect E/H, Finite
    Conductivity, Impedance, Lumped RLC, Radiation, PML, Symmetry) and **Excitations** (Wave Port,
    Lumped Port, Floquet Port). The **Lumped Elements** tab inserts chip resistors, inductors and capacitors
-   (0201 to 1206 and RF series of Coilcraft and Murata) between two traces: pads, element sheet and
+   (0201 to 1206 and RF series of Coilcraft and Murata) with a click on the board: pads, element sheet and
    Lumped RLC boundary with an ideal value, typical ESL/ESR or a Touchstone file of the vendor
    ([docs/LUMPED_ELEMENTS.md](docs/LUMPED_ELEMENTS.md)).
 4. **Analysis > Add Solution Setup**: solution frequency (single / multi / broadband), maximum
