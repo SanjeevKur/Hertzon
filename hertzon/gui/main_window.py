@@ -220,6 +220,7 @@ class MainWindow(QMainWindow):
         self.a_unite = A("&Unite", lambda: self.boolean("Unite"), "Ctrl+U")
         self.a_subtract = A("&Subtract...", lambda: self.boolean("Subtract"))
         self.a_intersect = A("&Intersect", lambda: self.boolean("Intersect"))
+        self.a_material = A("Assign Material...", self.assign_material)
         self.a_validate = A("&Validation Check...", self.validation_check)
         self.a_analyze = A("Analyze &All", self.analyze_all, "F5")
         self.a_escape = A("Cancel", self._escape, "Escape")
@@ -348,7 +349,8 @@ class MainWindow(QMainWindow):
         m.addAction("Fillet...", self.fillet)
         m.addAction("Chamfer...", self.chamfer)
         m.addSeparator()
-        m.addAction("Assign Material...", self.assign_material)
+        m.addAction(self.a_material)
+        m.setToolTipsVisible(True)
         m.addSeparator()
         sel = m.addMenu("Selection Mode")
         for a in self.a_mode.values():
@@ -679,7 +681,7 @@ class MainWindow(QMainWindow):
         self.mat_combo.addItem(self.new_material)
         self.mat_combo.currentTextChanged.connect(lambda t: setattr(self, "new_material", t or "vacuum"))
         g.widget(self.mat_combo)
-        g.small("Material", "material", self.assign_material)
+        self._mat_buttons = [g.small("Material", "material", self.assign_material)]
         self._update_sel_buttons()
 
         # ---- Model -------------------------------------------------------------------------
@@ -695,7 +697,7 @@ class MainWindow(QMainWindow):
         g.small("Bondwire", "line", lambda: self.create_by_dialog("CreateBondwire"))
         g.small("Scale", "move", lambda: self.transform("Scale"))
         g = pg.group("Material")
-        g.large("Assign Material", "material", self.assign_material)
+        self._mat_buttons.append(g.large("Assign Material", "material", self.assign_material))
         g.large("Edit Materials", "material", self.edit_materials)
         g = pg.group("Measure")
         g.large("Measure", "measure", lambda: self.start_draw("Measure"), menu=self._measure_items())
@@ -841,6 +843,7 @@ class MainWindow(QMainWindow):
 
     def _on_doc_changed(self, what: str) -> None:
         self._update_title()
+        self._update_sel_buttons()                 # a sheet may have become a solid (Thicken, Sweep)
         self._sync_overlays()
         if what in ("variables", "all", "model", "results"):
             self._follow_variation()
@@ -858,6 +861,20 @@ class MainWindow(QMainWindow):
         on = bool(self.doc.selection)
         for b in getattr(self, "_sel_buttons", []):
             b.setEnabled(on)
+        # only solids take a material: sheets get a boundary (Finite Conductivity, Impedance, ...)
+        solids, others = material_targets(self.doc, self.doc.selected_objects())
+        tip = "Assign a material to the selected solids"
+        if others and not solids:
+            tip = "Sheets and lines have no material: assign a boundary (Finite Conductivity, Impedance, ...)"
+        elif others:
+            tip += " (selected sheets and lines are skipped)"
+        a = getattr(self, "a_material", None)
+        if a is not None:
+            a.setEnabled(bool(solids))
+            a.setToolTip(tip)
+        for b in getattr(self, "_mat_buttons", []):
+            b.setEnabled(bool(solids))
+            b.setToolTip(tip)
 
     def _mat_popup(self, orig):
         def show():
@@ -2898,6 +2915,14 @@ class MainWindow(QMainWindow):
         objs = self.selected_objects(1)
         if not objs:
             return
+        objs, others = material_targets(self.doc, objs)
+        if not objs:
+            QMessageBox.information(self, "Assign Material",
+                                    "Sheets and lines have no material. Assign a boundary such as Finite "
+                                    "Conductivity or Impedance instead.")
+            return
+        if others:
+            self.msgs.add("info", f"Assign Material: skipped sheets/lines {', '.join(others)}")
         dlg = MaterialsDialog(self.doc, self, self.des.obj(objs[0]).material)
         if dlg.exec() != QDialog.Accepted or not dlg.selected():
             return
@@ -4657,7 +4682,8 @@ class MainWindow(QMainWindow):
         mode = self.doc.selection_mode
         if sel:
             if mode == "object":
-                m.addAction("Assign Material...", self.assign_material)
+                m.addAction(self.a_material)
+                m.setToolTipsVisible(True)
             b = m.addMenu("Assign Boundary")
             for k in schema.BOUNDARIES:
                 b.addAction(k, lambda _=False, k=k: self.assign("boundary", k))
@@ -4711,7 +4737,8 @@ class MainWindow(QMainWindow):
                 self.set_mode("object")
                 self.doc.select([Pick(name)])
             m.addAction("Properties...", lambda: self.edit_object_dialog(name))
-            m.addAction("Assign Material...", self.assign_material)
+            m.addAction(self.a_material)
+            m.setToolTipsVisible(True)
             m.addAction("Hide" if self.des.obj(name).visible else "Show",
                         lambda: self.set_visible(not self.des.obj(name).visible))
             m.addAction("Copy", self.copy_objects)
@@ -4862,6 +4889,19 @@ class MainWindow(QMainWindow):
         lay.addWidget(tb)
         dlg.resize(900, 700)
         dlg.exec()
+
+
+def material_targets(doc, names: list[str]) -> tuple[list[str], list[str]]:
+    """Split objects into solids, which take a material, and sheets/lines, which do not (a material on a
+    sheet is not used by the solve; old projects may still carry one)."""
+    solids, others = [], []
+    for n in names:
+        if not doc.design.has_obj(n):
+            continue
+        t = doc.tess.get(n)
+        dim = t.dim if t is not None else doc.design.obj(n).dim
+        (solids if dim == 3 else others).append(n)
+    return solids, others
 
 
 def _attach_unit(text: str, unit: str) -> str:

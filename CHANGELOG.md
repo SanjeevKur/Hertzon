@@ -6,6 +6,10 @@ the GitHub release notes.
 ## Unreleased
 
 ### Changed
+- **Assign Material only for solids**: greyed out in the ribbon, the Modeler menu and the context menus
+  when only sheets or lines are selected (they get a boundary such as Finite Conductivity or Impedance);
+  with solids and sheets selected the material goes to the solids. A material stored on a sheet by an
+  older project is kept and, as before, not used by the solve.
 - **EMerge 3.0.0b5 plus the fixes on its `hertzon` branch** (commit `2811e9a`; was 3.0.0a25, as advised in
   #25). Hertzon now installs EMerge from wheels built from a pinned commit, so solver fixes arrive without
   waiting for a release. Thin conductors with thickness (two-sided Finite Conductivity) are now solved
