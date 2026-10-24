@@ -804,3 +804,34 @@ def test_box_selection_takes_only_what_lies_completely_inside():
     assert v.box_picks((-1, -1), (11, 1)) == [Pick("A", 0)]          # the bottom edge only
     v.doc.selection_mode = "vertex"
     assert v.box_picks((5, -1), (11, 11)) == [Pick("A", 1), Pick("A", 2)]
+
+
+def test_grid_and_triad_stay_at_the_origin_of_a_far_model():
+    """A model far from the working CS origin: the grid still reaches the origin (with a spacing that keeps the
+    line count bounded), and the triad at the origin stays inside the camera clipping range."""
+    import types
+    import numpy as np
+    from hertzon.gui.viewer import ModelerView, WorkingCSActor
+    from vtkmodules.vtkRenderingCore import vtkCamera
+    box = (0.100, 0.050, 0.0, 0.103, 0.052, 0.0005)          # 3 mm part 100 mm away from the origin
+    v = types.SimpleNamespace(view_bbox=lambda: box, wcs=(np.zeros(3), np.eye(3)), grid_spacing=None,
+                              GRID_MAX_LINES=ModelerView.GRID_MAX_LINES)
+    v._grid_bounds = lambda: ModelerView._grid_bounds(v)
+    lo, hi = np.array(v._grid_bounds()[:3]), np.array(v._grid_bounds()[3:])
+    assert (lo <= 0).all() and (hi >= 0).all() and hi[0] == pytest.approx(0.103)
+    s = ModelerView.auto_spacing(v)
+    assert 0.103 / s <= ModelerView.GRID_MAX_LINES and s == pytest.approx(1e-3)
+    # an offset working CS at the part: the grid is taken in that frame and still holds its origin
+    v.wcs = (np.array([0.1, 0.05, 0.0]), np.eye(3))
+    g = v._grid_bounds()
+    assert g[0] == pytest.approx(0.0) and g[3] == pytest.approx(0.003)
+    # the camera looks at the part only: the clipping range is widened to take in the triad at the origin
+    cam = vtkCamera()
+    cam.SetFocalPoint(0.1015, 0.051, 0.0)
+    cam.SetPosition(0.1015, 0.051 + 0.01, 0.01)
+    cam.SetClippingRange(0.012, 0.016)
+    t = types.SimpleNamespace(origin=np.zeros(3))
+    WorkingCSActor._keep_in_depth(t, cam, 0.001)
+    near, far = cam.GetClippingRange()
+    d = float(np.dot(-np.array(cam.GetPosition()), np.array(cam.GetDirectionOfProjection())))
+    assert d > 0.016 and near <= d - 0.001 and far >= d + 0.001
