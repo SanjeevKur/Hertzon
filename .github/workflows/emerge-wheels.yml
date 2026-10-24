@@ -1,0 +1,114 @@
+# Builds EMerge wheels from the commit in packaging/emerge-commit and publishes them as the pre-release
+# emerge-<short sha> of this repository. pyproject.toml installs EMerge from these wheels, so Hertzon can
+# use any commit of EMerge (normally of its hertzon branch) without waiting for a release on PyPI, and
+# neither the installer nor a developer needs a Rust compiler.
+#
+# Runs when packaging/emerge-commit changes on any branch, or by hand from the Actions tab. A release that
+# already exists is left as it is. After a new commit, copy the wheel file names from the release into
+# the emerge entries of pyproject.toml.
+name: EMerge wheels
+
+on:
+  push:
+    paths: ["packaging/emerge-commit"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: emerge-wheels-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    outputs:
+      sha: ${{ steps.read.outputs.sha }}
+      tag: ${{ steps.read.outputs.tag }}
+      build: ${{ steps.read.outputs.build }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: read
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          SHA=$(grep -v '^#' packaging/emerge-commit | tr -d '[:space:]')
+          TAG="emerge-${SHA::7}"
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            echo "$TAG exists, nothing to build"
+            echo "build=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "build=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  wheels:
+    needs: check
+    if: needs.check.outputs.build == 'true'
+    name: Wheel ${{ matrix.os }} ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - { os: ubuntu-latest, target: x86_64 }
+          - { os: windows-latest, target: x64 }
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: FennisRobert/EMerge
+          ref: ${{ needs.check.outputs.sha }}
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Version <EMerge version>.post<commit date>
+        shell: bash
+        run: |
+          BASE=$(python -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["project"]["version"])')
+          VER="$BASE.post$(TZ=UTC git log -1 --format=%cd --date=format-local:%Y%m%d%H%M)"
+          echo "EMerge $BASE at ${{ needs.check.outputs.sha }} -> $VER"
+          for f in pyproject.toml src/emerge/__init__.py src/emerge/core.py; do
+            [ -f "$f" ] && sed -i "0,/\"$BASE\"/s//\"$VER\"/" "$f"
+          done
+          grep -n "$VER" pyproject.toml src/emerge/__init__.py
+      - name: Build abi3 wheel
+        uses: PyO3/maturin-action@v1
+        with:
+          target: ${{ matrix.target }}
+          args: --release --out dist
+          manylinux: auto
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheel-${{ matrix.os }}-${{ matrix.target }}
+          path: dist/*.whl
+
+  publish:
+    needs: [check, wheels]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Pre-release ${{ needs.check.outputs.tag }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ needs.check.outputs.sha }}
+          TAG: ${{ needs.check.outputs.tag }}
+        run: |
+          {
+            echo "EMerge wheels built from [FennisRobert/EMerge@${SHA::7}](https://github.com/FennisRobert/EMerge/commit/$SHA)"
+            echo "for Hertzon. EMerge is GPL-2.0-or-later; its source is that commit."
+            echo
+            echo "pyproject.toml entries:"
+            echo
+            for w in dist/*.whl; do
+              echo "    https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG/$(basename "$w")"
+            done
+          } > notes.md
+          cat notes.md
+          gh release create "$TAG" dist/*.whl --repo "$GITHUB_REPOSITORY" --prerelease --latest=false \
+            --target "$GITHUB_SHA" --title "EMerge ${SHA::7} wheels" --notes-file notes.md

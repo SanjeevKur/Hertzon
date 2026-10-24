@@ -109,7 +109,9 @@ GEOMETRY: dict[str, list[Prop]] = {
     "Split": [P("Plane", "choice", "XY", choices=("XY", "YZ", "XZ", "Custom")),
               P("Base", "point", "0,0,0", visible_if=("Plane", "Custom")),
               P("Normal", "vector", "0,0,1", visible_if=("Plane", "Custom")),
-              P("Keep", "choice", "Positive", choices=("Positive", "Negative"))],
+              P("Keep", "choice", "Positive", choices=("Positive", "Negative")),
+              P("CoordinateSystem", "choice", "Global", label="Coordinate system", choices=("Global",),
+                help="The plane, Base and Normal are given in this coordinate system")],
     "SweepAlongPath": [P("Tools", "objects", "", label="Path"),
                        P("Trihedron", "choice", "DiscreteTrihedron",
                          choices=("DiscreteTrihedron", "CorrectedFrenet", "Fixed", "Frenet"))],
@@ -293,7 +295,7 @@ SETUP: list[Prop] = [
     P("RefinementRatio", "float", "0.6", label="Element size ratio of refined elements", tab="Advanced"),
     P("GrowthRate", "float", "1.6", label="Mesh growth rate", tab="Advanced"),
     P("EnforceRefinementPercent", "bool", "True", label="Enforce refinement percentage", tab="Advanced"),
-    P("RefinementMethod", "choice", "Local (Delaunay)", label="Mesh refinement", tab="Advanced", choices=("Local (Delaunay)", "Remesh (slow)", "Remesh (stable, experimental)")),
+    P("RefinementMethod", "choice", "AURA (EMerge)", label="Mesh refinement", tab="Advanced", choices=("AURA (EMerge)", "Local (Delaunay)", "Remesh (slow)", "Remesh (stable, experimental)")),
     P("SaveFields", "bool", "True", label="Save fields at solution frequency", tab="Advanced"),
     P("Threads", "int", "0", label="Solver cores (0 = Tools > Options)", tab="Advanced"),
 ]
@@ -414,7 +416,8 @@ RECT_SIZES = {"Z": ("XSize", "YSize"), "X": ("YSize", "ZSize"), "Y": ("ZSize", "
 # "Zone (experimental)" (Mmg zone re-mesh) was dropped and fell back to the slow full re-mesh. It comes
 # first so that the reverse map (solution keys) gives "Local (Delaunay, experimental)" for Local.
 RENAMED_VALUES = {"RefinementMethod": {"Zone (experimental)": "Local (Delaunay)",
-                                       "Local (Delaunay, experimental)": "Local (Delaunay)", "Remesh": "Remesh (slow)"}}
+                                       "Local (Delaunay, experimental)": "Local (Delaunay)", "Remesh": "Remesh (slow)",
+                                       "AURA (EMerge, experimental)": "AURA (EMerge)"}}
 
 
 def upgrade_values(props: dict) -> dict:

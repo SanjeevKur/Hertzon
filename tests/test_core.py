@@ -140,7 +140,7 @@ def test_refinement_method_renamed():
     a.props["RefinementMethod"] = "Local (Delaunay, experimental)"
     b.props["RefinementMethod"] = "Local (Delaunay)"
     assert setup_key(a) == setup_key(b)
-    assert schema.defaults(schema.SETUP)["RefinementMethod"] == "Local (Delaunay)"
+    assert schema.defaults(schema.SETUP)["RefinementMethod"] == "AURA (EMerge)"
 
 
 def test_far_field_follows_edit_sources(tmp_path):
@@ -176,20 +176,6 @@ def test_far_field_follows_edit_sources(tmp_path):
         {**ff, "E_0_9": a[0] * E1 + a[1] * E2, "Prad_0_9": np.array([1.0])}, 9, 0)["rETotal"]) ** 2))
 
 
-def test_parallel_error_kernel_source():
-    """The parallel error estimate is generated from EMerge's kernel: the tet loop must become a prange
-    without exits (else numba runs it serially), everything else unchanged."""
-    from hertzon.solver import fast_error
-    from hertzon.solver.emerge_compat import EMERGE3
-    if EMERGE3:
-        pytest.skip("EMerge 3 has its own compiled error estimate")
-    src = fast_error._source()
-    assert src is not None
-    assert "for itet in prange(N_TETS):" in src and "parallel=True" in src
-    assert "adj_tets = [" not in src and "raise ValueError" not in src
-    compile(src, "error_estimate.py", "exec")
-
-
 def test_edit_sources_apply_keeps_dialog_open():
     import os
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
@@ -209,16 +195,11 @@ def test_edit_sources_apply_keeps_dialog_open():
 
 
 def test_fast_assembly_patches_and_sparse_helpers():
-    """The faster assembly replaces EMerge's code by source patterns; they must still match, and the
-    sparse helpers must give scipy's results."""
+    """The faster solve replaces EMerge's code by a source pattern; it must still match, and the sparse
+    helpers must give scipy's results."""
     import scipy.sparse as sp
     from hertzon.solver import fast_assembly as FA
-    from hertzon.solver.emerge_compat import EMERGE3
-    from emerge._emerge.physics.microwave.assembly import assembler
     from emerge._emerge import solver
-    if not EMERGE3:             # EMerge 3 assembles in its compiled library: only the solve is patched
-        n = sum(FA._patched(assembler.Assembler.assemble_freq_matrix, FA._ASSEMBLER_SUBS)[1:])
-        assert n == 5
     assert FA._patched(solver.SolveRoutine.solve, [(FA.re.compile(r"Asel = A\[:, solve_ids\]\[solve_ids, :\]"),
                                                     "x")])[1] == 1
     rng = np.random.default_rng(0)
@@ -233,7 +214,6 @@ def test_fast_assembly_patches_and_sparse_helpers():
     U = FA.upper_symmetric(A)
     assert U is not None and abs(U - sp.triu(A)).max() == 0
     assert FA.upper_symmetric((A + sp.random(300, 300, density=0.01, random_state=3)).tocsc()) is None
-    assert np.array_equal(FA.free_ids(10, {3, 7, 0}), [1, 2, 4, 5, 6, 8, 9])
 
 
 def test_curved_kernels_match_emerge_element_matrices():
@@ -295,22 +275,6 @@ def test_emerge_material_library():
     disp = [m for m in lib.values() if m.dispersion == EMERGE_DISPERSION]
     for m in disp:
         assert emerge_object(m.emsutil_key) is not None
-
-
-def test_thin_conductor_keeps_the_assembled_dof_numbering():
-    """EMerge assembles with get_tet_to_field() (the numbering before the thin conductor split); plots, far
-    fields and the error estimate read tet_to_field, which the patch keeps equal to it."""
-    import inspect
-    from hertzon.solver import emerge_patches as EP
-    from emerge._emerge.elements.nedelec2 import Nedelec2
-    assert "_tet_to_field_orig" in inspect.getsource(Nedelec2.get_tet_to_field)
-    EP.apply_thin_conductor()
-    b = object.__new__(Nedelec2)
-    b._partitioned = True                     # EMerge's own split returns at once
-    b._tet_to_field_orig = np.arange(12).reshape(3, 4)
-    b.tet_to_field = b._tet_to_field_orig + 100
-    Nedelec2.partition_dof(b, [[1]])
-    assert np.array_equal(b.tet_to_field, b._tet_to_field_orig) and b.get_tet_to_field() is b._tet_to_field_orig
 
 
 def test_finite_conductivity_thickness_without_two_sided():
@@ -734,3 +698,37 @@ def test_maximum_delta_energy_default():
     from hertzon.model import schema
     p = next(p for p in schema.SETUP if p.name == "MaximumDeltaEnergy")
     assert p.default == "0.001"
+
+
+def _split_box(cs=None, **split):
+    """Box 0..4 x 0..2 x 50..52 (mm), split; returns the bounding box of the kept part in mm."""
+    p = Project()
+    d = p.designs[0]
+    d.add_object("CreateBox", Position="0,0,50", XSize="4", YSize="2", ZSize="2")
+    if cs is not None:
+        d.coord_systems.append(cs)
+        split["CoordinateSystem"] = cs.name
+    d.obj("Box1").history.append(Command.new("Split", **split))
+    K.ensure_gmsh("test_split")
+    ctx = K.build_design(d, d.evaluator(p))
+    assert "Box1" not in ctx.errors, ctx.errors.get("Box1")
+    return np.asarray(K._bbox(ctx.built["Box1"])) * 1e3
+
+
+def test_split_in_object_and_face_coordinate_systems():
+    from hertzon.model.design import CoordSys
+    # global plane far from the object (the kept half space must still reach it)
+    assert _split_box(Plane="XY", Keep="Positive") == pytest.approx([0, 0, 50, 4, 2, 52], abs=1e-3)
+    # object CS at the box centre: XY cuts it in half along z
+    ocs = CoordSys("ObjectCS1", "Object", "Global")
+    ocs.props.update(Origin="2,1,51", Object="Box1")
+    assert _split_box(ocs, Plane="XY", Keep="Positive") == pytest.approx([0, 0, 51, 4, 2, 52], abs=1e-3)
+    assert _split_box(ocs, Plane="YZ", Keep="Negative") == pytest.approx([0, 0, 50, 2, 2, 52], abs=1e-3)
+    # face CS on the side face x=4 (local z = global +x), moved in by 1: XY is the plane x=3
+    fcs = CoordSys("FaceCS1", "Face", "Global")
+    fcs.props.update(Mode="Axis/Position", Origin="3,1,51", XAxis="0,1,0", YPoint="0,0,1", Face="Box1:1")
+    assert _split_box(fcs, Plane="XY", Keep="Positive") == pytest.approx([3, 0, 50, 4, 2, 52], abs=1e-3)
+    assert _split_box(fcs, Plane="XY", Keep="Negative") == pytest.approx([0, 0, 50, 3, 2, 52], abs=1e-3)
+    # custom plane: Base and Normal are local to the CS (local x = global y)
+    assert _split_box(fcs, Plane="Custom", Base="0.5,0,0", Normal="1,0,0", Keep="Positive") == \
+        pytest.approx([0, 1.5, 50, 4, 2, 52], abs=1e-3)

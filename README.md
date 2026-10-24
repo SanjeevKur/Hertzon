@@ -73,6 +73,9 @@ pip install -e .                                        # installs emerge, PySid
 python -m hertzon examples/WaveguidePost.hzn             # or just: hertzon
 ```
 
+EMerge comes from a pinned commit (see docs/EMERGE_CHANGES.md): prebuilt wheels for Windows x64 and Linux
+x86_64; on other platforms pip builds it from source, which needs a Rust compiler.
+
 EMerge 3 ships its solver kernels compiled; the first solve only compiles Hertzon's own numba kernels
 (curved elements, refinement), which takes about a minute once; later solves start immediately. On Linux without a desktop, run under `xvfb-run`.
 
@@ -88,7 +91,7 @@ EMerge 3 ships its solver kernels compiled; the first solve only compiles Hertzo
 3. Select faces (**F**) or objects (**O**) and assign **Boundaries** (Perfect E/H, Finite
    Conductivity, Impedance, Lumped RLC, Radiation, PML, Symmetry) and **Excitations** (Wave Port,
    Lumped Port, Floquet Port). The **Lumped Elements** tab inserts chip resistors, inductors and capacitors
-   (0201 to 1206 and RF series of Coilcraft and Murata) between two traces: pads, element sheet and
+   (0201 to 1206 and RF series of Coilcraft and Murata) with a click on the board: pads, element sheet and
    Lumped RLC boundary with an ideal value, typical ESL/ESR or a Touchstone file of the vendor
    ([docs/LUMPED_ELEMENTS.md](docs/LUMPED_ELEMENTS.md)).
 4. **Analysis > Add Solution Setup**: solution frequency (single / multi / broadband), maximum

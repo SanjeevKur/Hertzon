@@ -973,7 +973,6 @@ class Bridge:
             self._pw_fields = None
             pec = [int(t) for bc in m.mw.bc.oftype(PEC) for t in m.mesh.get_triangles(bc.tags)]
             pec = _with_conductor_sheets(m, pec)
-            _parallel_error_estimate(step)
             errors, lengths = [], None
             for fl in fields:
                 fl.set_field_vector()
@@ -988,9 +987,11 @@ class Bridge:
             method = str(p.get("RefinementMethod", ""))
             snap = (np.asarray(m.mesh.nodes), np.asarray(m.mesh.tets), m.mesh.n_tets)
             g = _refine_delaunay(m, error, lengths, pct, growth, step, self.out) if method.startswith("Local") else None
+            if g is None and method.startswith("AURA"):
+                g = _refine_aura(m, error, pct, step)
             if g is not None:
                 grow = g
-            elif method.startswith("Local"):        # failed local pass: keep the refinement so far
+            elif method.startswith("Local") or method.startswith("AURA"):  # failed local pass: keep the refinement so far
                 grow = _refine_stable(m, error, lengths, pct, growth, step, snap)
             elif _refine_local(m, p, coords, sizes, ratio, growth, pct, error, lengths):
                 grow = (m.mesh.n_tets / last_n - 1) * 100
@@ -1653,9 +1654,8 @@ def adaptive_loop(m, fa: list[float], p: dict, out: Path, on_pass=None, key: str
         # ---- refine ----------------------------------------------------------------------------
         emit("progress", value=12 + 40 * (step - 0.5) / maxp,
              text=f"Pass {step}: estimating solution error" + (" (first run compiles solver kernels, "
-                                                                 "this can take a few minutes)" if _first_run() or not _error_kernel_cached() else ""))
+                                                                 "this can take a few minutes)" if _first_run() else ""))
         info(f"Pass {step}: estimating solution error and refining the mesh")
-        _parallel_error_estimate(step)
         t_err = time.time()
         errors = np.empty((m.mesh.n_tets, len(fa)))
         lengths = None
@@ -1665,7 +1665,6 @@ def adaptive_loop(m, fa: list[float], p: dict, out: Path, on_pass=None, key: str
             errors[:, i] = err
         error = errors.max(axis=1)
         info(f"Pass {step}: error estimate {time.time() - t_err:.2f} s ({m.mesh.n_tets} tetrahedra)")
-        _log_error_threads()
         emit("progress", value=12 + 40 * (step - 0.4) / maxp, text=f"Pass {step}: refining the mesh")
         t_ref = time.time()
         ids = select_refinement_indices(error, incl)[::-1]
@@ -1676,9 +1675,11 @@ def adaptive_loop(m, fa: list[float], p: dict, out: Path, on_pass=None, key: str
         # the current mesh, kept for the stable fallback: a failed local pass may already have reset the model
         snap = (np.asarray(m.mesh.nodes), np.asarray(m.mesh.tets), m.mesh.n_tets)
         grow = _refine_delaunay(m, error, lengths, pct, growth, step, out) if method.startswith("Local") else None
+        if grow is None and method.startswith("AURA"):
+            grow = _refine_aura(m, error, pct, step)
         if grow is not None:
             pass
-        elif method.startswith("Remesh (stable") or method.startswith("Local"):
+        elif method.startswith("Remesh (stable") or method.startswith("Local") or method.startswith("AURA"):
             grow = _refine_stable(m, error, lengths, pct, growth, step, snap)
         else:
             # keep the ratio that hit the target in the previous pass (good first guess)
@@ -1906,6 +1907,36 @@ def _refine_delaunay(m, error, lengths, pct: float, growth: float, step: int, ou
         return None
 
 
+def _refine_aura(m, error, pct: float, step: int):
+    """AURA (EMerge): EMerge's own local refinement, longest-edge bisection of the worst tets followed by
+    flips and smoothing. Every old node stays. Returns the growth in percent, None when it failed (the
+    caller then re-meshes with the stable size field)."""
+    try:
+        from emerge._emerge.aura import BrepSnapshot
+        from emerge._emerge.aura.brep import snapshot_gmsh
+        from emerge._emerge.aura.emerge_tools import refine_mesh_step
+        if getattr(m, "_aura_brep", None) is None:
+            try:
+                m._aura_brep = snapshot_gmsh(scale=1 / m._geo_scale_factor)
+            except Exception as e:  # noqa: BLE001
+                warn(f"AURA: no geometry snapshot ({e}); new boundary nodes stay on the facets")
+                m._aura_brep = BrepSnapshot.empty()
+        periodic = [(bc.face1.tags, bc.face2.tags, np.asarray(bc.dv)) for bc in m.mesher._get_periodic_bcs()]
+        t0 = time.time()
+        new, rep = refine_mesh_step(m.mesh, np.asarray(error, float), brep=m._aura_brep, growth=pct / 100.0,
+                                    periodic=periodic)
+        n0 = m.mesh.n_tets
+        m._install_refined_mesh(new)
+        m._local_mesh = None
+        grow = (m.mesh.n_tets / n0 - 1) * 100
+        info(f"Pass {step}: AURA refinement -> {m.mesh.n_tets} tetrahedra (+{grow:.1f}%), "
+             f"min. quality {rep['q_min']:.3f}, {time.time() - t0:.2f} s")
+        return grow
+    except Exception as e:  # noqa: BLE001
+        warn(f"AURA refinement failed ({e}); re-meshing the model instead")
+        return None
+
+
 MMG_SHRINK = 0.5           # Mmg: refined elements are halved (a quarter made the passes slower overall)
 
 
@@ -2009,16 +2040,7 @@ def excite(fld, port: dict) -> None:
 
 def _interp_known_tets(fld, x, y, z, mapping) -> None:
     """fld.interpolate at points whose containing tetrahedron is known (skips the point location search)."""
-    basis = fld.basis
-    orig = basis.interpolate_index
-    try:
-        basis.interpolate_index = lambda *a, **k: mapping.astype(orig(x[:1], y[:1], z[:1]).dtype, copy=False)
-        fld.interpolate(x, y, z, usenan=False)
-    finally:
-        try:
-            del basis.interpolate_index
-        except AttributeError:
-            basis.interpolate_index = orig
+    fld.interpolate(x, y, z, usenan=False, mapping=mapping)
 
 
 def _peak_rss() -> float:
@@ -2143,6 +2165,9 @@ def _with_conductor_sheets(m, pec_tris):
     a finite conductivity (surface impedance / thin conductor). Across a conductor sheet the tangential
     H jumps by the surface current, which is physical and no discretization error; there, as on PEC, the
     residual is the tangential E on the face."""
+    from .emerge_patches import native
+    if native("sheet_error"):
+        return pec_tris
     try:
         from emerge._emerge.physics.microwave.bcs.boundary_conditions import SurfaceImpedance, ThinConductor
         tags = []
@@ -2156,36 +2181,6 @@ def _with_conductor_sheets(m, pec_tris):
     except Exception as e:  # noqa: BLE001
         warn(f"Conductor faces not excluded from the error estimate ({e})")
         return pec_tris
-
-
-def _parallel_error_estimate(step: int) -> None:
-    """Multi-threaded error estimate (hertzon.solver.fast_error); compiled once per machine and EMerge
-    version, EMerge's serial kernel otherwise."""
-    from . import fast_error
-    if "active" in fast_error._STATE:
-        return
-    if not fast_error.cached():
-        info(f"Pass {step}: compiling the parallel error estimate (once per machine, about 1-2 minutes)")
-    ok = fast_error._STATE["active"] = fast_error.apply()
-    if not ok:
-        info("Parallel error estimate not available; using EMerge's serial one")
-
-
-def _log_error_threads() -> None:
-    from . import fast_error
-    tr = fast_error._STATE.pop("threads", None)
-    if tr:
-        best, trials = tr
-        info("Error estimate threads: " + ", ".join(f"{n}: {t * 1e5:.2f} s/100k tets" for n, t in trials.items())
-             + f" -> using {best}")
-
-
-def _error_kernel_cached() -> bool:
-    try:
-        from . import fast_error
-        return fast_error.cached()
-    except Exception:  # noqa: BLE001
-        return True
 
 
 def kernel_tag() -> str:
