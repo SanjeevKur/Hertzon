@@ -22,7 +22,7 @@ from ..model.design import (Project, Design, Command, Assignment, FaceRef, Setup
 from ..model.expr import LENGTH_UNITS
 from ..model.materials import is_conductor, normalize_color
 from ..solver.results import results_dir, ResultStore
-from .doc import Document, Pick, result_dir
+from .doc import Document, Pick, material_targets, result_dir
 from .viewer import ModelerView, PLANE_NORMAL
 from .trees import ProjectTree, ModelTree
 from .panels import PropertiesPanel, MessageManager, ProgressPanel, SolutionDataDialog, rename_object
@@ -4889,19 +4889,6 @@ class MainWindow(QMainWindow):
         lay.addWidget(tb)
         dlg.resize(900, 700)
         dlg.exec()
-
-
-def material_targets(doc, names: list[str]) -> tuple[list[str], list[str]]:
-    """Split objects into solids, which take a material, and sheets/lines, which do not (a material on a
-    sheet is not used by the solve; old projects may still carry one)."""
-    solids, others = [], []
-    for n in names:
-        if not doc.design.has_obj(n):
-            continue
-        t = doc.tess.get(n)
-        dim = t.dim if t is not None else doc.design.obj(n).dim
-        (solids if dim == 3 else others).append(n)
-    return solids, others
 
 
 def _attach_unit(text: str, unit: str) -> str:

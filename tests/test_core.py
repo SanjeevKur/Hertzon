@@ -736,7 +736,8 @@ def test_split_in_object_and_face_coordinate_systems():
 
 def test_assign_material_only_for_solids(monkeypatch):
     """Sheets carry no material (they get boundaries such as Finite Conductivity): Assign Material is greyed
-    out for a sheet selection, and a mixed selection assigns the material to the solids only."""
+    out for a sheet selection, a mixed selection assigns the material to the solids only, and the object
+    properties of a sheet have no Material row."""
     import os
     import types
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
@@ -752,6 +753,9 @@ def test_assign_material_only_for_solids(monkeypatch):
     doc = Document(p)
     doc.rebuild()
     assert MW.material_targets(doc, ["Sub", "Trace"]) == (["Sub"], ["Trace"])
+    from hertzon.gui.doc import object_attributes
+    assert "Material" in [a.name for a in object_attributes(doc, "Sub")]
+    assert "Material" not in [a.name for a in object_attributes(doc, "Trace")]   # properties panel and dialog
 
     infos, logs = [], []
     win = types.SimpleNamespace(doc=doc, des=d, a_material=QAction("Assign Material..."),
