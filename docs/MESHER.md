@@ -36,12 +36,13 @@ Setup > Advanced > **Mesh refinement** (`RefinementMethod`):
 
 | Method | What it does | Meshes nested? |
 |---|---|---|
-| **Local (Delaunay)** (default) | hzmesh refines the current mesh around the worst elements | yes, old nodes never move |
+| Local (Delaunay) | hzmesh refines the current mesh around the worst elements | yes, old nodes never move |
 | Remesh (slow) | gmsh meshes the whole model again with EMerge's size field | no |
 | Remesh (stable, experimental) | gmsh re-meshes, but the size field holds every current node's size and only shrinks it at the worst elements | nearly |
-| AURA (EMerge, experimental) | EMerge's local refinement: longest-edge bisection of the worst elements, then flips and smoothing | yes, old nodes never move |
+| **AURA (EMerge)** (default) | EMerge's local refinement: longest-edge bisection of the worst elements, then flips and smoothing | yes, old nodes never move |
 
-If hzmesh is not available or a pass fails, Hertzon re-meshes that pass with gmsh and writes a
+AURA is the default since it converged faster or more accurately than hzmesh on the benchmark models
+(see below). If hzmesh or AURA is not available or a pass fails, Hertzon re-meshes that pass with gmsh and writes a
 warning to the log. A comparison of Local (Delaunay) and AURA on the benchmark models is in
 [examples/benchmark/mesher](../examples/benchmark/mesher/README.md). Older project values (`Local (Delaunay, experimental)`, `Zone (experimental)`,
 `Remesh`) are mapped to the current names on load (`Hertzon/model/schema.py`).

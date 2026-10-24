@@ -987,9 +987,11 @@ class Bridge:
             method = str(p.get("RefinementMethod", ""))
             snap = (np.asarray(m.mesh.nodes), np.asarray(m.mesh.tets), m.mesh.n_tets)
             g = _refine_delaunay(m, error, lengths, pct, growth, step, self.out) if method.startswith("Local") else None
+            if g is None and method.startswith("AURA"):
+                g = _refine_aura(m, error, pct, step)
             if g is not None:
                 grow = g
-            elif method.startswith("Local"):        # failed local pass: keep the refinement so far
+            elif method.startswith("Local") or method.startswith("AURA"):  # failed local pass: keep the refinement so far
                 grow = _refine_stable(m, error, lengths, pct, growth, step, snap)
             elif _refine_local(m, p, coords, sizes, ratio, growth, pct, error, lengths):
                 grow = (m.mesh.n_tets / last_n - 1) * 100
@@ -1677,7 +1679,7 @@ def adaptive_loop(m, fa: list[float], p: dict, out: Path, on_pass=None, key: str
             grow = _refine_aura(m, error, pct, step)
         if grow is not None:
             pass
-        elif method.startswith("Remesh (stable") or method.startswith("Local"):
+        elif method.startswith("Remesh (stable") or method.startswith("Local") or method.startswith("AURA"):
             grow = _refine_stable(m, error, lengths, pct, growth, step, snap)
         else:
             # keep the ratio that hit the target in the previous pass (good first guess)

@@ -140,7 +140,7 @@ def test_refinement_method_renamed():
     a.props["RefinementMethod"] = "Local (Delaunay, experimental)"
     b.props["RefinementMethod"] = "Local (Delaunay)"
     assert setup_key(a) == setup_key(b)
-    assert schema.defaults(schema.SETUP)["RefinementMethod"] == "Local (Delaunay)"
+    assert schema.defaults(schema.SETUP)["RefinementMethod"] == "AURA (EMerge)"
 
 
 def test_far_field_follows_edit_sources(tmp_path):

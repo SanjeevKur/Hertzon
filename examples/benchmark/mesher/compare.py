@@ -20,7 +20,7 @@ ROOT = HERE.parents[2]
 BENCH = ROOT / "examples" / "benchmark"
 PROFRUN = BENCH / "tools" / "profrun.py"
 
-METHODS = {"local": "Local (Delaunay)", "aura": "AURA (EMerge, experimental)"}
+METHODS = {"local": "Local (Delaunay)", "aura": "AURA (EMerge)"}
 
 # name: project, design, setup, reference S11 (None: no exact reference), setup overrides
 CASES = {
