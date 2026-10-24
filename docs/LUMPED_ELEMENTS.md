@@ -40,7 +40,7 @@ Hertzon adds, in a group named after the component (`C1`, `L1`, `R1`, `U1` ...):
 - the design variables **`C1_x`, `C1_y`, `C1_z`**: the centre of the component. Pads, element, terminations
   and integration line are defined relative to them, so changing them moves the whole component (also in
   a parametric sweep or an optimization). Arrange > Move / Rotate / Mirror of the whole group also works:
-  the integration line goes with it (a move keeps the variables, the other transforms write numbers).
+  the integration line is given in the coordinates of the element sheet and follows it.
 
 The component is an object group: a click on a pad or the element in the 3D view selects all its parts, and
 it is listed under **Groups** in the model tree. Edit > Ungroup (Ctrl+Shift+G) dissolves the group to edit a

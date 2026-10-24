@@ -655,7 +655,8 @@ class Bridge:
             hi = np.maximum(hi, b[3:])
             area += gmsh.model.occ.getMass(2, t)
         if line:
-            pts = ev.points(line)
+            from ..model.objframe import global_points
+            pts = global_points(self.design, a, "IntegrationLine", ev)    # follows its moved object
             v = np.asarray(pts[1]) - np.asarray(pts[0])
             h = float(np.linalg.norm(v))
             d = v / h

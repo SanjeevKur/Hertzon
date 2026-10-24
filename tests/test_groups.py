@@ -75,30 +75,26 @@ def test_lumped_component_is_a_group():
 
 
 def test_integration_line_follows_its_objects():
+    """Move / Rotate / Mirror of the whole group: the line follows its element sheet (model.objframe), the
+    stored text with the part's variables stays as it is."""
+    from hertzon.model import objframe as OF
+    from hertzon.model.design import Command
     p = Project("Free")
     d = p.designs[0]
     pkg = LU.PACKAGES["0603"]
     b, made, _ = LU.insert_component(p, d, None, None, None, pkg, LU.land_pattern(pkg), "C", "1pF",
                                      place=LU.Placement((5.0, 7.0, 0.8), axis=1, normal=2))
     names = G.members(d, "C1")
-    ev = d.evaluator(p)
-    before = np.asarray(ev.points(b.props["IntegrationLine"])) * 1e3
-    # a move keeps the variables of the placed part
-    assert G.follow_lines(d, ev, names, "Move", {"Vector": "1,-2,0"}) == ["C1_RLC"]
-    assert b.props["IntegrationLine"] == "C1_x+1mm,C1_y-0.45mm-2mm,C1_z;C1_x+1mm,C1_y+0.45mm-2mm,C1_z"
-    assert np.allclose(np.asarray(ev.points(b.props["IntegrationLine"])) * 1e3, before + [1, -2, 0])
-    # rotation by 90 degrees about Z through the part's centre turns the line into X
-    G.follow_lines(d, ev, names, "Rotate", {"Axis": "Z", "Angle": "90deg", "Center": "6,5,0"})
-    after = np.asarray(ev.points(b.props["IntegrationLine"])) * 1e3
-    assert np.allclose(after, [[6.45, 5, 0.8], [5.55, 5, 0.8]])
-    G.follow_lines(d, ev, names, "Mirror", {"Base": "0,0,0", "Normal": "1,0,0"})
-    assert np.allclose(np.asarray(ev.points(b.props["IntegrationLine"])) * 1e3, after * [-1, 1, 1])
-    # a line on objects that are not all moved stays where it is
     line = b.props["IntegrationLine"]
-    assert G.follow_lines(d, ev, names[:2], "Move", {"Vector": "1,0,0"}) == []
+    ev = d.evaluator(p)
+    glob = lambda: np.asarray(OF.global_points(d, b, "IntegrationLine", ev)) * 1e3  # noqa: E731
+    before = glob()
+    for kind, props in (("Move", {"Vector": "1,-2,0"}), ("Rotate", {"Axis": "Z", "Angle": "90deg", "Center": "6,5,0"})):
+        for n in names:
+            d.obj(n).history.append(Command(kind, dict(props)))
+    after = glob()
+    assert np.allclose(after, [[6.45, 5, 0.8], [5.55, 5, 0.8]]) and not np.allclose(after, before)
+    for n in names:
+        d.obj(n).history.append(Command("Mirror", {"Base": "0,0,0", "Normal": "1,0,0"}))
+    assert np.allclose(glob(), after * [-1, 1, 1])
     assert b.props["IntegrationLine"] == line
-    # plain numbers stay plain numbers in model units
-    a = Assignment("P1", "Lumped Port", {"IntegrationLine": "0,0,0;0,0,1"}, objects=["C1"])
-    d.excitations.append(a)
-    G.follow_lines(d, ev, ["C1"], "Scale", {"Factor": "2", "Center": "0,0,0"})
-    assert a.props["IntegrationLine"] == "0,0,0;0,0,2"

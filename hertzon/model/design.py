@@ -16,7 +16,7 @@ from . import schema
 from .expr import Evaluator
 from .materials import Material, default_color, library_material, library_materials, normalize_color
 
-FILE_VERSION = 1
+FILE_VERSION = 2     # 2: integration lines and U vectors in the coordinates of their object
 
 
 @dataclass
@@ -444,4 +444,8 @@ def project_from_dict(d: dict) -> Project:
     p.variables = dict(d.get("variables", {}))
     p.materials = [Material.from_dict(m) for m in d.get("materials", [])]
     p.designs = [design_from_dict(x) for x in d.get("designs", [])] or [Design()]
+    if int(d.get("version", 1) or 1) < 2:
+        from .objframe import migrate_global_points
+        for des in p.designs:
+            migrate_global_points(des, des.evaluator(p))
     return p

@@ -52,6 +52,11 @@ the GitHub release notes.
   conductors the line runs across the shorter side of the sheet as before.
 
 ### Fixed
+- **Integration lines follow their object**: the current or voltage line of a lumped element or lumped port
+  is now given in the coordinates of its sheet as created, so it moves, rotates, mirrors and scales with the
+  sheet (Move, Rotate, Mirror, Scale, Orientation), in the 3D view and in the solve. Before, it stayed where
+  it was set and a moved component kept its arrow, and its port direction, at the old place. Highlighted
+  boundaries and ports are drawn again when the geometry changes. Older projects are converted on loading.
 - **Split in a Face CS or Object CS**: the split plane (XY, YZ, XZ or Custom Base/Normal) is now taken in
   the working coordinate system, stored with the operation as *Coordinate system*. Before, the plane always
   lay in the Global CS, and an object far from that plane was deleted instead of split. Older projects keep

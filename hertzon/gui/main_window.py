@@ -2353,14 +2353,7 @@ class MainWindow(QMainWindow):
         self.doc.checkpoint()
         for o in objs:
             self.des.obj(o).history.append(Command(kind, dict(values)))
-        try:
-            moved = G.follow_lines(self.des, self.doc.evaluator(), objs, kind, values)
-        except Exception as e:  # noqa: BLE001
-            moved = []
-            self.msgs.add("warning", f"Integration lines not moved: {e}")
-        self.doc.commit("model")
-        if moved:
-            self.msgs.add("info", f"Integration line of {', '.join(moved)} moved with its objects")
+        self.doc.commit("model")         # integration lines follow by themselves (model.objframe)
 
     def chamfer(self) -> None:
         if self.doc.selection_mode != "edge" or not self.doc.selection:
@@ -3081,7 +3074,7 @@ class MainWindow(QMainWindow):
         if kind == "Lumped Port" or kind == "Lumped RLC":
             line = self._auto_integration_line(faces, objs)
             if line:
-                a.props["IntegrationLine"] = line
+                a.props["IntegrationLine"] = self._line_on_object(a, line)
         if not edit_assignment(self, self.doc, family, a):
             return
         self.doc.checkpoint()
@@ -4599,9 +4592,20 @@ class MainWindow(QMainWindow):
             return
         self._set_integration_line(name, line)
 
+    def _line_on_object(self, a, line: str) -> str:
+        """Integration line picked in the model (global) in the coordinates of its object, so that it moves
+        with the object."""
+        from ..model.objframe import to_object_coords
+        try:
+            return to_object_coords(self.des, a, line, self.doc.evaluator())
+        except Exception as e:  # noqa: BLE001
+            self.msgs.add("warning", f"{a.name}: integration line kept in global coordinates ({e})")
+            return line
+
     def _set_integration_line(self, name: str, line: str) -> None:
         self.doc.checkpoint()
         a = self.des.assignment(name)
+        line = self._line_on_object(a, line)
         a.props["IntegrationLine"] = line
         self.doc.commit("boundaries" if any(b is a for b in self.des.boundaries) else "excitations", geometry=False)
         self.view.show_assignments([a])
