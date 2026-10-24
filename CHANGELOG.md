@@ -6,6 +6,14 @@ the GitHub release notes.
 ## Unreleased
 
 ### Changed
+- **EMerge 3.0.0b5 plus the fixes on its `hertzon` branch** (commit `2811e9a`; was 3.0.0a25, as advised in
+  #25). Hertzon now installs EMerge from wheels built from a pinned commit, so solver fixes arrive without
+  waiting for a release. Thin conductors with thickness (two-sided Finite Conductivity) are now solved
+  with separate fields on both sides of the sheet: filters with such traces show slightly more conductor
+  loss (hairpin example: S21 about 0.3 dB lower) and smooth surface currents. Parallel sweeps no longer
+  keep the memory of every finished frequency batch. Hertzon's own workarounds for these points, for the
+  port mode solve and for the welcome prompt of the setup are removed. Speed and results were checked
+  on the benchmark models (`examples/benchmark/tools/emerge_bench.py`, docs/EMERGE_INTEGRATION.md).
 - **Integration line of Lumped Port and Lumped RLC**: placed automatically between the two conductors
   that touch the sheet, from the centre of one contact to the centre of the other (conductors: objects of a
   metal material and faces or objects with a Perfect E or Finite Conductivity boundary). A gap longer than

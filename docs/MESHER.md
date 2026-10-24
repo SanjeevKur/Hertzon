@@ -170,20 +170,9 @@ that had to be inserted next to the surface cannot trigger endless splitting.
 
 ## Faster EMerge import
 
-After the mesher, `Mesh3D._pre_update` was the most expensive step: it builds edges, triangles and
-all index tables in Python loops per tet. `Hertzon/solver/emerge_patches.py` replaces these loops
-with numpy sorting and searching:
-
-| Mesh | Original | Hertzon |
-|---|---|---|
-| 35k tets | 1.9 s | 0.3 s |
-| 74k tets | 5.2 s | 1.3 s |
-| 296k tets | 44-60 s | 3.7 s |
-
-- All arrays and dicts are **bit-identical** to the original, including order (tested on 6 meshes).
-- A block is only replaced if the EMerge source matches exactly; with another EMerge version or on
-  an error the original runs.
-- `HERTZON_SLOW_IMPORT=1` turns the speed-up off.
+With EMerge 2.8.9, `Mesh3D._pre_update` was the most expensive step after the mesher (edges, triangles and
+index tables in Python loops per tet, 44-60 s for 296k tets), and Hertzon replaced the loops with numpy
+sorting and searching. EMerge 3 builds these tables in its compiled core, so the replacement was removed.
 
 ## Threading and parallelism
 
@@ -257,7 +246,6 @@ Environment variables for experiments:
 | `HZMESH_SAG=<fraction>` | turn on the chord rule |
 | `HERTZON_CURVED=0` / `=1` | force curved elements off or on |
 | `HERTZON_CURVED_CHECK=1` | log straight vs. curved volume |
-| `HERTZON_SLOW_IMPORT=1` | use EMerge's original mesh import |
 
 ## Building
 
