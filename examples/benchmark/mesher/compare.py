@@ -28,8 +28,11 @@ CASES = {
                  complex(0.18037, 0.93542), {}),
     "post_dielectric": (BENCH / "waveguide_post" / "post_dielectric_local.hzn", "WR90_Post", "Setup1",
                         complex(-0.33672, 0.77887), {}),
-    "microstrip": (BENCH / "scaling" / "small_microstrip.hzn", "Microstrip50", "Setup1", None, {}),
-    "patch": (BENCH / "patch_antenna" / "patch_local.hzn", "Patch245", "Setup1", None, {}),
+    # fine-mesh references (see README): microstrip Remesh, second order, 188k tets; patch Remesh, 312k tets
+    "microstrip": (BENCH / "scaling" / "small_microstrip.hzn", "Microstrip50", "Setup1",
+                   complex(0.00440, 0.06558), {}),
+    "patch": (BENCH / "patch_antenna" / "patch_local.hzn", "Patch245", "Setup1",
+              complex(-0.19810, -0.01982), {}),
 }
 TARGET = 1e-3          # time to |S11 - S11,ref| <= TARGET, for cases with an exact reference
 
