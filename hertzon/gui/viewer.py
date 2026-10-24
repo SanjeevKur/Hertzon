@@ -225,6 +225,20 @@ class WorkingCSActor:
         L = self.PIXELS * world_h / h
         if L > 0 and math.isfinite(L):
             self.axes.SetTotalLength(L, L, L)
+            self._keep_in_depth(cam, 1.5 * L)
+
+    def _keep_in_depth(self, cam, r: float) -> None:
+        """Widen the clipping range so the triad is drawn: it does not count for the camera bounds, and with
+        the model far from the origin its shafts fell outside, leaving only the X/Y/Z captions on screen."""
+        d = float(np.dot(self.origin - np.array(cam.GetPosition()), np.array(cam.GetDirectionOfProjection())))
+        near, far = cam.GetClippingRange()
+        lo, hi = d - r, d + r
+        if not cam.GetParallelProjection():
+            if hi <= 0:
+                return                  # behind the camera
+            lo = max(lo, 1e-3 * max(far, hi))
+        if lo < near or hi > far:
+            cam.SetClippingRange(min(near, lo), max(far, hi))
 
 
 def nice_length(x: float) -> float:
@@ -1639,12 +1653,28 @@ class ModelerView(QWidget):
     # ------------------------------------------------------------------------------------------
     # grid / working plane
     # ------------------------------------------------------------------------------------------
+    def _grid_bounds(self) -> list[float]:
+        """Model bounding box in the working CS, widened to take in the CS origin: the grid always reaches the
+        origin, also when the model lies far away from it."""
+        b = self.view_bbox()
+        Ow, Rw = self.wcs
+        if np.linalg.norm(Ow) > 0 or not np.allclose(Rw, np.eye(3)):
+            C = np.array([[b[i] if (k >> j) & 1 == 0 else b[i + 3] for j, i in enumerate(range(3))]
+                          for k in range(8)])
+            L = (C - Ow) @ Rw
+            b = list(L.min(axis=0)) + list(L.max(axis=0))
+        return [min(b[i], 0.0) for i in range(3)] + [max(b[i + 3], 0.0) for i in range(3)]
+
+    GRID_MAX_LINES = 200       # per direction; a far origin coarsens the automatic spacing
+
     def auto_spacing(self) -> float:
         if self.grid_spacing:
             return self.grid_spacing
         b = self.view_bbox()
         size = max(b[3] - b[0], b[4] - b[1], b[5] - b[2], 1e-3)
-        raw = size / 20
+        g = self._grid_bounds()
+        extent = max(g[3] - g[0], g[4] - g[1], g[5] - g[2])
+        raw = max(size / 20, extent / self.GRID_MAX_LINES)
         e = 10 ** math.floor(math.log10(raw))
         for m in (1, 2, 5, 10):
             if raw <= m * e:
@@ -1658,15 +1688,12 @@ class ModelerView(QWidget):
         if not self.show_grid:
             return
         s = self.auto_spacing()
-        b = self.view_bbox()
+        b = self._grid_bounds()
         Ow, Rw = self.wcs
-        if np.linalg.norm(Ow) > 0 or not np.allclose(Rw, np.eye(3)):
-            C = np.array([[b[i] if (k >> j) & 1 == 0 else b[i + 3] for j, i in enumerate(range(3))]
-                          for k in range(8)])
-            L = (C - Ow) @ Rw
-            b = list(L.min(axis=0)) + list(L.max(axis=0))
         n = PLANE_NORMAL[self.grid_plane]
         axes = [i for i in range(3) if i != n]
+        while max(b[i + 3] - b[i] for i in range(3)) / s > 10 * self.GRID_MAX_LINES:
+            s *= 10                 # a fine fixed spacing over a far origin: draw every 10th line only
         pad = 0 if not self.doc.tess else 5 * s
         lo = [math.floor((b[i] - pad) / s + 1e-9) * s for i in range(3)]
         hi = [math.ceil((b[i + 3] + pad) / s - 1e-9) * s for i in range(3)]
