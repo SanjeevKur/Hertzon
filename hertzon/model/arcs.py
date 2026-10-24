@@ -1,4 +1,4 @@
-"""Center point arcs (HFSS AngularArc polyline segments), shared by the geometry kernel and the draw preview."""
+"""Center point arcs (AngularArc polyline segments), shared by the geometry kernel and the draw preview."""
 from __future__ import annotations
 
 import numpy as np

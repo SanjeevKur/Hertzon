@@ -64,9 +64,11 @@ DRAW_PHASES = {"CreateBox": 3, "CreateCylinder": 3, "CreateCone": 4, "CreateSphe
                "CreateRegularPolygon": 2, "CreatePolyline": 999, "Measure": 2,
                "MeasurePosition": 1, "MeasureAngle": 3,
                "OpMove": 2, "OpDupLine": 2, "OpMirror": 2, "OpDupMirror": 2,
-               "CSOffset": 1, "CSRotated": 2, "CSBoth": 3}
+               "CSOffset": 1, "CSRotated": 2, "CSBoth": 3, "IntegrationLine": 2}
 # interactive operations on selected objects (Move / Duplicate Along Line / Mirror by clicking points)
 OP_KINDS = {"OpMove", "OpDupLine", "OpMirror", "OpDupMirror"}
+# drawn in global coordinates with free 3D points (not held to the plane of the first point)
+FREE_KINDS = OP_KINDS | {"IntegrationLine"}
 # phases that move along the plane normal instead of in the plane
 HEIGHT_PHASE = {"CreateBox": {2}, "CreateCylinder": {2}, "CreateCone": {3}, "CreateRegularPolyhedron": {2}}
 
@@ -1580,7 +1582,7 @@ class ModelerView(QWidget):
             self.set_nav_mode("")
         self.cancel_draw()
         # primitives are drawn in the working CS; measuring and move/mirror stay global
-        local = not kind.startswith("Measure") and kind not in OP_KINDS
+        local = not kind.startswith("Measure") and kind not in FREE_KINDS
         self._frame = self.wcs if local else self._identity
         self.draw = DrawState(kind, DRAW_PHASES.get(kind, 2))
         self.plotter.interactor.setCursor(Qt.CrossCursor)
@@ -1621,6 +1623,8 @@ class ModelerView(QWidget):
             "CSOffset": ["Enter the origin of the new coordinate system"],
             "CSRotated": ["Enter a point on the new X axis", "Enter a point in the new XY plane"],
             "CSBoth": ["Enter the origin", "Enter a point on the new X axis", "Enter a point in the new XY plane"],
+            "IntegrationLine": ["Enter the start point of the integration line (snaps to vertices and edge centers)",
+                                "Enter the end point of the integration line"],
             "MeasureAngle": ["Enter a point on the first leg", "Enter the vertex of the angle",
                              "Enter a point on the second leg"],
         }.get(k)
@@ -1855,7 +1859,7 @@ class ModelerView(QWidget):
                 geo, kind = self._snap_plane(hit, n), ("grid" if "grid" in self.snap_modes else "")
         if geo is not None:
             p = geo
-            if d.points and not d.kind.startswith("Measure") and d.kind not in OP_KINDS:
+            if d.points and not d.kind.startswith("Measure") and d.kind not in FREE_KINDS:
                 p[n] = d.points[0][n]
             self.snap_kind = kind
             return p
@@ -1972,12 +1976,12 @@ class ModelerView(QWidget):
         self.plotter.render()
 
     def _arc_plane(self) -> str:
-        """Plane of center point arcs: the grid plane (HFSS ArcPlane)."""
+        """Plane of center point arcs: the grid plane (ArcPlane)."""
         return ARC_PLANE[PLANE_NORMAL[self.grid_plane]]
 
     def _track_sweep(self, p) -> None:
         """Center point arc: add the cursor's turn about the center since the last call to the swept angle,
-        so the arc follows the mouse past 180 degrees and in both directions (as in HFSS)."""
+        so the arc follows the mouse past 180 degrees and in both directions."""
         d = self.draw
         a = _plane_angle(d.points[-2], d.points[-1], p, PLANE_NORMAL[self.grid_plane])
         if a is None:
@@ -2011,7 +2015,7 @@ class ModelerView(QWidget):
 
 SEG_KEYS = {"l": "Line", "a": "Arc", "c": "CenterArc", "s": "Spline"}
 SEG_NAMES = {"Line": "Straight", "Arc": "3 Point Arc", "CenterArc": "Center Point Arc", "Spline": "Spline"}
-ARC_PLANE = {2: "XY", 0: "YZ", 1: "ZX"}      # plane normal index -> HFSS ArcPlane
+ARC_PLANE = {2: "XY", 0: "YZ", 1: "ZX"}      # plane normal index -> ArcPlane
 
 
 def _center_pending(d) -> bool:
@@ -2152,7 +2156,8 @@ def preview_mesh(kind: str, pts: list, n: int, modes: list | None = None):
             return pv.lines_from_points(densify(P, modes, ARC_PLANE[n]))
         if kind == "CSRotated":
             P = [np.zeros(3)] + list(P)
-        if kind in ("CreatePolyline", "Measure", "MeasureAngle", "CSRotated", "CSBoth") or kind in OP_KINDS:
+        if kind in ("CreatePolyline", "Measure", "MeasureAngle", "CSRotated", "CSBoth", "IntegrationLine") \
+                or kind in OP_KINDS:
             line = pv.lines_from_points(np.array(P))
             return line
     except Exception:  # noqa: BLE001

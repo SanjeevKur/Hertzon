@@ -7,9 +7,35 @@ the GitHub release notes.
 
 ### Changed
 - **EMerge 3.0.0b5** (was 3.0.0a25), as advised in #25. It fixes the port mode solve for wave ports and
-  the thin conductor split after a re-mesh pass; Hertzon's own workaround for the latter is removed, and
-  the setup no longer needs to mark EMerge's welcome text as shown. Speed and results were checked
+  the thin conductor split after a re-mesh pass; Hertzon's own workaround for the latter is removed. The
+  setup no longer needs to mark EMerge's welcome text as shown, and Hertzon's retry of the port mode solve
+  is removed because EMerge handles a failing shift itself. Speed and results were checked
   against 3.0.0a25 on the benchmark models (`examples/benchmark/tools/emerge_bench.py`).
+- **Integration line of Lumped Port and Lumped RLC**: placed automatically between the two conductors
+  that touch the sheet, from the centre of one contact to the centre of the other (conductors: objects of a
+  metal material and faces or objects with a Perfect E or Finite Conductivity boundary). A gap longer than
+  the traces are wide or a sheet wider than the traces now gets the right line. Without two touching
+  conductors the line runs across the shorter side of the sheet as before.
+
+### New
+- **Lumped Elements tab**: inserts a chip resistor, inductor or capacitor, or a component measured by a
+  Touchstone file, between the two selected traces. Packages 0201, 0402, 0603, 0805, 1206 and the RF series
+  Coilcraft 0402HP/0402HPH/0402CS/0603HP/0603CS and Murata LQW15AN/LQP03TN/GJM03/GJM15 with their body
+  dimensions. Hertzon adds the pads of the land pattern (made like the traces), the element sheet with its
+  Lumped RLC boundary and integration line, and optionally a 3D body with metal terminations (the
+  mounted inductance from the field solution). The ideal value can carry the typical ESL and ESR of the size.
+- **Lumped RLC: Model** Parallel RLC (as before), Series RLC or Touchstone (.s1p, or .s2p measured in
+  series or as a shunt). The Validation Check reads the Touchstone file; the solver warns when a sweep
+  leaves its frequency range.
+- **Draw Integration Line** (right click a Lumped Port or Lumped RLC in the project tree): start and end
+  point picked with two clicks in the 3D view, with snapping to vertices and edge centers.
+  **Auto Integration Line** places it between the conductors again.
+
+## 0.1.25 (2026-10-23)
+
+### Changed
+- **Contributors** section in the README (all-contributors convention, `.all-contributorsrc`): bug reports
+  and feature ideas are credited.
 
 ### Fixed
 - **Radiation Pattern, polar plot**: a Phi cut is now labelled over theta -180..180 deg, as defined on the
@@ -19,12 +45,12 @@ the GitHub release notes.
 ## 0.1.24 (2026-10-23)
 
 ### New
-- **Overlapping objects exactly as in HFSS**: an exact geometry check in the Validation Check lists the
+- **Exact overlap check of solids**: an exact geometry check in the Validation Check lists the
   solids that overlap and how much. A partial overlap of two different dielectrics or two different metals
   is now an **error** that blocks Analyze, optimization and parametric runs (also from scripts and the AI
   link, and checked again in the solver). Objects completely inside another stay allowed (the inner one
   applies); a dielectric completely inside a conductor is flagged as without effect.
-- **Design setting Material override** (on by default, as in new HFSS designs): a metal overrides a
+- **Design setting Material override** (on by default): a metal overrides a
   dielectric where they overlap. Off: every partial overlap of different materials is an error and the
   inner object always wins, also a dielectric inside a metal.
 - **Resolve Overlap** / **Resolve All Overlaps** in the Validation Check subtract the winning object from
@@ -46,10 +72,10 @@ the GitHub release notes.
 ## 0.1.23 (2026-10-23)
 
 ### New
-- **Draw > Arc > 3 Point / Center Point** (as in HFSS), also in the ribbon next to Polyline: a polyline of
+- **Draw > Arc > 3 Point / Center Point**, also in the ribbon next to Polyline: a polyline of
   one arc. Center Point: click the start point, the center, then move the cursor around the center; the arc
   follows it in both directions and past 180 degrees, the click sets the angle.
-- **Center Point Arc segments in polylines** (key **C** while drawing, like L / A / S): stored as the HFSS
+- **Center Point Arc segments in polylines** (key **C** while drawing, like L / A / S): stored as the
   segment type `AngularArc:<angle>:<plane>` in *Segment types*, so the angle can be edited (and be an
   expression, e.g. `AngularArc:ang:XY`); the end point follows the angle. Closed arcs can be covered.
 - **First start note**: when the solver kernels are not compiled yet (Hertzon started without the setup's
@@ -60,9 +86,9 @@ the GitHub release notes.
 - **NATO sphere example**: radiation boundary instead of PML and Max Delta E 0.001; the sphere RCS example
   and the tutorial name the radiation boundary as well (with a plane wave the radiation boundary is used
   in any case, the incident wave enters through it; the help of *Open boundary* now says so).
-- **Overlapping solids** as in HFSS with material override: a conductor wins over a dielectric (or air) in
+- **Overlapping solids** with material override: a conductor wins over a dielectric (or air) in
   the overlap whatever its size; otherwise the smaller object wins, regions stay background. Partial
-  overlaps HFSS rejects (two dielectrics or two conductors of different materials) give a warning.
+  overlaps of two dielectrics or two conductors of different materials give a warning.
 
 ### Fixed
 - **Tools > Keyboard Shortcuts** opens again: the dialog failed at once because its table widgets were not
@@ -111,7 +137,7 @@ the GitHub release notes.
 ## 0.1.21 (2026-10-22)
 
 ### New
-- **Subtract** dialog as in HFSS: arrow buttons **→ / ←** move the selected objects between Blank Parts and
+- **Subtract** dialog: arrow buttons **→ / ←** move the selected objects between Blank Parts and
   Tool Parts; several objects are selected by dragging with the mouse, Ctrl or Shift. Several blank parts are
   each cut by all tool parts. Swap exchanges all blank and tool parts.
 - **Radiation Pattern** of a sweep with saved fields: the report shows the far field of the chosen solution
