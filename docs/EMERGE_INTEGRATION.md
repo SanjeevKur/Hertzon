@@ -203,7 +203,7 @@ tetrahedra.
   (limit), with up to 0.13 difference in S above cutoff. Below the waveguide cutoff the fit does not
   converge, and whether the reduced basis accepts a check point depends on the run.
 - **Fast sweep memory**: the Rotman lens sweep (11 ports, 49k tetrahedra, 9 frequencies) grows past 14 GB.
-- **Symmetry planes and far fields**: the far field does not mirror the boundary fields at symmetry planes,
-  and the port impedance factor of a symmetry plane (`ImpedanceMultiplier`) is not applied in the solver.
-  EMerge's `farfield(..., syms=...)` has the mirror logic; its radiated power is scaled by `factor**2`
-  although it is integrated only over the simulated half, which should be checked with a full/half model.
+- **Symmetry planes and ports**: the port impedance factor of a symmetry plane (`ImpedanceMultiplier`) is
+  not applied in the solver, so a port cut by a symmetry plane is referred to the impedance of the half port.
+  Far fields are mirrored at symmetry planes (`farfield_post.mirrored`, same scaling as EMerge's
+  `farfield(syms=...)` after #75); directivity and pattern do not depend on the port impedance.
