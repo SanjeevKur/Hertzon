@@ -972,7 +972,6 @@ class Bridge:
                 break
             self._pw_fields = None
             pec = [int(t) for bc in m.mw.bc.oftype(PEC) for t in m.mesh.get_triangles(bc.tags)]
-            pec = _with_conductor_sheets(m, pec)
             errors, lengths = [], None
             for fl in fields:
                 fl.set_field_vector()
@@ -1659,9 +1658,8 @@ def adaptive_loop(m, fa: list[float], p: dict, out: Path, on_pass=None, key: str
         t_err = time.time()
         errors = np.empty((m.mesh.n_tets, len(fa)))
         lengths = None
-        est_tris = _with_conductor_sheets(m, solve_ids)
         for i in range(len(fa)):
-            err, lengths = fields[i]._solution_quality(est_tris)
+            err, lengths = fields[i]._solution_quality(solve_ids)
             errors[:, i] = err
         error = errors.max(axis=1)
         info(f"Pass {step}: error estimate {time.time() - t_err:.2f} s ({m.mesh.n_tets} tetrahedra)")
@@ -2158,29 +2156,6 @@ def _save_pass_results(out: Path, fa: list[float], Ss: list, z0, passes: list, m
                                               "frequencies": list(fa), "running": True})
     except Exception as e:  # noqa: BLE001
         warn(f"Could not store intermediate pass results: {e}")
-
-
-def _with_conductor_sheets(m, pec_tris):
-    """Triangles the error estimate treats as conductor faces: EMerge's PEC triangles plus the faces with
-    a finite conductivity (surface impedance / thin conductor). Across a conductor sheet the tangential
-    H jumps by the surface current, which is physical and no discretization error; there, as on PEC, the
-    residual is the tangential E on the face."""
-    from .emerge_patches import native
-    if native("sheet_error"):
-        return pec_tris
-    try:
-        from emerge._emerge.physics.microwave.bcs.boundary_conditions import SurfaceImpedance, ThinConductor
-        tags = []
-        for bc in m.mw.bc.boundary_conditions:
-            if isinstance(bc, ThinConductor) or (isinstance(bc, SurfaceImpedance) and bc._material is not None):
-                tags.extend(bc.tags)
-        if not tags:
-            return pec_tris
-        extra = np.asarray(m.mesh.get_triangles(sorted(set(tags))), np.int64).ravel()
-        return np.concatenate([np.asarray(pec_tris if pec_tris is not None else [], np.int64).ravel(), extra])
-    except Exception as e:  # noqa: BLE001
-        warn(f"Conductor faces not excluded from the error estimate ({e})")
-        return pec_tris
 
 
 def kernel_tag() -> str:
