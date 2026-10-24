@@ -33,10 +33,8 @@ try {
     & $venvPy -m pip install -e ".[test]"
     if ($LASTEXITCODE -ne 0) { throw 'Package installation failed (see messages above).' }
     Write-Host 'Preparing the solver (first-time compilation, can take a few minutes) ...'
-    # EMerge 3 shows a one-time welcome text at the first import in a console and waits for Enter. The input
-    # comes from a pipe here (no prompt, the setup runs unattended in the release check), and the welcome is
-    # marked as shown, so Hertzon.exe and the warm-up console never stop at it either.
-    '' | & $venvPy -c "import emerge; from emerge._emerge.global_cache import EMergeGlobalCache; EMergeGlobalCache().set_user_warned('welcome_message'); print('EMerge', getattr(emerge, '__version__', 'ok'))"
+    # stdin from a pipe: the setup runs unattended (release check) and must never wait for input
+    '' | & $venvPy -c "import emerge; print('EMerge', getattr(emerge, '__version__', 'ok'))"
     if ($LASTEXITCODE -ne 0) { throw 'EMerge could not be imported.' }
     # compile all solver kernels now with a small test solve, so the first real solve starts at full speed
     '' | & $venvPy -m hertzon.solver.warmup

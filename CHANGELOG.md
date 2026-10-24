@@ -6,11 +6,25 @@ the GitHub release notes.
 ## Unreleased
 
 ### Changed
+- **EMerge 3.0.0b5 plus the fixes on its `hertzon` branch** (commit `2811e9a`; was 3.0.0a25, as advised in
+  #25). Hertzon now installs EMerge from wheels built from a pinned commit, so solver fixes arrive without
+  waiting for a release. Thin conductors with thickness (two-sided Finite Conductivity) are now solved
+  with separate fields on both sides of the sheet: filters with such traces show slightly more conductor
+  loss (hairpin example: S21 about 0.3 dB lower) and smooth surface currents. Parallel sweeps no longer
+  keep the memory of every finished frequency batch. Hertzon's own workarounds for these points, for the
+  port mode solve and for the welcome prompt of the setup are removed. Speed and results were checked
+  on the benchmark models (`examples/benchmark/tools/emerge_bench.py`, docs/EMERGE_INTEGRATION.md).
 - **Integration line of Lumped Port and Lumped RLC**: placed automatically between the two conductors
   that touch the sheet, from the centre of one contact to the centre of the other (conductors: objects of a
   metal material and faces or objects with a Perfect E or Finite Conductivity boundary). A gap longer than
   the traces are wide or a sheet wider than the traces now gets the right line. Without two touching
   conductors the line runs across the shorter side of the sheet as before.
+
+### Fixed
+- **Split in a Face CS or Object CS**: the split plane (XY, YZ, XZ or Custom Base/Normal) is now taken in
+  the working coordinate system, stored with the operation as *Coordinate system*. Before, the plane always
+  lay in the Global CS, and an object far from that plane was deleted instead of split. Older projects keep
+  splitting in the Global CS.
 
 ### New
 - **Lumped Elements tab**: inserts a chip resistor, inductor or capacitor, or a component measured by a
