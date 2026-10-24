@@ -36,9 +36,9 @@ these pull requests start from `main`, never from `hertzon`.
 
 | Item | Hertzon code today | Why `main` | Status |
 |---|---|---|---|
-| Parallel sweep threads share one solver (`AutomaticRoutine` singleton) | `mt_pardiso._duplicate` | Crashes in MKL; affects every user of parallel sweeps | Fixed on `main` (`e80e840`); drop `_duplicate` once Hertzon runs on a version with it |
-| Factorizations of sweep worker threads are never released | `mt_pardiso.release` (for its own PARDISO threads) | Memory leak in every threaded sweep: scipy's SuperLU frees a factorization only in the thread that created it, and EMerge drops the worker routines in the main thread (+350 MB per batch of 4 frequencies on a 15k unknown matrix) | PR prepared: reset each routine on its own worker thread, with test |
-| Thin conductor DoF numbering differs between assembly and post-processing | `emerge_patches.apply_thin_conductor` | Small: S identical, E within 1e-4, H at the sheet up to 1.4 % of its peak (Hertzon microstrip), the current across a trace within 0.03 % (EMerge's thin conductor test model) | PR to `main` in preparation: keep `tet_to_field` in the assembled numbering. Hertzon keeps the patch until it is merged |
+| Parallel sweep threads share one solver (`AutomaticRoutine` singleton) | – | Crashes in MKL; affects every user of parallel sweeps | Fixed on `main` (`e80e840`); Hertzon's workaround removed |
+| Factorizations of sweep worker threads are never released | – | Memory leak in every threaded sweep: scipy's SuperLU frees a factorization only in the thread that created it, and EMerge drops the worker routines in the main thread (+350 MB per batch of 4 frequencies on a 15k unknown matrix) | Fixed on `main` (#72, `821607b`); Hertzon's workaround removed |
+| Thin conductor DoF numbering differs between assembly and post-processing | – | Fields and surface currents at every thin conductor | Fixed by the maintainer on `main` (`77beeb6`): both sides of the sheet are now solved separately. Hertzon's patch removed |
 | Port mode solve ends the whole solve on `ArpackNoConvergence` | `emerge_patches._robust_eigs` | – | No PR: since 3.0.0b5 the port mode solvers factorize the shift once, use an oversampled Krylov space and skip a failing shift. Three waveport runs without Hertzon's retry and all benchmark runs: no failure. Dropped from Hertzon |
 | Error estimate counts the current jump at finite-conductivity sheets as error | `bridge._with_conductor_sheets` | Wrong refinement at conductor sheets; may overlap with the maintainer's thin trace fix (`c951924`) | Needs a model that shows the effect first; none of the benchmark models does |
 | gmsh fails on trimmed B-spline faces of CAD files | `emerge_patches.apply_mesh_fallback` | Meshing crash for imported CAD, not GUI specific | To do, low priority |
@@ -90,8 +90,18 @@ Fixed in EMerge 3.0.0b5 or dead on EMerge 3, nothing to send: thin conductor spl
 (`_thin_conductor_new_mesh`), the ARPACK retry (`_robust_eigs`), the welcome prompt workaround in `setup.ps1`, and the replacements for
 EMerge 2.8.9 (`fast_error.py`, vectorised `_pre_update`, 2.8.9 assembly, `AMRPoints` patch).
 
-## Open: how Hertzon depends on the `hertzon` branch
+## How Hertzon depends on EMerge
 
-Hertzon pins EMerge from PyPI today. To use the `hertzon` branch, Hertzon pins a commit of it. EMerge's
-Rust core (`emr`) is then built from source (maturin), so the Windows installer needs a wheel built for
-that commit, for example by Hertzon's release workflow.
+Hertzon installs EMerge from a pinned commit, normally the head of EMerge's `hertzon` branch, instead of a
+PyPI release:
+
+1. `packaging/emerge-commit` holds the commit.
+2. When it changes, `.github/workflows/emerge-wheels.yml` builds the wheels (Windows x64, Linux x86_64,
+   abi3, version `<EMerge version>.post<commit time>`) and publishes them as the pre-release
+   `emerge-<short sha>` of the Hertzon repository, with a link to the EMerge source commit (GPL).
+3. The `emerge` entries of `pyproject.toml` point at these wheels; on other platforms pip builds the same
+   commit from source (needs Rust).
+
+Updating EMerge is therefore one Hertzon pull request: new commit, wheel URLs, benchmark
+(`examples/benchmark/tools/emerge_bench.py`) against the previous commit, results in
+[EMERGE_INTEGRATION.md](EMERGE_INTEGRATION.md).

@@ -1,6 +1,5 @@
-"""Run-time fixes for EMerge 3 (applied once in the solver worker): thin conductor DoF numbering, mesh retry
-for broken CAD faces, curved elements, and the grid accelerated size field of
-Hertzon's re-mesh refinement. docs/EMERGE_INTEGRATION.md lists each one with its status upstream."""
+"""Run-time fixes for EMerge 3 (applied once in the solver worker): mesh retry for broken CAD faces, curved
+elements, and the grid accelerated size field of Hertzon's re-mesh refinement. docs/EMERGE_INTEGRATION.md lists each one with its status upstream."""
 from __future__ import annotations
 
 import os
@@ -12,7 +11,7 @@ _DONE = False
 
 def native(name: str) -> bool:
     """True when the Hertzon replacement ``name`` is switched off for a comparison with plain EMerge:
-    HERTZON_EMERGE_NATIVE=mt_pardiso,thin_conductor,sheet_error,mesh_fallback"""
+    HERTZON_EMERGE_NATIVE=mt_pardiso,sheet_error,mesh_fallback"""
     return name in os.environ.get("HERTZON_EMERGE_NATIVE", "").replace(" ", "").split(",")
 
 
@@ -43,8 +42,6 @@ def apply() -> None:
     apply_curved()
     if not native("mesh_fallback"):
         apply_mesh_fallback()
-    if not native("thin_conductor"):
-        apply_thin_conductor()
 
 
 # ------------------------------------------------------------------------------------------------
@@ -149,32 +146,6 @@ def amr_size_at(amr, gr: float, _qf: float, pts: np.ndarray, lc: float = 1e300) 
         return np.full(pts.shape[1], lc)
     q = _kernel()
     return np.array([q(x, y, z, lc, *args) for x, y, z in pts.T.tolist()])
-
-
-def apply_thin_conductor() -> None:
-    """ThinConductor (finite conductivity with thickness on a sheet inside the model) splits the DoFs of the
-    sheet in Nedelec2.partition_dof and remaps them in tet_to_field, but only for one tetrahedron per sheet
-    triangle and on a side picked from an unoriented normal, so about half of the tetrahedra at the sheet
-    use the copies. The matrix assembly (curl-curl and mass through get_tet_to_field) uses the original
-    numbering, so the solution is that of a one-sided impedance sheet and the copies only carry the second
-    Robin term. Field plots, far fields and the error estimate read tet_to_field and got noise at every
-    conductor sheet (Jsurf, refinement chasing it). The original numbering is restored after the split,
-    so everything reads the DoFs the solution lives on; the S-parameters do not change."""
-    try:
-        from emerge._emerge.elements.nedelec2 import Nedelec2
-    except Exception:  # noqa: BLE001
-        return
-    orig = Nedelec2.partition_dof
-    if getattr(orig, "_hertzon_consistent", False):
-        return
-
-    def partition_dof(self, list_tags):
-        orig(self, list_tags)
-        if getattr(self, "_tet_to_field_orig", None) is not None:
-            self.tet_to_field = self._tet_to_field_orig.copy()
-
-    partition_dof._hertzon_consistent = True
-    Nedelec2.partition_dof = partition_dof
 
 
 def apply_mesh_fallback() -> None:

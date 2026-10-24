@@ -277,22 +277,6 @@ def test_emerge_material_library():
         assert emerge_object(m.emsutil_key) is not None
 
 
-def test_thin_conductor_keeps_the_assembled_dof_numbering():
-    """EMerge assembles with get_tet_to_field() (the numbering before the thin conductor split); plots, far
-    fields and the error estimate read tet_to_field, which the patch keeps equal to it."""
-    import inspect
-    from hertzon.solver import emerge_patches as EP
-    from emerge._emerge.elements.nedelec2 import Nedelec2
-    assert "_tet_to_field_orig" in inspect.getsource(Nedelec2.get_tet_to_field)
-    EP.apply_thin_conductor()
-    b = object.__new__(Nedelec2)
-    b._partitioned = True                     # EMerge's own split returns at once
-    b._tet_to_field_orig = np.arange(12).reshape(3, 4)
-    b.tet_to_field = b._tet_to_field_orig + 100
-    Nedelec2.partition_dof(b, [[1]])
-    assert np.array_equal(b.tet_to_field, b._tet_to_field_orig) and b.get_tet_to_field() is b._tet_to_field_orig
-
-
 def test_finite_conductivity_thickness_without_two_sided():
     """Older files: a thickness meant the two-sided thin conductor; loading keeps that and the result key."""
     from hertzon.model.design import project_from_dict

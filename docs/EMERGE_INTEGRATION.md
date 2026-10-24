@@ -20,7 +20,7 @@ the commits on this branch.
   the S-parameters (last adaptive pass and sweeps) and the far fields.
 - Every case runs a fixed number of adaptive passes (4), so two runs solve the same meshes; the tetrahedra
   per pass are compared too. Before a series, Hertzon's warm-up compiles all numba kernels.
-- `HERTZON_EMERGE_NATIVE=mt_pardiso,thin_conductor,sheet_error,mesh_fallback`,
+- `HERTZON_EMERGE_NATIVE=mt_pardiso,sheet_error,mesh_fallback`,
   `HERTZON_SLOW_ASSEMBLY=1`, `HERTZON_PARDISO_STRUCT=1` and `HERTZON_HYBRID_SWEEP=0` switch single
   replacements off, so EMerge's own code runs instead.
 - `examples/benchmark/tools/farfield_kernels.py HUYGENS_NPZ` compares the far field kernels on stored
@@ -58,6 +58,26 @@ Hertzon evaluates fields at points whose tetrahedron is already known (corners a
 tetrahedron, the far field surface). It used to replace `basis.interpolate_index` for the call; EMerge 3
 takes the mapping directly. Same times, bit-identical results. Done.
 
+## Step 3: EMerge from a pinned commit of its `hertzon` branch (`2811e9a`)
+
+Hertzon now installs EMerge from wheels built from a fixed commit (`packaging/emerge-commit`,
+`.github/workflows/emerge-wheels.yml`), so EMerge fixes reach Hertzon without a release on PyPI. `2811e9a`
+is 3.0.0b5 plus the worker thread fixes (`e80e840`, `821607b`), the two-sided thin conductor split
+(`77beeb6`) and the curve sampling of mesh size fields (`7b2d581`). All five cases against b5:
+
+| Case | b5 | `2811e9a` | Results |
+|---|---|---|---|
+| microstrip | 37.6 s | 25.0 s | same meshes; S11 within 0.12 dB, S21 within 0.01 dB (thin conductor trace) |
+| hairpin | 79.2 s | 60.1 s | meshes differ from pass 2; S21 0.27 dB lower on average, S11 up to 2.6 dB at −13 dB |
+| patch | 60.2 s | 64.6 s | bit-identical, far field too |
+| waveport | 157.6 s | 155.0 s | adaptive and discrete identical to 1e-14 (interpolating sweep: see open issues) |
+| rotman | 66.5 s | 63.5 s | bit-identical, far fields too |
+
+The differences come from the thin conductor split: the hairpin's traces are two-sided thin conductors,
+which are now solved with separate fields on both sides (more conductor loss; the EMerge test checks the
+loss of a stripline against Wheeler's incremental inductance rule). No case got slower beyond the noise
+(the microstrip b5 run was the first after the warm-up and slower than usual).
+
 ## Replacements that stay for now (candidates for EMerge's `hertzon` branch)
 
 Each row: the replacement switched off, i.e. EMerge's own code, relative to Hertzon with all replacements
@@ -94,12 +114,16 @@ worker thread its own PARDISO instance with `mkl_set_num_threads_local`. Two EMe
 way:
 
 1. `AutomaticRoutine` is a singleton (`__new__`), so `SolveRoutine.duplicate()` returns the same object and
-   the worker threads share one solver (and can factorize in one PARDISO handle at the same time). Fixed on
-   EMerge `main` in `e80e840` (after 3.0.0b5).
-2. After a threaded sweep, `thread_local.__dict__.clear()` drops the routines without `reset()`, so the
-   PARDISO factorizations of every batch stay allocated.
+   the worker threads share one solver (and can factorize in one PARDISO handle at the same time). Fixed in
+   EMerge `e80e840`.
+2. The worker routines were dropped in the main thread after each batch. scipy's SuperLU frees a
+   factorization only in the thread that created it, and PARDISO only on `reset()`, so every batch left its
+   factorizations allocated. Fixed in EMerge `821607b` (FennisRobert/EMerge#72): each worker resets its
+   routine on its own thread. Hertzon's own release only worked before EMerge moved the threaded solve into
+   `_dispatch_jobs` (3.0.0b5); it is removed with the move to `2811e9a`, together with the singleton
+   workaround and the pipelined assembly, which did not apply to b5 either.
 
-**Proposal:** first the two bug fixes, then PARDISO per worker thread.
+**Proposal:** PARDISO per worker thread on EMerge's `hertzon` branch.
 
 ### Reduced basis in the interpolating sweep (`hybrid_sweep`)
 
@@ -135,15 +159,6 @@ it is about 9 % of the Rotman run time. Hertzon's former parallel kernel for EMe
 excitations in one pass over the tetrahedra (geometry and neighbour data once).
 **Proposal (low priority):** a multi-excitation variant of `compute_error_single`; nothing to keep in Hertzon.
 
-### Thin conductor DoF numbering (`emerge_patches.apply_thin_conductor`)
-
-`Nedelec2.partition_dof` remaps `tet_to_field` for the split tetrahedra (one side, chosen from an unoriented
-normal). The assembly reads the original numbering through `get_tet_to_field()`, while fields, far field and
-the error estimate read the remapped `tet_to_field`. The S-parameters are not affected (identical in the
-benchmark), but surface currents and field plots show noise at every sheet. Hertzon restores the original
-numbering after the split. No speed effect.
-**Proposal:** needs the maintainer's view on the intended design.
-
 ### Conductor sheets in the error estimate (`bridge._with_conductor_sheets`)
 
 Faces with a finite conductivity (surface impedance with material, thin conductor) are passed to the error
@@ -159,6 +174,11 @@ the benchmark models the meshes came out identical with and without it.
 ## Removed
 
 - `_thin_conductor_new_mesh` (fixed in EMerge 3.0.0b5).
+- `apply_thin_conductor`, which kept `tet_to_field` in the numbering the system was assembled with. EMerge
+  `77beeb6` makes the split itself right: every tetrahedron on one side of the sheet uses the copied DoFs,
+  in the assembly as in the fields, so both sides of a thin conductor are solved separately.
+- The worker thread fixes of `mt_pardiso` (shared routine, release of the factorizations, pipelined
+  assembly), see above.
 - `_robust_eigs`, the ARPACK retry of the port mode solve: since 3.0.0b5 EMerge factorizes the shift once,
   oversamples the Krylov space and skips a failing shift. No failure in three waveport runs without it nor
   in any benchmark run.
