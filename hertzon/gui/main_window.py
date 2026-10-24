@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (QMainWindow, QDockWidget, QTabWidget, QSplitter, 
                                QTableWidgetItem, QHeaderView)
 
 from .. import __version__
+from ..model import groups as G
 from ..model import schema
 from ..model.design import (Project, Design, Command, Assignment, FaceRef, Setup, Sweep, InfiniteSphere, Report,
                             FieldPlot, design_from_dict)
@@ -202,6 +203,10 @@ class MainWindow(QMainWindow):
         self.a_delete = A("&Delete", self.delete_selection, "Delete")
         self.a_selall = A("Select &All", self.select_all, "Ctrl+A")
         self.a_selname = A("Select by &Name...", self.select_by_name, "Ctrl+Shift+N")
+        self.a_group = A("&Group", self.group_selection, "Ctrl+G",
+                         tip="Group the selected objects: they are selected, moved and transformed as one unit")
+        self.a_ungroup = A("U&ngroup", lambda: self.ungroup_selection(), "Ctrl+Shift+G",
+                           tip="Dissolve the groups of the selected objects so single objects can be edited")
         self.a_props = A("P&roperties...", self.edit_selected_properties)
         self.a_fit = A("Fit &All", self.view.fit_all, "Ctrl+D")
         self.a_fitsel = A("Fit &Selection", self.view.fit_selection, "Ctrl+E")
@@ -263,6 +268,9 @@ class MainWindow(QMainWindow):
         m.addSeparator()
         m.addAction(self.a_selall)
         m.addAction(self.a_selname)
+        m.addSeparator()
+        m.addAction(self.a_group)
+        m.addAction(self.a_ungroup)
         fs = m.addMenu("Select Faces")
         fs.addAction("All Object Faces", self.select_object_faces)
         fs.addAction("Face by Position...", self.select_face_by_position)
@@ -547,6 +555,9 @@ class MainWindow(QMainWindow):
         g.widget(self.sel_combo)
         g.small("Select by Name", "byname", self.a_selname)
         g.small("Select All", "selall", self.a_selall)
+        g = pg.group("Group")
+        g.icon_only = True
+        self._sel_buttons = [g.small("Group", "group", self.a_group), g.small("Ungroup", "ungroup", self.a_ungroup)]
         g = pg.group("Show")
         g.icon_only = True
         # layout: Show All / Show Selected / Show Only Selected | Overlays on/off / Hide Selected
@@ -599,7 +610,6 @@ class MainWindow(QMainWindow):
         g.icon_only = True
         g.small("Region", "region", self.create_region)
         g.small("Section", "section", self.section)
-        self._sel_buttons = []
         g = pg.group("Operations")
         g.icon_only = True
         for txt, ic, fn in (("Move", "move", lambda: self.start_op("OpMove")),
@@ -1232,7 +1242,8 @@ class MainWindow(QMainWindow):
 
     def _tree_objects(self, names: list, add: bool) -> None:
         self.set_mode("object")
-        self.doc.select([Pick(n) for n in names], add)
+        # the tree lists the members of a group: a member picked there is selected on its own
+        self.doc.select([Pick(n) for n in names], add, whole_groups=False)
 
     def set_mode(self, mode: str) -> None:
         self.a_mode[mode].setChecked(True)
@@ -2342,7 +2353,14 @@ class MainWindow(QMainWindow):
         self.doc.checkpoint()
         for o in objs:
             self.des.obj(o).history.append(Command(kind, dict(values)))
+        try:
+            moved = G.follow_lines(self.des, self.doc.evaluator(), objs, kind, values)
+        except Exception as e:  # noqa: BLE001
+            moved = []
+            self.msgs.add("warning", f"Integration lines not moved: {e}")
         self.doc.commit("model")
+        if moved:
+            self.msgs.add("info", f"Integration line of {', '.join(moved)} moved with its objects")
 
     def chamfer(self) -> None:
         if self.doc.selection_mode != "edge" or not self.doc.selection:
@@ -2479,6 +2497,7 @@ class MainWindow(QMainWindow):
     def _duplicate(self, objs: list[str], cmds_for_copy) -> None:
         self.doc.checkpoint()
         new = []
+        copies: list[dict[str, str]] = [{} for _ in cmds_for_copy]
         for name in objs:
             src = self.des.obj(name)
             for i, cmds in enumerate(cmds_for_copy, start=1):
@@ -2499,6 +2518,9 @@ class MainWindow(QMainWindow):
                         cmd.props["Tools"] = ",".join(tools)
                 self.des.objects.append(c)
                 new.append(c.name)
+                copies[i - 1][name] = c.name
+        for cp in copies:               # every copy of a group is a group of its own
+            G.copy_groups(self.des, cp)
         self.doc.commit("model")
         self.msgs.add("info", f"Created {', '.join(new)}")
 
@@ -2564,9 +2586,11 @@ class MainWindow(QMainWindow):
             return
         self.doc.checkpoint()
         new = []
+        copies = {}
         for pack in self.clipboard:
             o = copy.deepcopy(pack["obj"])
             o.name = self.des.unique_name(o.name)
+            copies[pack["obj"].name] = o.name
             mapping = {}
             for t in pack["tools"]:
                 tc = copy.deepcopy(t)
@@ -2580,6 +2604,7 @@ class MainWindow(QMainWindow):
                                                 if x.strip())
             self.des.objects.append(o)
             new.append(o.name)
+        G.copy_groups(self.des, copies)
         self.doc.commit("model")
         self.doc.select([Pick(n) for n in new])
 
@@ -2609,6 +2634,45 @@ class MainWindow(QMainWindow):
         self.doc.commit("model")
         self.doc.selectionChanged.emit()
         self.msgs.add("info", f"Deleted {', '.join(objs)}")
+
+    def group_selection(self) -> None:
+        """Edit > Group: the selected objects (also of different kinds) become one group."""
+        objs = self.doc.selected_objects() if self.doc.selection_mode == "object" else []
+        if len(G.expand(self.des, objs)) < 2:
+            QMessageBox.information(self, "Group", "Please select at least two objects to group.")
+            return
+        self.doc.checkpoint()
+        name = G.make_group(self.des, objs)
+        self.doc.commit("model", geometry=False)
+        self.doc.select([Pick(n) for n in G.members(self.des, name)])
+        self.msgs.add("info", f"Grouped {', '.join(G.members(self.des, name))} as '{name}'")
+
+    def ungroup_selection(self, names: list[str] | None = None) -> None:
+        """Edit > Ungroup: dissolves the groups of the selected objects; the objects stay selected."""
+        objs = names or self.doc.selected_objects()
+        if not any(self.des.has_obj(n) and self.des.obj(n).group or n in G.groups(self.des) for n in objs):
+            QMessageBox.information(self, "Ungroup", "The selection contains no group.")
+            return
+        sel = G.expand(self.des, [n for n in objs if self.des.has_obj(n)]) or \
+            [m for n in objs for m in G.members(self.des, n)]
+        self.doc.checkpoint()
+        gone = G.ungroup(self.des, objs)
+        self.doc.commit("model", geometry=False)
+        self.doc.select([Pick(n) for n in sel])
+        self.msgs.add("info", f"Ungrouped {', '.join(gone)}")
+
+    def rename_group(self, name: str) -> None:
+        new, ok = QInputDialog.getText(self, "Rename Group", "Name:", text=name)
+        if not ok or new.strip() == name:
+            return
+        self.doc.checkpoint()
+        try:
+            G.rename_group(self.des, name, new)
+        except ValueError as e:
+            self.doc.undo_stack.pop()
+            QMessageBox.warning(self, "Rename Group", str(e))
+            return
+        self.doc.commit("model", geometry=False)
 
     def select_all(self) -> None:
         self.set_mode("object")
@@ -4740,6 +4804,7 @@ class MainWindow(QMainWindow):
                 bo = m.addMenu("Boolean")
                 for a in (self.a_unite, self.a_subtract, self.a_intersect):
                     bo.addAction(a)
+                self._group_actions(m)
                 m.addAction("Hide Selection", lambda: self.set_visible(False))
                 m.addAction("Properties...", self.edit_selected_properties)
             elif mode == "edge":
@@ -4777,12 +4842,27 @@ class MainWindow(QMainWindow):
                         lambda: self.set_visible(not self.des.obj(name).visible))
             m.addAction("Copy", self.copy_objects)
             m.addAction("Delete", self.delete_selection)
+            self._group_actions(m)
             b = m.addMenu("Assign Boundary")
             for k in schema.BOUNDARIES:
                 b.addAction(k, lambda _=False, k=k: self.assign("boundary", k))
             e = m.addMenu("Assign Excitation")
             for k in schema.EXCITATIONS:
                 e.addAction(k, lambda _=False, k=k: self.assign("excitation", k))
+        elif data and data[0] == "objgroup":
+            name = data[1]
+            names = G.members(self.des, name)
+            if set(names) != set(self.doc.selected_objects()):
+                self.set_mode("object")
+                self.doc.select([Pick(n) for n in names])
+            m.addAction("Ungroup", lambda: self.ungroup_selection([name]))
+            m.addAction("Rename...", lambda: self.rename_group(name))
+            m.addAction(self.a_material)
+            m.setToolTipsVisible(True)
+            m.addAction("Hide", lambda: self.set_visible(False))
+            m.addAction("Show", lambda: self.set_visible(True))
+            m.addAction("Copy", self.copy_objects)
+            m.addAction("Delete", self.delete_selection)
         elif data and data[0] == "command":
             obj, idx = data[1], data[2]
             c = self.des.obj(obj).history[idx]
@@ -4806,6 +4886,14 @@ class MainWindow(QMainWindow):
         else:
             m.addAction("Show All", self.show_all)
         m.exec(pos)
+
+    def _group_actions(self, m) -> None:
+        """Group / Ungroup entries of a context menu, as far as they apply to the selection."""
+        objs = self.doc.selected_objects()
+        if len(G.expand(self.des, objs)) > 1 and len({self.des.obj(n).group or n for n in objs}) > 1:
+            m.addAction(self.a_group)
+        if any(self.des.obj(n).group for n in objs if self.des.has_obj(n)):
+            m.addAction(self.a_ungroup)
 
     def _suppress(self, obj: str, idx: int) -> None:
         self.doc.checkpoint()

@@ -254,7 +254,7 @@ class Design:
         return f"{stem}{i}"
 
     def all_names(self) -> set[str]:
-        names = {o.name for o in self.objects}
+        names = {o.name for o in self.objects} | {o.group for o in self.objects if o.group}
         for lst in (self.boundaries, self.excitations, self.mesh_ops):
             names |= {a.name for a in lst}
         names |= {s.name for s in self.setups}

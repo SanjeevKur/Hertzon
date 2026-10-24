@@ -8,6 +8,7 @@ from PySide6.QtGui import QBrush, QColor, QIcon, QPixmap, QPainter, QPalette
 from PySide6.QtWidgets import QTreeWidget, QTreeWidgetItem, QAbstractItemView, QStyle, QStyledItemDelegate
 
 from .doc import Document
+from ..model import groups as G
 from ..model.schema import BOUNDARY_COLORS, EXCITATION_COLORS
 from ..solver.results import results_dir, ResultStore
 from .doc import result_dir
@@ -259,7 +260,8 @@ def solution_state(doc, setup: str) -> str:
 
 
 class ModelTree(QTreeWidget):
-    """Objects grouped as Solids (by material) / Sheets / Lines with their command history."""
+    """Objects grouped as Solids (by material) / Sheets / Lines with their command history; members of
+    object groups are listed under their group in Groups."""
 
     objectSelected = Signal(list, bool)          # names, add
     commandSelected = Signal(str, int)           # object, command index
@@ -292,7 +294,13 @@ class ModelTree(QTreeWidget):
         if self._syncing:
             return
         items = self.selectedItems()
-        objs = [it.data(0, ROLE)[1] for it in items if it.data(0, ROLE) and it.data(0, ROLE)[0] == "object"]
+        objs = []
+        for it in items:
+            d = it.data(0, ROLE)
+            if d and d[0] == "objgroup":
+                objs += [n for n in G.members(self.doc.design, d[1]) if n not in objs]
+            elif d and d[0] == "object" and d[1] not in objs:
+                objs.append(d[1])
         cmds = [it.data(0, ROLE) for it in items if it.data(0, ROLE) and it.data(0, ROLE)[0] == "command"]
         if objs:
             self.objectSelected.emit(objs, False)
@@ -312,7 +320,7 @@ class ModelTree(QTreeWidget):
         # remember expansion
         def walk(it):
             d = it.data(0, ROLE)
-            if d and d[0] in ("group", "material", "object"):
+            if d and d[0] in ("group", "material", "object", "objgroup"):
                 key = f"{d[0]}:{d[1]}"
                 (self._expanded.add if it.isExpanded() else self._expanded.discard)(key)
             for i in range(it.childCount()):
@@ -323,7 +331,8 @@ class ModelTree(QTreeWidget):
         self.clear()
         des = self.doc.design
         groups = {}
-        titles = ["Solids", "Sheets", "Lines"]
+        grouped = G.groups(des)
+        titles = (["Groups"] if grouped else []) + ["Solids", "Sheets", "Lines"]
         if any(not o.model for o in des.live_objects()):
             titles.append("Non Model")
         for title in titles:
@@ -332,8 +341,18 @@ class ModelTree(QTreeWidget):
             self.addTopLevelItem(g)
             g.setExpanded(f"group:{title}" in self._expanded or title in self._expanded)
             groups[title] = g
+        for gname, names in grouped.items():
+            gi = QTreeWidgetItem([gname])
+            gi.setData(0, ROLE, ("objgroup", gname))
+            gi.setToolTip(0, f"Group of {len(names)} objects: selected, moved and transformed together")
+            groups["Groups"].addChild(gi)
+            for n in names:
+                self._add_object(gi, des.obj(n))
+            gi.setExpanded(f"objgroup:{gname}" in self._expanded)
         mats: dict[str, QTreeWidgetItem] = {}
         for o in des.live_objects():
+            if o.group in grouped:
+                continue
             t = self.doc.tess.get(o.name)
             dim = t.dim if t else o.dim
             if not o.model:
@@ -407,8 +426,14 @@ class ModelTree(QTreeWidget):
         self.blockSignals(True)
         self.clearSelection()
 
+        whole = {g for g, m in G.groups(self.doc.design).items() if names.issuperset(m)}
+
         def walk(it):
             d = it.data(0, ROLE)
+            if d and d[0] == "objgroup" and d[1] in whole and self.doc.selection_mode == "object":
+                it.setSelected(True)
+                it.parent().setExpanded(True)
+                return                      # a whole group shows as its group item
             if d and d[0] == "object" and d[1] in names and self.doc.selection_mode == "object":
                 it.setSelected(True)
                 p = it.parent()

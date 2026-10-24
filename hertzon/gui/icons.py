@@ -858,6 +858,22 @@ def _selall(p):
     _box(p, 32, 40, 16, 14, 6, QColor("#f7d774"), ORANGE)
 
 
+def _group(p, dissolve=False):
+    pen = _pen(GREY if dissolve else DBLUE, 3)
+    if dissolve:
+        pen.setStyle(Qt.DashLine)
+    p.setPen(pen)
+    p.setBrush(Qt.NoBrush)
+    p.drawRoundedRect(QRectF(4, 6, 56, 52), 6, 6)
+    _box(p, 10, 24, 18, 18, 7)
+    p.setPen(_pen(DBLUE, 2.5))
+    p.setBrush(QColor("#f7d774"))
+    p.drawEllipse(QRectF(32, 30, 20, 20))
+    if not dissolve:
+        p.setPen(_pen(ORANGE, 3))
+        p.drawLine(QPointF(26, 36), QPointF(34, 40))
+
+
 def _exit(p):
     _doc(p)
     p.setPen(_pen(RED, 5))
@@ -1185,7 +1201,7 @@ _DRAW = {
     "field": _field, "field_vec": lambda p: _field(p, "vec"), "field_h": lambda p: _field(p, "h"),
     "animate": _animate, "clear": _clear, "soldata": _soldata, "export": _export, "design": _design,
     "variables": _variables, "screenshot": _screenshot, "help": _help, "projection": _projection,
-    "byname": _byname, "selall": _selall, "exit": _exit, "filter": _filter, "antenna": _antenna,
+    "byname": _byname, "selall": _selall, "group": _group, "ungroup": lambda p: _group(p, True), "exit": _exit, "filter": _filter, "antenna": _antenna,
     "resistor": _resistor, "inductor": _inductor, "capacitor": _capacitor, "chip": _chip,
 }
 

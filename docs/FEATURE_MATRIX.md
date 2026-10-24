@@ -31,6 +31,7 @@ Legend: **✔** implemented and tested · **◐** implemented with limitations �
 | Region (padding % or absolute) | Draw > Region | ✔ | |
 | Unite, Subtract (blank/tool, clone), Intersect, Split | Modeler > Boolean | ✔ | |
 | Move, Rotate, Mirror, Scale, Duplicate along line / around axis / mirror | Edit > Arrange / Duplicate | ✔ | |
+| Object groups (also of solids, sheets and lines together), ungroup, rename | Edit > Group (Ctrl+G) / Ungroup (Ctrl+Shift+G), model tree > Groups | ✔ | A group is selected and transformed as one unit; SMD components are groups; saved in the project |
 | Thicken sheet, Sweep along vector / around axis, Cover lines | Draw / Modeler | ✔ | Sweep along path ✖ |
 | Fillet | Modeler > Fillet | ◐ | Edges of solids; chamfer ✖ |
 | Import STEP / IGES / BREP, Export STEP | File / Modeler | ✔ | |
