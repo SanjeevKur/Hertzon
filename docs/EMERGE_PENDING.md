@@ -13,9 +13,9 @@ when the check passes, remove the workaround in its own PR and move the entry to
 
 | Upstream fix | Hertzon workaround | Waiting for | Check before removing |
 |---|---|---|---|
-| Release the factorizations of sweep worker threads on their own thread (memory grew with every batch of a threaded sweep) | `mt_pardiso.release` | PR FennisRobert/EMerge#72 merged and released | Threaded sweep with `HERTZON_EMERGE_NATIVE=mt_pardiso`: memory stays flat over many batches; same S-parameters as with the workaround |
+| Release the factorizations of sweep worker threads on their own thread (memory grew with every batch of a threaded sweep) | `mt_pardiso.release` | Merged into EMerge `main` (FennisRobert/EMerge#72), not yet in a release | Threaded sweep with `HERTZON_EMERGE_NATIVE=mt_pardiso`: memory stays flat over many batches; same S-parameters as with the workaround |
 | Parallel sweep threads share one solver (`AutomaticRoutine` singleton) | `mt_pardiso._duplicate` | Fixed on EMerge `main` (`e80e840`), not yet in a release | Parallel sweep of the benchmark models with `HERTZON_EMERGE_NATIVE=mt_pardiso`: no crash, same S-parameters |
-| ThinConductor DoF split (fields at a conductor sheet read DoFs the solver does not use) | `emerge_patches.apply_thin_conductor` | The maintainer's own rework of the thin conductor DoF split | `HERTZON_EMERGE_NATIVE=thin_conductor` on the microstrip benchmark: no noise in field and surface current plots at the trace, S-parameters compared with the workaround (they may change, since the sheet may then be two-sided), adaptive meshing with a thin conductor still converges |
+| ThinConductor DoF split (fields at a conductor sheet read DoFs the solver does not use) | `emerge_patches.apply_thin_conductor` | The maintainer's rework on EMerge `main` (`77beeb6`, "Separate the two sides of a ThinConductor sheet in the solve"), not yet in a release | `HERTZON_EMERGE_NATIVE=thin_conductor` on the microstrip benchmark: no noise in field and surface current plots at the trace, S-parameters compared with the workaround (they may change, since the sheet may then be two-sided), adaptive meshing with a thin conductor still converges |
 
 ## Done
 
