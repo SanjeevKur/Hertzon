@@ -1,31 +1,30 @@
 # Waiting on EMerge
 
-Hertzon carries a few workarounds for EMerge bugs that are being fixed upstream. This list says what each one
-waits for, and how to check that it can go once the fix is in an EMerge release. Background on every
-replacement is in `docs/EMERGE_INTEGRATION.md` and `docs/EMERGE_CHANGES.md`.
+Hertzon is built on a pinned commit of EMerge's `hertzon` branch (`packaging/emerge-commit`). This list
+says which EMerge fixes Hertzon is waiting for, what in Hertzon depends on each one, and what to check once
+it arrives. Background on every EMerge change is in `docs/EMERGE_INTEGRATION.md` and
+`docs/EMERGE_CHANGES.md`.
 
-**When Hertzon moves to a new EMerge version:** go through this list. For every entry whose upstream fix is in
-that version, run the check with the workaround switched off. Most workarounds can be switched off without a
-code change with `HERTZON_EMERGE_NATIVE` (comma separated, e.g. `HERTZON_EMERGE_NATIVE=thin_conductor`). Only
-when the check passes, remove the workaround in its own PR and move the entry to "Done" below.
+**When `packaging/emerge-commit` moves to a new EMerge commit:** go through this list. For every entry whose
+fix is in that commit, run its check. Only when the check passes, remove the workaround (or enable the
+feature) in its own PR and move the entry to "Done" below.
 
-## Open
+## Open: workarounds waiting for an EMerge fix
 
-| Upstream fix | Hertzon workaround | Waiting for | Check before removing |
+(none)
+
+## Open: Hertzon features waiting for an EMerge fix
+
+| EMerge fix | Hertzon feature that needs it | Waiting for | Check before enabling |
 |---|---|---|---|
-| Release the factorizations of sweep worker threads on their own thread (memory grew with every batch of a threaded sweep) | `mt_pardiso.release` | Merged into EMerge `main` (FennisRobert/EMerge#72), not yet in a release | Threaded sweep with `HERTZON_EMERGE_NATIVE=mt_pardiso`: memory stays flat over many batches; same S-parameters as with the workaround |
-| Parallel sweep threads share one solver (`AutomaticRoutine` singleton) | `mt_pardiso._duplicate` | Fixed on EMerge `main` (`e80e840`), not yet in a release | Parallel sweep of the benchmark models with `HERTZON_EMERGE_NATIVE=mt_pardiso`: no crash, same S-parameters |
-| ThinConductor DoF split (fields at a conductor sheet read DoFs the solver does not use) | `emerge_patches.apply_thin_conductor` | The maintainer's rework on EMerge `main` (`77beeb6`, "Separate the two sides of a ThinConductor sheet in the solve"), not yet in a release | `HERTZON_EMERGE_NATIVE=thin_conductor` on the microstrip benchmark: no noise in field and surface current plots at the trace, S-parameters compared with the workaround (they may change, since the sheet may then be two-sided), adaptive meshing with a thin conductor still converges |
-
-## Needed before a Hertzon feature
-
-| Upstream fix | Hertzon feature that needs it | Waiting for |
-|---|---|---|
-| Far field with symmetry planes: radiated power halved per plane, directivity 3 dB too high per plane | Symmetry planes (half and quarter models); Hertzon does not mirror far fields yet | PR FennisRobert/EMerge#75 merged and released; until then do not offer symmetry planes for far fields |
+| Far field with symmetry planes: radiated power halved per plane, directivity 3 dB too high per plane | Symmetry planes (half and quarter models); Hertzon does not mirror far fields yet | PR FennisRobert/EMerge#75 merged and in `packaging/emerge-commit` | A model solved in full and as a half model: same radiated power, gain and directivity |
 
 ## Done
 
-| Upstream fix | Removed workaround | EMerge version |
+| EMerge fix | Removed Hertzon workaround | EMerge version or commit |
 |---|---|---|
+| Parallel sweep threads share one solver (`AutomaticRoutine` singleton) | `mt_pardiso._duplicate` | `hertzon` branch `2811e9a` |
+| Factorizations of sweep worker threads are released on their own thread (FennisRobert/EMerge#72) | `mt_pardiso.release` | `hertzon` branch `2811e9a` |
+| ThinConductor sheet split on both sides in the solve | `emerge_patches.apply_thin_conductor` | `hertzon` branch `2811e9a` |
 | Port mode solve stops on `ArpackNoConvergence` | `emerge_patches._robust_eigs` | 3.0.0b5 |
 | Thin conductor split after a new mesh | `_thin_conductor_new_mesh` | 3.0.0b5 |
