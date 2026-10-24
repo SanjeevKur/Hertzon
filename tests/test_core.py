@@ -402,7 +402,8 @@ def test_projection_keeps_the_model_size():
     cam.SetFocalPoint(0, 0, 0)
     cam.SetViewAngle(30)
     got = []
-    v = types.SimpleNamespace(plotter=types.SimpleNamespace(camera=cam, render=lambda: None), on_projection=got.append)
+    v = types.SimpleNamespace(plotter=types.SimpleNamespace(camera=cam, render=lambda: None), on_projection=got.append,
+                              request_render=lambda: None)
     ModelerView.set_orthographic(v, True)
     assert cam.GetParallelProjection() and got == [True]
     assert cam.GetParallelScale() == pytest.approx(100 * math.tan(math.radians(15)))
@@ -804,3 +805,107 @@ def test_box_selection_takes_only_what_lies_completely_inside():
     assert v.box_picks((-1, -1), (11, 1)) == [Pick("A", 0)]          # the bottom edge only
     v.doc.selection_mode = "vertex"
     assert v.box_picks((5, -1), (11, 11)) == [Pick("A", 1), Pick("A", 2)]
+
+
+def _edge_view(Vw, actors):
+    """A ModelerView stand-in for screen-space edge picking: identity camera on a 100 x 100 px view,
+    so world x, y in [-1, 1] land on pixels 0 to 100."""
+    import types
+    import vtk
+    names = ("_edge_segments", "_nearest_edge")
+    View = type("View", (), {k: Vw.ModelerView.__dict__[k] for k in names} | {"PICK_PX": 8})
+    v = View()
+    cam = types.SimpleNamespace(GetCompositeProjectionTransformMatrix=lambda *a: vtk.vtkMatrix4x4())
+    v.plotter = types.SimpleNamespace(renderer=types.SimpleNamespace(GetSize=lambda: (100, 100),
+                                                                     GetActiveCamera=lambda: cam))
+    v.actors, v._edge_cache = actors, None
+    return v
+
+
+def test_edge_pick_by_screen_distance():
+    """Edge mode and polylines: the edge nearest to the cursor on screen within PICK_PX pixels, hidden objects
+    and other dimensions skipped, the nearer one in depth on a tie, the picking arrays rebuilt when an object
+    changes."""
+    import types
+    import pyvista as pv
+    from hertzon.gui import viewer as Vw
+
+    def obj(polylines, dim=3, z=0.0, shown=True):
+        pts, lines, off = [], [], 0
+        for P in polylines:
+            P = np.c_[np.asarray(P, float), np.full(len(P), z)]
+            pts.append(P)
+            lines.append(np.r_[len(P), np.arange(off, off + len(P))])
+            off += len(P)
+        em = pv.PolyData(np.vstack(pts), lines=np.concatenate(lines))
+        em.cell_data["edge"] = np.arange(len(polylines)) + 10
+        return types.SimpleNamespace(edge_mesh=em, dim=dim,
+                                     edges=types.SimpleNamespace(GetVisibility=lambda: shown))
+
+    # A: two edges (10 along y = 0, 11 a bent line through x = 0.5); L: a polyline (dim 1) along y = 0.6
+    A = obj([[(-0.8, 0.0), (0.8, 0.0)], [(0.5, -0.8), (0.5, -0.4), (0.6, 0.4)]])
+    L = obj([[(-0.8, 0.6), (0.0, 0.6), (0.8, 0.6)]], dim=1)
+    v = _edge_view(Vw, {"A": A, "L": L})
+    assert v._nearest_edge((20, 52)) == ("A", 10)           # 2 px above y = 0
+    assert v._nearest_edge((76, 30)) == ("A", 11)           # next to the bent line, near its second segment
+    assert v._nearest_edge((40, 81)) == ("L", 10)
+    assert v._nearest_edge((40, 65)) is None                # more than 8 px from everything
+    assert v._nearest_edge((20, 52), dims=(0, 1)) is None   # only polylines
+    assert v._nearest_edge((40, 81), dims=(0, 1)) == ("L", 10)
+    # a coincident edge nearer to the camera wins, a hidden one is never picked
+    v.actors["B"] = obj([[(-0.8, 0.0), (0.8, 0.0)]], z=-0.5)
+    assert v._nearest_edge((20, 52)) == ("B", 10)
+    v.actors["B"] = obj([[(-0.8, 0.0), (0.8, 0.0)]], z=-0.5, shown=False)
+    assert v._nearest_edge((20, 52)) == ("A", 10)
+    # an object rebuilt with new geometry: the cached segments follow
+    v.actors["A"] = obj([[(-0.8, -0.5), (0.8, -0.5)]])
+    assert v._nearest_edge((20, 52)) is None
+    assert v._nearest_edge((20, 26)) == ("A", 10)
+
+
+def test_selection_restyles_only_what_changed():
+    """A click restyles the objects whose selection changed; the colours are the same as after a full restyle."""
+    import types
+    import pyvista as pv
+    import vtk
+    from hertzon.gui import viewer as Vw
+    from hertzon.gui.doc import Pick
+    names = ("_plain_actor", "_drop_actor", "_objects", "_style_obj", "restyle_all", "refresh_selection",
+             "_clear_highlight", "_highlight_color", "_add_highlight_mesh", "request_render")
+    View = type("View", (), {k: Vw.ModelerView.__dict__[k] for k in names})
+    v = View()
+    ren = vtk.vtkRenderer()
+    v.plotter = types.SimpleNamespace(renderer=ren, interactor=types.SimpleNamespace(isVisible=lambda: True,
+                                                                                     update=lambda: None))
+    objs = [types.SimpleNamespace(name=f"O{i}", color="#3060a0", transparency=0.6 if i == 2 else 0.0,
+                                  visible=i != 3, wireframe=False, material="vacuum",
+                                  history=[types.SimpleNamespace(kind="CreateBox")]) for i in range(5)]
+    v.doc = types.SimpleNamespace(selection_mode="object", selection=[], tess={},
+                                  design=types.SimpleNamespace(objects=objs, obj=lambda n: objs[int(n[1:])]),
+                                  project=types.SimpleNamespace(material=lambda m: None))
+    v.actors, v.highlight_actors, v.overlay_actors = {}, [], {}
+    v._styled_sel, v._styled_mode = set(), None
+    for o in objs:
+        m = pv.Box()
+        m.cell_data["face"] = np.arange(m.n_cells)
+        v.actors[o.name] = Vw.ObjActors(surface=v._plain_actor(m, "#999999", pickable=True), mesh=m,
+                                        edges=v._plain_actor(m.extract_all_edges(), "#202020", line_width=1))
+
+    def look():
+        return {n: (a.surface.GetProperty().GetColor(), a.surface.GetVisibility(), a.edges.GetProperty().GetLineWidth())
+                for n, a in v.actors.items()}, ren.GetActors().GetNumberOfItems()
+    styled = []
+    real = v._style_obj
+    v._style_obj = lambda n, o=None: (styled.append(n), real(n, o))
+    v.refresh_selection()
+    for sel in (["O1"], ["O2", "O4"], ["O3"], [], ["O0"]):
+        v.doc.selection = [Pick(n) for n in sel]
+        before = set(v._styled_sel)
+        styled.clear()
+        v.refresh_selection()
+        assert set(styled) == before | set(sel)              # only what was or is selected
+        got = look()
+        v.restyle_all()
+        assert look() == got                                 # same as restyling everything
+    assert v.actors["O0"].surface.GetProperty().GetColor() == Vw._rgb(Vw.HIGHLIGHT)
+    assert v.actors["O1"].surface.GetProperty().GetColor() == Vw._rgb("#3060a0")

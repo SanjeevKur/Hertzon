@@ -22,6 +22,11 @@ the GitHub release notes.
   Local (Delaunay) on the benchmark models (`examples/benchmark/mesher`).
 
 ### Changed
+- **Faster 3D view with many objects**: the model shows several times faster (300 objects: 1.8 s instead
+  of 7.7 s), a click to select, an attribute change and the edge pre-highlight no longer slow down with
+  the number of objects (300 objects: select 0.3 s instead of 0.8 s, edge hover 2 ms instead of 0.4 s).
+  Several changes in one step now redraw the view once instead of two or three times. The view looks
+  and picks exactly as before.
 - **Assign Material only for solids**: greyed out in the ribbon, the Modeler menu and the context menus
   when only sheets or lines are selected (they get a boundary such as Finite Conductivity or Impedance);
   with solids and sheets selected the material goes to the solids. The object properties of sheets and
