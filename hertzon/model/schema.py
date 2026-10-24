@@ -295,7 +295,7 @@ SETUP: list[Prop] = [
     P("RefinementRatio", "float", "0.6", label="Element size ratio of refined elements", tab="Advanced"),
     P("GrowthRate", "float", "1.6", label="Mesh growth rate", tab="Advanced"),
     P("EnforceRefinementPercent", "bool", "True", label="Enforce refinement percentage", tab="Advanced"),
-    P("RefinementMethod", "choice", "Local (Delaunay)", label="Mesh refinement", tab="Advanced", choices=("Local (Delaunay)", "Remesh (slow)", "Remesh (stable, experimental)")),
+    P("RefinementMethod", "choice", "Local (Delaunay)", label="Mesh refinement", tab="Advanced", choices=("Local (Delaunay)", "Remesh (slow)", "Remesh (stable, experimental)", "AURA (EMerge, experimental)")),
     P("SaveFields", "bool", "True", label="Save fields at solution frequency", tab="Advanced"),
     P("Threads", "int", "0", label="Solver cores (0 = Tools > Options)", tab="Advanced"),
 ]
