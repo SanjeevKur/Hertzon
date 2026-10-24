@@ -5,7 +5,15 @@ the GitHub release notes.
 
 ## Unreleased
 
+### Added
+- **Mesh refinement "AURA (EMerge)"**, EMerge's own local refinement, with Hertzon's error estimate,
+  convergence criterion and curved elements. A comparison script measures the time to solution against
+  Local (Delaunay) on the benchmark models (`examples/benchmark/mesher`).
+
 ### Changed
+- **AURA (EMerge) is the default mesh refinement for new setups** (was Local (Delaunay)). On the
+  benchmark models it reached the convergence criterion in 0.35 to 0.6 times the time in three of four
+  cases and was as accurate or more accurate per tetrahedron. Saved setups keep their method; Local (Delaunay) stays selectable.
 - **EMerge 3.0.0b5 plus the fixes on its `hertzon` branch** (commit `2811e9a`; was 3.0.0a25, as advised in
   #25). Hertzon now installs EMerge from wheels built from a pinned commit, so solver fixes arrive without
   waiting for a release. Thin conductors with thickness (two-sided Finite Conductivity) are now solved
