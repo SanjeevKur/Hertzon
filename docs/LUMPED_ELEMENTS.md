@@ -20,11 +20,13 @@ solver warns. A relative path is relative to the project file.
 
 ## Lumped Elements tab
 
-1. Select the two traces (**O**) the component connects. They have to lie in one plane with a gap along X,
-   Y or Z.
-2. **Resistor**, **Inductor**, **Capacitor** or **Touchstone**.
-3. Choose the value or the Touchstone file, the package and the geometry:
-   - **Planar**: the element sheet lies between the pads in the trace plane. *Typical ESL and ESR* adds
+1. Click **Resistor**, **Inductor**, **Capacitor** or **Touchstone**, or open its menu and pick the package
+   (0201 ... 1206 or a vendor series).
+2. Click the centre of the component on the board surface (the click snaps to surfaces, vertices and edge
+   centers; **Tab** types the coordinates).
+3. Choose the value or the Touchstone file, the orientation (along X or Y on a board in the XY plane: the
+   plane of the drawing grid), the land pattern and the geometry:
+   - **Planar**: the element sheet lies between the pads in the board plane. *Typical ESL and ESR* adds
      the mounted inductance and loss of the size in series (0201 0.15 nH, 0402 0.3 nH, 0603 0.45 nH,
      0805 0.6 nH, 1206 0.9 nH; 0.05 Ω).
    - **3D**: the body gets metal terminations of its height, the element sheet lies on top between them.
@@ -32,15 +34,25 @@ solver warns. A relative path is relative to the project file.
 
 Hertzon adds, in a group named after the component (`C1`, `L1`, `R1`, `U1` ...):
 
-- **Pads** from each trace end to the pad gap G of the land pattern, as wide as the pad width X. They are
-  made like the first trace: of its metal, or added to its Perfect E / Finite Conductivity boundary.
-  When the gap already is G there are no pads.
+- the two **pads** of the land pattern (Perfect E boundary `C1_Pads`),
 - the **element sheet** and its **Lumped RLC** boundary `C1_RLC` with the integration line,
-- with 3D the **terminations** (PEC boxes).
+- with 3D the **terminations** (PEC boxes),
+- the design variables **`C1_x`, `C1_y`, `C1_z`**: the centre of the component. Pads, element, terminations
+  and integration line are defined relative to them, so changing them moves the whole component (also in
+  a parametric sweep or an optimization). Move it with them, not with Arrange > Move, which leaves the
+  integration line behind.
+
+Draw the traces up to the pads or let them overlap the pads; the pads and the traces connect where they touch
+or overlap.
+
+**Shortcut between two traces:** with two traces selected (**O**) the component is placed in the gap between
+them instead. The pads then reach from the trace ends to the pad gap G and are made like the first trace (of
+its metal for solid traces, or added to its Perfect E / Finite Conductivity boundary); when the gap is G there
+are no pads. The traces have to lie in one plane with a gap along X, Y or Z.
 
 The land pattern follows IPC-7351 (nominal density) from the body dimensions: G = L − 2e, outer extent
-L + 2 × 0.10 mm below size 0603 and L + 2 × 0.35 mm from it on, pad width W. G and X can be changed in the
-dialog. Draw the traces with a gap of about the outer extent of the land pattern; a larger gap gives long
+L + 2 × 0.10 mm below size 0603 and L + 2 × 0.35 mm from it on, pad width W. G, X and (when placed freely)
+the outer extent Z can be changed in the dialog. Between two traces, a gap much larger than Z gives long
 pads, which Hertzon reports.
 
 ## Packages

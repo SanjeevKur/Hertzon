@@ -5,19 +5,28 @@ the GitHub release notes.
 
 ## Unreleased
 
+### Added
+- **Mesh refinement "AURA (EMerge)"**, EMerge's own local refinement, with Hertzon's error estimate,
+  convergence criterion and curved elements. A comparison script measures the time to solution against
+  Local (Delaunay) on the benchmark models (`examples/benchmark/mesher`).
+
 ### Changed
 - **Assign Material only for solids**: greyed out in the ribbon, the Modeler menu and the context menus
   when only sheets or lines are selected (they get a boundary such as Finite Conductivity or Impedance);
   with solids and sheets selected the material goes to the solids. The object properties of sheets and
   lines have no Material row. A material stored on a sheet by an
   older project is kept and, as before, not used by the solve.
+- **AURA (EMerge) is the default mesh refinement for new setups** (was Local (Delaunay)). On the
+  benchmark models it reached the convergence criterion in 0.35 to 0.6 times the time in three of four
+  cases and was as accurate or more accurate per tetrahedron. Saved setups keep their method; Local (Delaunay) stays selectable.
 - **EMerge 3.0.0b5 plus the fixes on its `hertzon` branch** (commit `2811e9a`; was 3.0.0a25, as advised in
   #25). Hertzon now installs EMerge from wheels built from a pinned commit, so solver fixes arrive without
   waiting for a release. Thin conductors with thickness (two-sided Finite Conductivity) are now solved
   with separate fields on both sides of the sheet: filters with such traces show slightly more conductor
   loss (hairpin example: S21 about 0.3 dB lower) and smooth surface currents. Parallel sweeps no longer
   keep the memory of every finished frequency batch. Hertzon's own workarounds for these points, for the
-  port mode solve and for the welcome prompt of the setup are removed. Speed and results were checked
+  port mode solve, for conductor sheets in the error estimate (it changed no mesh) and for the welcome
+  prompt of the setup are removed. Speed and results were checked
   on the benchmark models (`examples/benchmark/tools/emerge_bench.py`, docs/EMERGE_INTEGRATION.md).
 - **Integration line of Lumped Port and Lumped RLC**: placed automatically between the two conductors
   that touch the sheet, from the centre of one contact to the centre of the other (conductors: objects of a
@@ -33,7 +42,9 @@ the GitHub release notes.
 
 ### New
 - **Lumped Elements tab**: inserts a chip resistor, inductor or capacitor, or a component measured by a
-  Touchstone file, between the two selected traces. Packages 0201, 0402, 0603, 0805, 1206 and the RF series
+  Touchstone file: pick the package in the menu of the button and click the position on the board. The
+  part comes with its pads (Perfect E), and its position is the design variables <name>_x/_y/_z, so it
+  moves as a whole. With two traces selected it is placed in the gap between them. Packages 0201, 0402, 0603, 0805, 1206 and the RF series
   Coilcraft 0402HP/0402HPH/0402CS/0603HP/0603CS and Murata LQW15AN/LQP03TN/GJM03/GJM15 with their body
   dimensions. Hertzon adds the pads of the land pattern (made like the traces), the element sheet with its
   Lumped RLC boundary and integration line, and optionally a 3D body with metal terminations (the

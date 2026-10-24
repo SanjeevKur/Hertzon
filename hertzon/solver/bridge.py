@@ -972,7 +972,6 @@ class Bridge:
                 break
             self._pw_fields = None
             pec = [int(t) for bc in m.mw.bc.oftype(PEC) for t in m.mesh.get_triangles(bc.tags)]
-            pec = _with_conductor_sheets(m, pec)
             errors, lengths = [], None
             for fl in fields:
                 fl.set_field_vector()
@@ -987,9 +986,11 @@ class Bridge:
             method = str(p.get("RefinementMethod", ""))
             snap = (np.asarray(m.mesh.nodes), np.asarray(m.mesh.tets), m.mesh.n_tets)
             g = _refine_delaunay(m, error, lengths, pct, growth, step, self.out) if method.startswith("Local") else None
+            if g is None and method.startswith("AURA"):
+                g = _refine_aura(m, error, pct, step)
             if g is not None:
                 grow = g
-            elif method.startswith("Local"):        # failed local pass: keep the refinement so far
+            elif method.startswith("Local") or method.startswith("AURA"):  # failed local pass: keep the refinement so far
                 grow = _refine_stable(m, error, lengths, pct, growth, step, snap)
             elif _refine_local(m, p, coords, sizes, ratio, growth, pct, error, lengths):
                 grow = (m.mesh.n_tets / last_n - 1) * 100
@@ -1657,9 +1658,8 @@ def adaptive_loop(m, fa: list[float], p: dict, out: Path, on_pass=None, key: str
         t_err = time.time()
         errors = np.empty((m.mesh.n_tets, len(fa)))
         lengths = None
-        est_tris = _with_conductor_sheets(m, solve_ids)
         for i in range(len(fa)):
-            err, lengths = fields[i]._solution_quality(est_tris)
+            err, lengths = fields[i]._solution_quality(solve_ids)
             errors[:, i] = err
         error = errors.max(axis=1)
         info(f"Pass {step}: error estimate {time.time() - t_err:.2f} s ({m.mesh.n_tets} tetrahedra)")
@@ -1673,9 +1673,11 @@ def adaptive_loop(m, fa: list[float], p: dict, out: Path, on_pass=None, key: str
         # the current mesh, kept for the stable fallback: a failed local pass may already have reset the model
         snap = (np.asarray(m.mesh.nodes), np.asarray(m.mesh.tets), m.mesh.n_tets)
         grow = _refine_delaunay(m, error, lengths, pct, growth, step, out) if method.startswith("Local") else None
+        if grow is None and method.startswith("AURA"):
+            grow = _refine_aura(m, error, pct, step)
         if grow is not None:
             pass
-        elif method.startswith("Remesh (stable") or method.startswith("Local"):
+        elif method.startswith("Remesh (stable") or method.startswith("Local") or method.startswith("AURA"):
             grow = _refine_stable(m, error, lengths, pct, growth, step, snap)
         else:
             # keep the ratio that hit the target in the previous pass (good first guess)
@@ -1903,6 +1905,36 @@ def _refine_delaunay(m, error, lengths, pct: float, growth: float, step: int, ou
         return None
 
 
+def _refine_aura(m, error, pct: float, step: int):
+    """AURA (EMerge): EMerge's own local refinement, longest-edge bisection of the worst tets followed by
+    flips and smoothing. Every old node stays. Returns the growth in percent, None when it failed (the
+    caller then re-meshes with the stable size field)."""
+    try:
+        from emerge._emerge.aura import BrepSnapshot
+        from emerge._emerge.aura.brep import snapshot_gmsh
+        from emerge._emerge.aura.emerge_tools import refine_mesh_step
+        if getattr(m, "_aura_brep", None) is None:
+            try:
+                m._aura_brep = snapshot_gmsh(scale=1 / m._geo_scale_factor)
+            except Exception as e:  # noqa: BLE001
+                warn(f"AURA: no geometry snapshot ({e}); new boundary nodes stay on the facets")
+                m._aura_brep = BrepSnapshot.empty()
+        periodic = [(bc.face1.tags, bc.face2.tags, np.asarray(bc.dv)) for bc in m.mesher._get_periodic_bcs()]
+        t0 = time.time()
+        new, rep = refine_mesh_step(m.mesh, np.asarray(error, float), brep=m._aura_brep, growth=pct / 100.0,
+                                    periodic=periodic)
+        n0 = m.mesh.n_tets
+        m._install_refined_mesh(new)
+        m._local_mesh = None
+        grow = (m.mesh.n_tets / n0 - 1) * 100
+        info(f"Pass {step}: AURA refinement -> {m.mesh.n_tets} tetrahedra (+{grow:.1f}%), "
+             f"min. quality {rep['q_min']:.3f}, {time.time() - t0:.2f} s")
+        return grow
+    except Exception as e:  # noqa: BLE001
+        warn(f"AURA refinement failed ({e}); re-meshing the model instead")
+        return None
+
+
 MMG_SHRINK = 0.5           # Mmg: refined elements are halved (a quarter made the passes slower overall)
 
 
@@ -2124,29 +2156,6 @@ def _save_pass_results(out: Path, fa: list[float], Ss: list, z0, passes: list, m
                                               "frequencies": list(fa), "running": True})
     except Exception as e:  # noqa: BLE001
         warn(f"Could not store intermediate pass results: {e}")
-
-
-def _with_conductor_sheets(m, pec_tris):
-    """Triangles the error estimate treats as conductor faces: EMerge's PEC triangles plus the faces with
-    a finite conductivity (surface impedance / thin conductor). Across a conductor sheet the tangential
-    H jumps by the surface current, which is physical and no discretization error; there, as on PEC, the
-    residual is the tangential E on the face."""
-    from .emerge_patches import native
-    if native("sheet_error"):
-        return pec_tris
-    try:
-        from emerge._emerge.physics.microwave.bcs.boundary_conditions import SurfaceImpedance, ThinConductor
-        tags = []
-        for bc in m.mw.bc.boundary_conditions:
-            if isinstance(bc, ThinConductor) or (isinstance(bc, SurfaceImpedance) and bc._material is not None):
-                tags.extend(bc.tags)
-        if not tags:
-            return pec_tris
-        extra = np.asarray(m.mesh.get_triangles(sorted(set(tags))), np.int64).ravel()
-        return np.concatenate([np.asarray(pec_tris if pec_tris is not None else [], np.int64).ravel(), extra])
-    except Exception as e:  # noqa: BLE001
-        warn(f"Conductor faces not excluded from the error estimate ({e})")
-        return pec_tris
 
 
 def kernel_tag() -> str:

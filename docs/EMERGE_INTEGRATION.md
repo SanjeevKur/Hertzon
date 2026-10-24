@@ -20,7 +20,7 @@ the commits on this branch.
   the S-parameters (last adaptive pass and sweeps) and the far fields.
 - Every case runs a fixed number of adaptive passes (4), so two runs solve the same meshes; the tetrahedra
   per pass are compared too. Before a series, Hertzon's warm-up compiles all numba kernels.
-- `HERTZON_EMERGE_NATIVE=mt_pardiso,sheet_error,mesh_fallback`,
+- `HERTZON_EMERGE_NATIVE=mt_pardiso,mesh_fallback`,
   `HERTZON_SLOW_ASSEMBLY=1`, `HERTZON_PARDISO_STRUCT=1` and `HERTZON_HYBRID_SWEEP=0` switch single
   replacements off, so EMerge's own code runs instead.
 - `examples/benchmark/tools/farfield_kernels.py HUYGENS_NPZ` compares the far field kernels on stored
@@ -159,13 +159,6 @@ it is about 9 % of the Rotman run time. Hertzon's former parallel kernel for EMe
 excitations in one pass over the tetrahedra (geometry and neighbour data once).
 **Proposal (low priority):** a multi-excitation variant of `compute_error_single`; nothing to keep in Hertzon.
 
-### Conductor sheets in the error estimate (`bridge._with_conductor_sheets`)
-
-Faces with a finite conductivity (surface impedance with material, thin conductor) are passed to the error
-estimate like PEC faces, because the jump of tangential H across them is the physical surface current. In
-the benchmark models the meshes came out identical with and without it.
-**Proposal:** check against EMerge's thin trace changes; otherwise a small change in EMerge.
-
 ### Robustness only (no effect unless something fails)
 
 - `apply_mesh_fallback`: when gmsh fails on trimmed B-spline faces of CAD files, mesh again without
@@ -173,6 +166,10 @@ the benchmark models the meshes came out identical with and without it.
 
 ## Removed
 
+- `bridge._with_conductor_sheets`, which passed conductor sheets to the error estimate like PEC faces.
+  It changed nothing: microstrip and hairpin give the same meshes and S-parameters without it (the face
+  terms of EMerge's estimate contribute practically nothing, see
+  `emerge-integration/fehlerschaetzer/amr-vergleich-results.md` in the project files).
 - `_thin_conductor_new_mesh` (fixed in EMerge 3.0.0b5).
 - `apply_thin_conductor`, which kept `tet_to_field` in the numbering the system was assembled with. EMerge
   `77beeb6` makes the split itself right: every tetrahedron on one side of the sheet uses the copied DoFs,

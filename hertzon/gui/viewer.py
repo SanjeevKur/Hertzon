@@ -64,11 +64,12 @@ DRAW_PHASES = {"CreateBox": 3, "CreateCylinder": 3, "CreateCone": 4, "CreateSphe
                "CreateRegularPolygon": 2, "CreatePolyline": 999, "Measure": 2,
                "MeasurePosition": 1, "MeasureAngle": 3,
                "OpMove": 2, "OpDupLine": 2, "OpMirror": 2, "OpDupMirror": 2,
-               "CSOffset": 1, "CSRotated": 2, "CSBoth": 3, "IntegrationLine": 2}
+               "CSOffset": 1, "CSRotated": 2, "CSBoth": 3, "IntegrationLine": 2,
+               "PlaceComponent": 1}
 # interactive operations on selected objects (Move / Duplicate Along Line / Mirror by clicking points)
 OP_KINDS = {"OpMove", "OpDupLine", "OpMirror", "OpDupMirror"}
 # drawn in global coordinates with free 3D points (not held to the plane of the first point)
-FREE_KINDS = OP_KINDS | {"IntegrationLine"}
+FREE_KINDS = OP_KINDS | {"IntegrationLine", "PlaceComponent"}
 # phases that move along the plane normal instead of in the plane
 HEIGHT_PHASE = {"CreateBox": {2}, "CreateCylinder": {2}, "CreateCone": {3}, "CreateRegularPolyhedron": {2}}
 
@@ -1625,6 +1626,8 @@ class ModelerView(QWidget):
             "CSBoth": ["Enter the origin", "Enter a point on the new X axis", "Enter a point in the new XY plane"],
             "IntegrationLine": ["Enter the start point of the integration line (snaps to vertices and edge centers)",
                                 "Enter the end point of the integration line"],
+            "PlaceComponent": ["Click the centre of the component on the board surface (snaps to surfaces, "
+                               "vertices and edge centers)"],
             "MeasureAngle": ["Enter a point on the first leg", "Enter the vertex of the angle",
                              "Enter a point on the second leg"],
         }.get(k)
@@ -1852,7 +1855,7 @@ class ModelerView(QWidget):
                 kind = "grid" if "grid" in self.snap_modes else ""
             self.snap_kind = kind
             return p
-        if geo is None and self.movement_mode == "3D":
+        if geo is None and (self.movement_mode == "3D" or d.kind == "PlaceComponent"):
             hit = self._surface_point(pos)
             if hit is not None:
                 hit = R.T @ (hit - O)

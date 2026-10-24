@@ -11,7 +11,7 @@ _DONE = False
 
 def native(name: str) -> bool:
     """True when the Hertzon replacement ``name`` is switched off for a comparison with plain EMerge:
-    HERTZON_EMERGE_NATIVE=mt_pardiso,sheet_error,mesh_fallback"""
+    HERTZON_EMERGE_NATIVE=mt_pardiso,mesh_fallback"""
     return name in os.environ.get("HERTZON_EMERGE_NATIVE", "").replace(" ", "").split(",")
 
 

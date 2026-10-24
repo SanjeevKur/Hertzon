@@ -735,14 +735,23 @@ class MainWindow(QMainWindow):
         # ---- Lumped Elements ---------------------------------------------------------------
         pg = rb.page("Lumped Elements")
         g = pg.group("Components")
-        g.large("Resistor", "resistor", lambda: self.insert_component("R"),
-                tip="Insert a chip resistor between the two selected traces")
-        g.large("Inductor", "inductor", lambda: self.insert_component("L"),
-                tip="Insert a chip inductor between the two selected traces")
-        g.large("Capacitor", "capacitor", lambda: self.insert_component("C"),
-                tip="Insert a chip capacitor between the two selected traces")
-        g.large("Touchstone", "chip", lambda: self.insert_component("S"),
-                tip="Insert a component measured by a Touchstone file (.s1p/.s2p) between the two selected traces")
+
+        def pkg_menu(kind):
+            from ..model.lumped import GENERIC, SERIES
+            items = [(p.name, (lambda p=p.name: self.insert_component(kind, p))) for p in GENERIC]
+            items += [(p.name, (lambda p=p.name: self.insert_component(kind, p))) for p in SERIES
+                      if kind in ("S", p.kind)]
+            return items
+        tip = (" with its pads: click the package, then the position on the board. With two traces selected it "
+               "is placed in the gap between them.")
+        g.large("Resistor", "resistor", lambda: self.insert_component("R"), menu=pkg_menu("R"),
+                tip="Chip resistor" + tip)
+        g.large("Inductor", "inductor", lambda: self.insert_component("L"), menu=pkg_menu("L"),
+                tip="Chip inductor" + tip)
+        g.large("Capacitor", "capacitor", lambda: self.insert_component("C"), menu=pkg_menu("C"),
+                tip="Chip capacitor" + tip)
+        g.large("Touchstone", "chip", lambda: self.insert_component("S"), menu=pkg_menu("S"),
+                tip="Component measured by a Touchstone file (.s1p/.s2p)" + tip)
         g = pg.group("Boundary")
         g.large("Lumped RLC", "boundary", bnd("Lumped RLC"), tip="Lumped RLC boundary on the selected sheet")
 
@@ -2081,6 +2090,9 @@ class MainWindow(QMainWindow):
         P = [np.asarray(p, float) for p in pts]
         if kind == "IntegrationLine":
             self._line_drawn(P)
+            return
+        if kind == "PlaceComponent":
+            self._component_placed(P[0])
             return
         if kind.startswith("Op"):
             self._op_finished(kind, P)
@@ -4444,39 +4456,61 @@ class MainWindow(QMainWindow):
             raise ValueError(f"'{name}' has no geometry")
         return np.asarray(t.points, float) * 1e3
 
-    def insert_component(self, kind: str) -> None:
-        """SMD component between the two selected traces: pads, element sheet, Lumped RLC boundary."""
+    def insert_component(self, kind: str, package: str | None = None) -> None:
+        """SMD component with its pads, element sheet and Lumped RLC boundary: placed by a click on the board,
+        or in the gap between the two selected traces."""
+        objs = self.doc.selected_objects() if self.doc.selection_mode == "object" else []
+        if len(objs) == 2 and all(self.des.has_obj(o) and self.des.obj(o).dim >= 2 for o in objs):
+            self._insert_between(kind, package, objs)
+            return
+        self._place_target = (kind, package)
+        self.start_draw("PlaceComponent")
+
+    def _component_placed(self, p) -> None:
         from ..model import lumped as LU
         from .lumped_dialogs import ComponentDialog
-        objs = self.doc.selected_objects()
-        if len(objs) != 2:
-            QMessageBox.information(self, "Insert Component", "Select the two traces (O) the component connects.")
+        kind, package = getattr(self, "_place_target", ("C", None))
+        normal = PLANE_NORMAL[self.view.grid_plane]
+        dlg = ComponentDialog(self, kind, None, package, normal)
+        if dlg.exec() != QDialog.Accepted:
             return
+        v = dlg.result_values()
+        place = LU.Placement(tuple(float(x) * 1e3 for x in p), v["axis"], normal)
+        self._add_component(v, None, None, None, place)
+
+    def _insert_between(self, kind: str, package: str | None, objs: list[str]) -> None:
+        from ..model import lumped as LU
+        from .lumped_dialogs import ComponentDialog
         try:
             ends = LU.trace_ends(self._trace_points_mm(objs[0]), self._trace_points_mm(objs[1]))
         except ValueError as e:
             QMessageBox.warning(self, "Insert Component", str(e))
             return
-        dlg = ComponentDialog(self, kind, ends.gap)
+        dlg = ComponentDialog(self, kind, ends.gap, package)
         if dlg.exec() != QDialog.Accepted:
             return
-        v = dlg.result_values()
+        self._add_component(dlg.result_values(), objs[0], objs[1], ends, None)
+
+    def _add_component(self, v: dict, a, b, ends, place) -> None:
+        from ..model import lumped as LU
         self.doc.checkpoint()
         try:
-            b, made, warns = LU.insert_component(
-                self.doc.project, self.des, objs[0], objs[1], ends, v["pkg"], v["land"], v["kind"], v["value"],
-                v["name"], parasitics=v["parasitics"], terminations=v["terminations"], touchstone=v["touchstone"],
-                mount=v["mount"])
+            bnd, made, warns = LU.insert_component(
+                self.doc.project, self.des, a, b, ends, v["pkg"], v["land"], v["kind"], v["value"], v["name"],
+                parasitics=v["parasitics"], terminations=v["terminations"], touchstone=v["touchstone"],
+                mount=v["mount"], place=place)
         except Exception as e:  # noqa: BLE001
             self.doc.undo()
             QMessageBox.warning(self, "Insert Component", str(e))
             return
         self.doc.commit("model")
-        self.view.show_assignments([b])
+        self.view.show_assignments([bnd])
         for w in warns:
-            self.msgs.add("warning", f"{b.name}: {w}")
-        self.msgs.add("info", f"Inserted {v['pkg'].name} '{made[-1].name if made else b.name}' between "
-                              f"{objs[0]} and {objs[1]} ({', '.join(o.name for o in made)})")
+            self.msgs.add("warning", f"{bnd.name}: {w}")
+        where = f"between {a} and {b}" if a else "at the clicked point (move it with its variables " \
+            + ", ".join(k for k in self.des.variables if k.startswith(made[-1].name + "_")) + ")"
+        self.msgs.add("info", f"Inserted {v['pkg'].name} '{made[-1].name}' {where}: "
+                              f"{', '.join(o.name for o in made)}")
 
     def draw_integration_line(self, name: str) -> None:
         """Start and end point of the integration line picked in the 3D view (two clicks, with snapping)."""
