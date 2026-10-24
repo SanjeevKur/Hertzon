@@ -28,7 +28,9 @@ the GitHub release notes.
 
 ### New
 - **Lumped Elements tab**: inserts a chip resistor, inductor or capacitor, or a component measured by a
-  Touchstone file, between the two selected traces. Packages 0201, 0402, 0603, 0805, 1206 and the RF series
+  Touchstone file: pick the package in the menu of the button and click the position on the board. The
+  part comes with its pads (Perfect E), and its position is the design variables <name>_x/_y/_z, so it
+  moves as a whole. With two traces selected it is placed in the gap between them. Packages 0201, 0402, 0603, 0805, 1206 and the RF series
   Coilcraft 0402HP/0402HPH/0402CS/0603HP/0603CS and Murata LQW15AN/LQP03TN/GJM03/GJM15 with their body
   dimensions. Hertzon adds the pads of the land pattern (made like the traces), the element sheet with its
   Lumped RLC boundary and integration line, and optionally a 3D body with metal terminations (the

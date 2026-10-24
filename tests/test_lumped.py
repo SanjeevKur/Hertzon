@@ -163,7 +163,8 @@ def test_insert_component_into_a_design():
     b2, made2, _ = LU.insert_component(p, d, "TraceA", "TraceB", ends, pkg, LU.land_pattern(pkg), "L", "3nH",
                                        terminations=True)
     assert made2[-1].name == "L1" and b2.props["Inductance"] == "3nH" and b2.props["UseResistance"] == "False"
-    assert d.obj("R1_PadA").material == "pec" and d.obj("R1_PadA").solve_inside is False
+    # sheet pads conduct through a Perfect E boundary (a metal material makes only solids conductors)
+    assert d.assignment("R1_Pads").kind == "Perfect E" and d.assignment("R1_Pads").objects == ["R1_PadA", "R1_PadB"]
     assert d.obj("L1_TermA").material == "pec" and d.obj("L1_TermA").history[0].kind == "CreateBox"
 
 
@@ -174,3 +175,33 @@ def test_insert_touchstone_component(tmp_path):
     b, _, _ = LU.insert_component(p, d, "TraceA", "TraceB", ends, pkg, LU.land_pattern(pkg), "S", touchstone=str(f))
     assert b.props["Model"] == "Touchstone" and b.props["TouchstoneFile"] == str(f)
     assert b.props["Component"] == "Murata GJM15 (GJM1555C1H1R0BB01)"
+
+
+def test_place_component_freely():
+    """Placed by a click: full land pattern around the point, position in design variables, Perfect E pads."""
+    p = Project("Free")
+    d = p.designs[0]
+    pkg = LU.PACKAGES["0603"]
+    land = LU.land_pattern(pkg)                                        # G 0.9, Z 2.3, X 0.8
+    place = LU.Placement((5.0, 7.0, 0.8), axis=1, normal=2)
+    b, made, warns = LU.insert_component(p, d, None, None, None, pkg, land, "C", "1pF", place=place)
+    assert [o.name for o in made] == ["C1_PadA", "C1_PadB", "C1"] and not warns
+    assert d.variables == {"C1_x": "5mm", "C1_y": "7mm", "C1_z": "0.8mm"}
+    pa = made[0].history[0].props
+    assert pa["Position"] == "C1_x-0.4mm,C1_y-1.15mm,C1_z" and pa["YSize"] == "0.7" and pa["XSize"] == "0.8"
+    assert d.assignment("C1_Pads").objects == ["C1_PadA", "C1_PadB"]
+    ev = d.evaluator(p)
+    line = ev.points(b.props["IntegrationLine"])
+    assert np.allclose(np.asarray(line) * 1e3, [[5, 6.55, 0.8], [5, 7.45, 0.8]])
+    assert np.allclose(np.asarray(ev.point(made[1].history[0].props["Position"])) * 1e3, [4.6, 7.45, 0.8])
+    # moving the variable moves pads, element and integration line together
+    d.variables["C1_y"] = "10mm"
+    ev = d.evaluator(p)
+    assert np.allclose(np.asarray(ev.points(b.props["IntegrationLine"]))[:, 1] * 1e3, [9.55, 10.45])
+    # a second part gets its own variables; along X in the board plane
+    b2, made2, _ = LU.insert_component(p, d, None, None, None, pkg, land, "R", "10ohm",
+                                       place=LU.Placement((0, 0, 0), axis=0, normal=2))
+    assert made2[-1].name == "R1" and "R1_x" in d.variables
+    assert b2.props["IntegrationLine"] == "R1_x-0.45mm,R1_y,R1_z;R1_x+0.45mm,R1_y,R1_z"
+    with pytest.raises(ValueError):
+        LU.Placement((0, 0, 0), axis=2, normal=2).ends(land)

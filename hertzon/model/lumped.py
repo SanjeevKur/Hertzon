@@ -244,13 +244,36 @@ def rlc_props(kind: str, value: str, pkg: Package, parasitics: bool, touchstone:
     return p
 
 
-def insert_component(project, design, trace_a: str, trace_b: str, ends: TraceEnds, pkg: Package, land: Land,
-                     kind: str, value: str = "", name: str = "", parasitics: bool = True,
-                     terminations: bool = False, touchstone: str = "", mount: str = "Series"):
-    """Adds the pads, terminations and element sheet of a component between two traces and its Lumped RLC
-    boundary. The pads are made like trace A: of its material, or added to the Perfect E / Finite
-    Conductivity boundary that makes it a conductor (copper when neither). Returns (boundary, objects,
-    warnings)."""
+@dataclass
+class Placement:
+    """Free placement of a component: centre on the board surface (mm), direction of the component axis
+    (pad to pad) and the board normal (axis indices)."""
+    centre: tuple[float, float, float]
+    axis: int = 0
+    normal: int = 2
+
+    def ends(self, land: Land) -> TraceEnds:
+        """The land pattern as two virtual trace ends at its outer edges, so the pads get their full length."""
+        c = self.centre
+        lat = 3 - self.axis - self.normal
+        if lat not in (0, 1, 2) or self.axis == self.normal:
+            raise ValueError("the component axis has to lie in the board plane")
+        return TraceEnds(self.axis, 1, self.normal, c[self.normal], c[self.normal], c[self.axis] - land.Z / 2,
+                         c[self.axis] + land.Z / 2, c[lat])
+
+
+def insert_component(project, design, trace_a: str | None, trace_b: str | None, ends: TraceEnds | None,
+                     pkg: Package, land: Land, kind: str, value: str = "", name: str = "",
+                     parasitics: bool = True, terminations: bool = False, touchstone: str = "",
+                     mount: str = "Series", place: Placement | None = None):
+    """Adds the pads, terminations and element sheet of a component and its Lumped RLC boundary.
+
+    Between two traces (``trace_a``, ``trace_b``, ``ends``) the pads reach from the trace ends to the land
+    pattern and are made like trace A: of its material, or added to the Perfect E / Finite Conductivity
+    boundary that makes it a conductor. Placed freely (``place``) the component gets the full land pattern
+    and its position is the design variables <name>_x, <name>_y, <name>_z, so it moves with them. Sheet pads
+    that are not part of a trace boundary get a Perfect E boundary <name>_Pads. Returns (boundary,
+    objects, warnings)."""
     from .design import Assignment
     from .expr import LENGTH_UNITS
     from .materials import is_conductor
@@ -258,20 +281,49 @@ def insert_component(project, design, trace_a: str, trace_b: str, ends: TraceEnd
     to_model = 1e-3 / LENGTH_UNITS[design.units]
     fmt = lambda v: f"{v * to_model:.6g}"  # noqa: E731
     name = design.unique_name(name or NAME_PREFIX[kind] + "1")
-    obj_a = design.obj(trace_a)
-    solid = obj_a.dim == 3
+    if place is not None:
+        ends = place.ends(land)
+        names = {*design.variables, *design.all_names()}
+        k = 1
+        while any(f"{name}{'' if k == 1 else k}_{c}" in names for c in "xyz"):
+            k += 1
+        var = [f"{name}{'' if k == 1 else k}_{c}" for c in "xyz"]
+        unit = design.units
+        for v, c in zip(var, place.centre):
+            design.variables[v] = f"{fmt(c)}{unit}"
+
+        def pos(p):
+            out = []
+            for i, x in enumerate(p):
+                off = (x - place.centre[i]) * to_model
+                out.append(var[i] if abs(off) < 1e-12 else f"{var[i]}{off:+.6g}{unit}")
+            return ",".join(out)
+        solid = metal = False
+        bnd = None
+    else:
+        obj_a = design.obj(trace_a)
+        solid = obj_a.dim == 3
+        try:
+            metal = is_conductor(project.material(obj_a.material))
+        except KeyError:
+            metal = False
+        bnd = None if metal else next((b for b in design.boundaries
+                                       if b.kind in ("Perfect E", "Finite Conductivity") and trace_a in b.objects),
+                                      None)
+
+        def pos(p):
+            return ",".join(fmt(v) for v in p)
     geo = component_geometry(ends, pkg, land, name, terminations=terminations, solid_pads=solid)
-    try:
-        metal = is_conductor(project.material(obj_a.material))
-    except KeyError:
-        metal = False
-    bnd = None if metal else next((b for b in design.boundaries if b.kind in ("Perfect E", "Finite Conductivity")
-                                   and trace_a in b.objects), None)
-    pad_mat = obj_a.material if metal else ("vacuum" if bnd is not None else "copper")
+    has_pads = any(bx.role == "pad" for bx in geo.boxes)
+    if bnd is None and has_pads and (not metal or not solid):
+        # sheet pads conduct through a boundary (a metal material makes only solids conductors)
+        bnd = Assignment(design.unique_name(name + "_Pads"), "Perfect E", {}, objects=[])
+        design.boundaries.append(bnd)
+    pad_mat = obj_a.material if metal and solid else "vacuum"
     axis = "XYZ"[ends.normal]
     made = []
     for bx in geo.boxes:
-        lo = ",".join(fmt(v) for v in bx.lo)
+        lo = pos(bx.lo)
         if bx.sheet_axis is None:
             props = dict(Position=lo, XSize=fmt(bx.size[0]), YSize=fmt(bx.size[1]), ZSize=fmt(bx.size[2]))
             o = design.add_object("CreateBox", name=bx.name, material="vacuum", **props)
@@ -297,7 +349,7 @@ def insert_component(project, design, trace_a: str, trace_b: str, ends: TraceEnd
     element = next(o for o in made if o.name == name)
     props = rlc_props(kind, value, pkg, parasitics and not terminations, touchstone, mount)
     props["Component"] = pkg.name + ("" if kind != "S" else f" ({Path(touchstone).stem})")
-    props["IntegrationLine"] = ";".join(",".join(fmt(v) for v in p) for p in geo.line)
+    props["IntegrationLine"] = ";".join(pos(p) for p in geo.line)
     b = Assignment(design.unique_name(name + "_RLC"), "Lumped RLC", props, objects=[element.name])
     design.boundaries.append(b)
     return b, made, geo.warnings
