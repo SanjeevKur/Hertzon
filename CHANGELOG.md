@@ -12,7 +12,8 @@ the GitHub release notes.
   with separate fields on both sides of the sheet: filters with such traces show slightly more conductor
   loss (hairpin example: S21 about 0.3 dB lower) and smooth surface currents. Parallel sweeps no longer
   keep the memory of every finished frequency batch. Hertzon's own workarounds for these points, for the
-  port mode solve and for the welcome prompt of the setup are removed. Speed and results were checked
+  port mode solve, for conductor sheets in the error estimate (it changed no mesh) and for the welcome
+  prompt of the setup are removed. Speed and results were checked
   on the benchmark models (`examples/benchmark/tools/emerge_bench.py`, docs/EMERGE_INTEGRATION.md).
 - **Integration line of Lumped Port and Lumped RLC**: placed automatically between the two conductors
   that touch the sheet, from the centre of one contact to the centre of the other (conductors: objects of a
