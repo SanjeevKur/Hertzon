@@ -6,6 +6,13 @@ the GitHub release notes.
 ## Unreleased
 
 ### Added
+- **Object groups**: Edit > Group (Ctrl+G) puts the selected objects, also solids, sheets and lines
+  together, into one group. A click on a member in the 3D view selects the whole group, so Move, Rotate,
+  Mirror, Copy, Hide or Delete act on all of it; the model tree lists the groups under **Groups** (rename,
+  ungroup, single members selectable there). Edit > Ungroup (Ctrl+Shift+G) dissolves a group to edit single
+  objects again. Groups are saved in the project. SMD components (C, L, R, Touchstone parts) are inserted as
+  a group of pads, terminations and element sheet, and the integration line of a lumped port or element now
+  moves with its objects.
 - **Mesh refinement "AURA (EMerge)"**, EMerge's own local refinement, with Hertzon's error estimate,
   convergence criterion and curved elements. A comparison script measures the time to solution against
   Local (Delaunay) on the benchmark models (`examples/benchmark/mesher`).

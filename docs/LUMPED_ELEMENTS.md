@@ -39,8 +39,12 @@ Hertzon adds, in a group named after the component (`C1`, `L1`, `R1`, `U1` ...):
 - with 3D the **terminations** (PEC boxes),
 - the design variables **`C1_x`, `C1_y`, `C1_z`**: the centre of the component. Pads, element, terminations
   and integration line are defined relative to them, so changing them moves the whole component (also in
-  a parametric sweep or an optimization). Move it with them, not with Arrange > Move, which leaves the
-  integration line behind.
+  a parametric sweep or an optimization). Arrange > Move / Rotate / Mirror of the whole group also works:
+  the integration line goes with it (a move keeps the variables, the other transforms write numbers).
+
+The component is an object group: a click on a pad or the element in the 3D view selects all its parts, and
+it is listed under **Groups** in the model tree. Edit > Ungroup (Ctrl+Shift+G) dissolves the group to edit a
+single part; a single part can also be picked in the model tree under its group.
 
 Draw the traces up to the pads or let them overlap the pads; the pads and the traces connect where they touch
 or overlap.

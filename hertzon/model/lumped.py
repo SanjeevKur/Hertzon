@@ -334,7 +334,6 @@ def insert_component(project, design, trace_a: str | None, trace_b: str | None, 
             o = design.add_object("CreateRectangle", name=bx.name, material="vacuum", **props)
         mat = {"pad": pad_mat, "termination": "pec", "element": "vacuum"}[bx.role]
         o.material = mat
-        o.group = name
         if bx.role != "element":
             try:
                 o.solve_inside = not is_conductor(project.material(mat))
@@ -346,6 +345,8 @@ def insert_component(project, design, trace_a: str | None, trace_b: str | None, 
         else:
             o.color = "#16a085"
         made.append(o)
+    for o in made:          # pads, terminations and element sheet are one group, named like the part
+        o.group = name
     element = next(o for o in made if o.name == name)
     props = rlc_props(kind, value, pkg, parasitics and not terminations, touchstone, mount)
     props["Component"] = pkg.name + ("" if kind != "S" else f" ({Path(touchstone).stem})")
