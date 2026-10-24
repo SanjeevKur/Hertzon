@@ -523,6 +523,7 @@ class Bridge:
                     self.open_faces = self.ff_box.boundary()
             else:
                 self.open_faces = self.region_geo.boundary()
+        self.sym_faces = []
         for b in self.design.boundaries:
             if not b.enabled:
                 continue
@@ -536,6 +537,8 @@ class Bridge:
                 warn(f"{b.name}: empty selection, skipped")
                 continue
             p, ev = b.props, self.ev
+            if b.kind == "Symmetry":
+                self.sym_faces.append(("E" if p.get("Type", "Perfect E") == "Perfect E" else "H", b.name, tags))
             if b.kind == "Perfect E" or (b.kind == "Symmetry" and p.get("Type") == "Perfect E"):
                 mw.bc.PEC(sel)
             elif b.kind == "Perfect H" or (b.kind == "Symmetry" and p.get("Type") == "Perfect H"):
@@ -1255,6 +1258,11 @@ class Bridge:
             warn(f"Far field surface not available: {ex}")
             return False
         out = {"vis": vis, "wns": wns, "stamp": np.array([time.time_ns()])}
+        planes = self.symmetry_planes()
+        if planes:
+            out["sym_kind"] = np.array([p[0] for p in planes])
+            out["sym_axis"] = np.array([p[1] for p in planes], np.int64)
+            out["sym_pos"] = np.array([p[2] for p in planes], np.float64)
         pw = self.plane_wave()
         if pw is not None:
             out["E0"] = np.array([abs(self.ev.value(pw.props.get("EMagnitude", "1") or "1"))])
@@ -1281,10 +1289,40 @@ class Bridge:
                     out[f"E_{k}_{n}"], out[f"H_{k}_{n}"] = E.astype(np.complex128), H.astype(np.complex128)
                     S = 0.5 * np.cross(E.T, np.conj(H).T).T
                     out[f"Prad_{k}_{n}"] = np.array([float(np.real(np.sum(S * wns)))])
+                    if port.get("kind") == "Incident Plane Wave":
+                        out[f"pw_{n}"] = np.array([1])
                 except Exception as ex:  # noqa: BLE001
                     warn(f"Far field surface fields for port {port['number']} failed: {ex}")
         self.store.save_npz(f"huygens_{label}.npz", **out)
         return True
+
+    def symmetry_planes(self) -> list[tuple[str, int, float]]:
+        """Symmetry boundaries as mirror planes of the far field: (E or H, axis 0/1/2, position in m). Only a
+        plane parallel to a coordinate plane can be mirrored, and only one plane per axis."""
+        planes: list[tuple[str, int, float]] = []
+        m = self.m
+        for kind, name, tags in getattr(self, "sym_faces", []):
+            try:
+                tris = np.asarray(m.mesh.get_triangles(tags), np.int64)
+                pts = np.asarray(m.mesh.nodes)[:, np.unique(np.asarray(m.mesh.tris)[:, tris])]
+            except Exception as ex:  # noqa: BLE001
+                warn(f"{name}: symmetry plane not found in the mesh ({ex}); the far field is not mirrored there")
+                continue
+            span = np.ptp(pts, axis=1)
+            ax = int(np.argmin(span))
+            if span[ax] > 1e-6 * max(float(span.max()), 1e-12):
+                warn(f"{name}: the symmetry faces are not one plane parallel to XY, YZ or ZX; "
+                     "the far field is not mirrored there")
+                continue
+            pos = float(np.mean(pts[ax]))
+            same = [p for p in planes if p[1] == ax]
+            if same:
+                if abs(same[0][2] - pos) > 1e-9 + 1e-6 * float(span.max()) or same[0][0] != kind:
+                    warn(f"{name}: a second symmetry plane normal to {'XYZ'[ax]}; "
+                         "the far field is mirrored only at the first one")
+                continue
+            planes.append((kind, ax, pos))
+        return planes
 
     def antenna_pass(self, step: int) -> None:
         """Antenna parameters of an adaptive pass (Antenna Parameters report over the passes)."""

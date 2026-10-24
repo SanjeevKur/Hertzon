@@ -4,6 +4,6 @@ Small improvements collected for a future release. Items move to `CHANGELOG.md` 
 
 ## Open
 
-- **Symmetry planes for far fields**: offer far fields (gain, directivity, radiation pattern) in designs with
-  symmetry planes, but only once EMerge PR #75 (radiated power is no longer halved per symmetry plane) is in
-  an EMerge release or the pinned commit. Before that the directivity comes out 3 dB too high per plane.
+- **Ports cut by a symmetry plane**: apply the `ImpedanceMultiplier` of the symmetry boundary to the port
+  impedance. Today a lumped port cut by the plane is referred to the impedance of the half port (half
+  dipole: S11 0.31 instead of 0.06); far field pattern and directivity are not affected.
