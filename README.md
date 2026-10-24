@@ -199,8 +199,11 @@ What changed in each release: [CHANGELOG.md](CHANGELOG.md).
 ## Tests
 
 ```bash
-pip install pytest gerbonara pygerber && python -m pytest tests
+pip install -e ".[test]" && python -m pytest tests
 ```
+
+Run the install again whenever `packaging/emerge-commit` changes: the tests stop with a message when the
+installed EMerge is not the pinned commit.
 
 ## Branches and releases
 
