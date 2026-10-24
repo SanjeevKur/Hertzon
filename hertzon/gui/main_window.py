@@ -1096,6 +1096,10 @@ class MainWindow(QMainWindow):
             for sp in self.des.spheres:
                 if sp.props.get("CoordinateSystem") == name:
                     sp.props["CoordinateSystem"] = nm
+            for o in self.des.objects:
+                for c in o.history:
+                    if c.props.get("CoordinateSystem") == name:
+                        c.props["CoordinateSystem"] = nm
             if self.des.working_cs == name:
                 self.des.working_cs = nm
         if not self._check_cs(cs):
@@ -1107,7 +1111,8 @@ class MainWindow(QMainWindow):
     def delete_cs(self, name: str) -> None:
         users = [o.name for o in self.des.objects if o.orientation == name] + \
                 [c.name for c in self.des.coord_systems if c.reference == name] + \
-                [sp.name for sp in self.des.spheres if sp.props.get("CoordinateSystem") == name]
+                [sp.name for sp in self.des.spheres if sp.props.get("CoordinateSystem") == name] + \
+                [o.name for o in self.des.objects if any(c.props.get("CoordinateSystem") == name for c in o.history)]
         if users:
             QMessageBox.warning(self, "Delete Coordinate System",
                                 f"{name} is used by: {', '.join(users[:8])}. Change those first.")
@@ -2291,7 +2296,10 @@ class MainWindow(QMainWindow):
         if not objs:
             return
         props = schema.GEOMETRY[kind]
-        dlg = NamedPropsDialog(kind, kind, props, schema.defaults(props), self.doc.evaluator(), parent=self,
+        vals = schema.defaults(props)
+        if "CoordinateSystem" in vals:      # Split: the plane is given in the working coordinate system
+            vals["CoordinateSystem"] = self.des.working_cs
+        dlg = NamedPropsDialog(kind, kind, props, vals, self.doc.evaluator(), parent=self,
                                info=f"Apply to: {', '.join(objs)}")
         dlg.name_edit.setEnabled(False)
         if dlg.exec() != QDialog.Accepted:

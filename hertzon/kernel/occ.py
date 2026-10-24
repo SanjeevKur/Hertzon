@@ -914,35 +914,32 @@ def _apply(cmd: Command, dt: list[tuple[int, int]], ctx: BuildContext, owner: st
             raise GeometryError(f"{k} produced an empty object")
         return out
     if k == "Split":
-        xmin, ymin, zmin, xmax, ymax, zmax = _bbox(dt)
-        big = 10 * max(xmax - xmin, ymax - ymin, zmax - zmin, 1e-6)
-        cx, cy, cz = (xmin + xmax) / 2, (ymin + ymax) / 2, (zmin + zmax) / 2
-        pos = p.get("Keep", "Positive") == "Positive"
+        # the plane lies in the coordinate system of the command (XY, YZ, XZ or Custom Base/Normal);
+        # the kept half space is a slab on the chosen side that reaches over the whole object
+        from ..model import coordsys
+        try:
+            O, R = coordsys.frame(ctx.design, p.get("CoordinateSystem", "Global") or "Global", ev)
+        except (KeyError, ValueError) as e:
+            raise GeometryError(f"Split: coordinate system: {e}") from e
         plane = p.get("Plane", "XY")
         if plane == "Custom":
-            # arbitrary plane through Base with Normal: keep the half space on the chosen side
-            b = np.asarray(ev.point(p.get("Base", "0,0,0") or "0,0,0"), float)
-            n = _plane_normal(p, ev)
-            if not pos:
-                n = -n
-            c = np.array([cx, cy, cz])
-            c = c - n * ((c - b) @ n)
-            disk = o.addDisk(*c, 2 * big, 2 * big, zAxis=list(n))
-            half = o.extrude([(2, disk)], *(n * 2 * big))
-            box = [d for d in half if d[0] == 3][0][1]
-            out, _ = o.intersect(dt, [(3, box)])
-            if not out:
-                raise GeometryError("Split removed the whole object")
-            return out
-        if plane == "XY":
-            box = o.addBox(cx - big, cy - big, 0 if pos else -big, 2 * big, 2 * big, big)
-        elif plane == "YZ":
-            box = o.addBox(0 if pos else -big, cy - big, cz - big, big, 2 * big, 2 * big)
+            b = O + R @ np.asarray(ev.point(p.get("Base", "0,0,0") or "0,0,0"), float)
+            n = R @ _plane_normal(p, ev)
         else:
-            box = o.addBox(cx - big, 0 if pos else -big, cz - big, 2 * big, big, 2 * big)
+            b, n = O, R[:, {"XY": 2, "YZ": 0, "XZ": 1}[plane]]
+        if p.get("Keep", "Positive") != "Positive":
+            n = -n
+        xmin, ymin, zmin, xmax, ymax, zmax = _bbox(dt)
+        lo, hi = np.array([xmin, ymin, zmin]), np.array([xmax, ymax, zmax])
+        c = (lo + hi) / 2
+        dist = (c - b) @ n
+        size = 2 * (np.linalg.norm(hi - lo) + abs(dist)) + 1e-6
+        disk = o.addDisk(*(c - n * dist), size, size, zAxis=list(n))
+        half = o.extrude([(2, disk)], *(n * size))
+        box = [d for d in half if d[0] == 3][0][1]
         out, _ = o.intersect(dt, [(3, box)])
         if not out:
-            raise GeometryError("Split removed the whole object")
+            raise GeometryError("Split removed the whole object (it lies completely on the other side of the plane)")
         return out
     if k in ("SweepAlongPath", "Connect", "Imprint"):
         tools = _tools(p, ctx)

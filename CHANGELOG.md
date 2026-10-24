@@ -20,6 +20,12 @@ the GitHub release notes.
   the traces are wide or a sheet wider than the traces now gets the right line. Without two touching
   conductors the line runs across the shorter side of the sheet as before.
 
+### Fixed
+- **Split in a Face CS or Object CS**: the split plane (XY, YZ, XZ or Custom Base/Normal) is now taken in
+  the working coordinate system, stored with the operation as *Coordinate system*. Before, the plane always
+  lay in the Global CS, and an object far from that plane was deleted instead of split. Older projects keep
+  splitting in the Global CS.
+
 ### New
 - **Lumped Elements tab**: inserts a chip resistor, inductor or capacitor, or a component measured by a
   Touchstone file, between the two selected traces. Packages 0201, 0402, 0603, 0805, 1206 and the RF series

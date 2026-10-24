@@ -698,3 +698,37 @@ def test_maximum_delta_energy_default():
     from hertzon.model import schema
     p = next(p for p in schema.SETUP if p.name == "MaximumDeltaEnergy")
     assert p.default == "0.001"
+
+
+def _split_box(cs=None, **split):
+    """Box 0..4 x 0..2 x 50..52 (mm), split; returns the bounding box of the kept part in mm."""
+    p = Project()
+    d = p.designs[0]
+    d.add_object("CreateBox", Position="0,0,50", XSize="4", YSize="2", ZSize="2")
+    if cs is not None:
+        d.coord_systems.append(cs)
+        split["CoordinateSystem"] = cs.name
+    d.obj("Box1").history.append(Command.new("Split", **split))
+    K.ensure_gmsh("test_split")
+    ctx = K.build_design(d, d.evaluator(p))
+    assert "Box1" not in ctx.errors, ctx.errors.get("Box1")
+    return np.asarray(K._bbox(ctx.built["Box1"])) * 1e3
+
+
+def test_split_in_object_and_face_coordinate_systems():
+    from hertzon.model.design import CoordSys
+    # global plane far from the object (the kept half space must still reach it)
+    assert _split_box(Plane="XY", Keep="Positive") == pytest.approx([0, 0, 50, 4, 2, 52], abs=1e-3)
+    # object CS at the box centre: XY cuts it in half along z
+    ocs = CoordSys("ObjectCS1", "Object", "Global")
+    ocs.props.update(Origin="2,1,51", Object="Box1")
+    assert _split_box(ocs, Plane="XY", Keep="Positive") == pytest.approx([0, 0, 51, 4, 2, 52], abs=1e-3)
+    assert _split_box(ocs, Plane="YZ", Keep="Negative") == pytest.approx([0, 0, 50, 2, 2, 52], abs=1e-3)
+    # face CS on the side face x=4 (local z = global +x), moved in by 1: XY is the plane x=3
+    fcs = CoordSys("FaceCS1", "Face", "Global")
+    fcs.props.update(Mode="Axis/Position", Origin="3,1,51", XAxis="0,1,0", YPoint="0,0,1", Face="Box1:1")
+    assert _split_box(fcs, Plane="XY", Keep="Positive") == pytest.approx([3, 0, 50, 4, 2, 52], abs=1e-3)
+    assert _split_box(fcs, Plane="XY", Keep="Negative") == pytest.approx([0, 0, 50, 3, 2, 52], abs=1e-3)
+    # custom plane: Base and Normal are local to the CS (local x = global y)
+    assert _split_box(fcs, Plane="Custom", Base="0.5,0,0", Normal="1,0,0", Keep="Positive") == \
+        pytest.approx([0, 1.5, 50, 4, 2, 52], abs=1e-3)
