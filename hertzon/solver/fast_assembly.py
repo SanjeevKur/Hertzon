@@ -1,15 +1,11 @@
 """Faster solve for EMerge 3 (same results, applied once in the solver worker): PARDISO factorizes the complex
-symmetric system matrix as LDL^T (mtype 6) instead of an unsymmetric LU, and the PEC rows and columns are
-removed in parallel instead of with scipy fancy indexing (single core). EMerge 3 builds the element
-matrices and the CSC pattern in its compiled library, which replaced Hertzon's assembly for EMerge 2.8.9.
-Set HERTZON_SLOW_ASSEMBLY=1 for EMerge's original code, HERTZON_PARDISO_STRUCT=1 for its LU only.
+symmetric system matrix as LDL^T (mtype 6) instead of an unsymmetric LU. EMerge removes the PEC rows and
+columns in parallel itself since FennisRobert/EMerge#78, and builds the element matrices and the CSC pattern
+in its compiled library. Set HERTZON_SLOW_ASSEMBLY=1 or HERTZON_PARDISO_STRUCT=1 for EMerge's LU.
 """
 from __future__ import annotations
 
-import inspect
 import os
-import re
-import textwrap
 import threading
 
 import numpy as np
@@ -23,83 +19,6 @@ def _main_thread() -> bool:
     """numba's default (workqueue) threading layer aborts the process when parallel kernels run in two
     threads at once: EMerge's parallel sweeps solve in worker threads, which use the serial *_s copies."""
     return threading.current_thread() is threading.main_thread()
-
-
-# -- PEC rows/columns removed in parallel --------------------------------------------------------------
-
-@njit(cache=True, nogil=True, parallel=True)
-def _sub_counts(indptr, indices, keep, newid):
-    n = keep.shape[0]
-    cnt = np.zeros(n + 1, dtype=np.int64)
-    for j in prange(n):
-        c = keep[j]
-        m = 0
-        for k in range(indptr[c], indptr[c + 1]):
-            if newid[indices[k]] >= 0:
-                m += 1
-        cnt[j + 1] = m
-    return cnt
-
-
-@njit(cache=True, nogil=True)
-def _sub_counts_s(indptr, indices, keep, newid):
-    n = keep.shape[0]
-    cnt = np.zeros(n + 1, dtype=np.int64)
-    for j in range(n):
-        c = keep[j]
-        m = 0
-        for k in range(indptr[c], indptr[c + 1]):
-            if newid[indices[k]] >= 0:
-                m += 1
-        cnt[j + 1] = m
-    return cnt
-
-
-@njit(cache=True, nogil=True, parallel=True)
-def _sub_fill(indptr, indices, data, keep, newid, outptr, outind, outdata):
-    for j in prange(keep.shape[0]):
-        c = keep[j]
-        p = outptr[j]
-        for k in range(indptr[c], indptr[c + 1]):
-            r = newid[indices[k]]
-            if r >= 0:
-                outind[p] = r
-                outdata[p] = data[k]
-                p += 1
-
-
-@njit(cache=True, nogil=True)
-def _sub_fill_s(indptr, indices, data, keep, newid, outptr, outind, outdata):
-    for j in range(keep.shape[0]):
-        c = keep[j]
-        p = outptr[j]
-        for k in range(indptr[c], indptr[c + 1]):
-            r = newid[indices[k]]
-            if r >= 0:
-                outind[p] = r
-                outdata[p] = data[k]
-                p += 1
-
-
-def submatrix(A, ids):
-    """A[:, ids][ids, :] for a CSC matrix and increasing ids."""
-    from scipy.sparse import csc_matrix
-    ids = np.asarray(ids)
-    if (getattr(A, "format", "") != "csc" or A.shape[0] != A.shape[1] or ids.ndim != 1 or ids.size == 0
-            or ids.dtype.kind not in "iu" or np.any(np.diff(ids) <= 0)):
-        return A[:, ids][ids, :]
-    keep = ids.astype(np.int64)
-    newid = np.full(A.shape[0], -1, dtype=np.int64)
-    newid[keep] = np.arange(keep.size, dtype=np.int64)
-    par = _main_thread()
-    cnt = (_sub_counts if par else _sub_counts_s)(A.indptr, A.indices, keep, newid)
-    outptr = np.cumsum(cnt)
-    idx_t = np.int32 if outptr[-1] < 2**31 - 1 else np.int64
-    outptr = outptr.astype(idx_t)
-    outind = np.empty(outptr[-1], dtype=idx_t)
-    outdata = np.empty(outptr[-1], dtype=A.dtype)
-    (_sub_fill if par else _sub_fill_s)(A.indptr, A.indices, A.data, keep, newid, outptr, outind, outdata)
-    return csc_matrix((outdata, outind, outptr), shape=(keep.size, keep.size))
 
 
 # -- complex symmetric PARDISO -----------------------------------------------------------------------------
@@ -254,44 +173,13 @@ def _set_symmetry(self, complex_symmetric: bool) -> None:
     self._hzn_sym = bool(complex_symmetric)
 
 
-# -- source patches --------------------------------------------------------------------------------------
-
-
-def _patched(fn, subs):
-    src = textwrap.dedent(inspect.getsource(fn))
-    n = 0
-    for rx, rep in subs:
-        src, k = rx.subn(rep, src)
-        n += k
-    if not n:
-        return None, 0
-    mod = inspect.getmodule(fn)
-    ns = dict(vars(mod))
-    ns["_hzn_fa"] = __import__(__name__, fromlist=["x"])
-    code = compile(src, inspect.getsourcefile(fn) or "<hertzon>", "exec")
-    exec(code, ns)  # noqa: S102
-    new = ns[fn.__name__]
-    new.__qualname__ = fn.__qualname__
-    new._hertzon_fast = True
-    return new, n
-
-
 def apply() -> None:
-    """Install the faster code (before emerge_patches.apply_curved wraps the assembly)."""
+    """Install the faster PARDISO factorization."""
     global _DONE
     if _DONE or os.environ.get("HERTZON_SLOW_ASSEMBLY") == "1":
         return
     _DONE = True
     from emerge._emerge import solver
-    fn = solver.SolveRoutine.solve
-    try:
-        new, n = _patched(fn, [(re.compile(r"Asel = A\[:, solve_ids\]\[solve_ids, :\]"),
-                                "Asel = _hzn_fa.submatrix(A, solve_ids)")])
-    except Exception:  # noqa: BLE001
-        new, n = None, 0
-    if new is not None:
-        solver.SolveRoutine.solve = new
-    STATS["solve"] = n
     if os.environ.get("HERTZON_PARDISO_STRUCT") != "1":
         try:
             from emerge._emerge.solve_interfaces import pardiso_interface as PI

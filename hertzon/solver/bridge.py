@@ -815,9 +815,10 @@ class Bridge:
             info(f"Order of basis functions: {name}")
         except Exception as ex:  # noqa: BLE001
             warn(f"Basis order '{name}' not available ({ex}); using second order")
-        try:      # curved elements at curved surfaces (setting "CurvedElements", default on)
+        try:      # EMerge's curved elements at curved surfaces (setting "CurvedElements", default on)
             from . import curvilinear
             curvilinear.CTX["enabled"] = self.setup.props.get("CurvedElements", "True") == "True"
+            self.m.settings.mw_curved_elements = curvilinear.enabled()
         except Exception:  # noqa: BLE001
             pass
 

@@ -1,5 +1,7 @@
-"""Run-time fixes for EMerge 3 (applied once in the solver worker): mesh retry for broken CAD faces, curved
-elements, and the grid accelerated size field of Hertzon's re-mesh refinement. docs/EMERGE_INTEGRATION.md lists each one with its status upstream."""
+"""Run-time fixes for EMerge 3 (applied once in the solver worker): mesh retry for broken CAD faces and the grid
+accelerated size field of Hertzon's re-mesh refinement. Curved elements are EMerge's own since
+FennisRobert/EMerge#77 (Settings.mw_curved_elements, set in bridge.py). docs/EMERGE_INTEGRATION.md lists
+each one with its status upstream."""
 from __future__ import annotations
 
 import os
@@ -20,7 +22,7 @@ def apply() -> None:
     if _DONE:
         return
     _DONE = True
-    try:      # before apply_curved: the curved-element wrapper wraps the faster assembly
+    try:
         from . import fast_assembly
         fast_assembly.apply()
     except Exception as ex:  # noqa: BLE001
@@ -33,13 +35,12 @@ def apply() -> None:
     except Exception as ex:  # noqa: BLE001
         from loguru import logger
         logger.warning(f"Parallel sweeps with PARDISO not available ({ex})")
-    try:      # after fast_assembly: wraps its SolveRoutine.solve
+    try:      # wraps EMerge's SolveRoutine.solve
         from . import hybrid_sweep
         hybrid_sweep.apply()
     except Exception as ex:  # noqa: BLE001
         from loguru import logger
         logger.warning(f"Reduced basis for the interpolating sweep not available ({ex})")
-    apply_curved()
     if not native("mesh_fallback"):
         apply_mesh_fallback()
 
@@ -180,56 +181,3 @@ def apply_mesh_fallback() -> None:
             return out
     generate._hertzon_fallback = True
     gmsh.model.mesh.generate = generate
-
-
-def apply_curved() -> None:
-    """Curvilinear tets at curved PEC/material surfaces (see curvilinear.py): the element matrices of the
-    tets next to curved CAD surfaces are recomputed after EMerge's assembly. Any error leaves EMerge's
-    own (straight) matrices in place."""
-    try:
-        from emerge._emerge.physics.microwave.assembly import assembler
-        try:
-            from emerge._emerge.physics.microwave.assembly import curlcurl
-        except ImportError:     # EMerge 3: the assembler reads it from emr_microwave at call time
-            from emerge._emerge.physics.microwave.assembly import emr_microwave as curlcurl
-        from . import curvilinear as CV
-    except Exception:  # noqa: BLE001
-        return
-    orig = curlcurl.tet_mass_stiffness_matrices
-    if getattr(orig, "_hertzon_curved", False):
-        return
-
-    def tet_mass_stiffness_matrices(field, er, ur, conductor_tets, cscmap=None):
-        dataE, dataB, cscmap = orig(field, er, ur, conductor_tets, cscmap)
-        if CV.enabled():
-            try:
-                n = CV.apply_curved(field, er, ur, conductor_tets, dataE, dataB)
-                if n:
-                    from loguru import logger
-                    logger.info(f"Curved elements: {n} tetrahedra on curved surfaces "
-                                f"({CV.STATS.get('curved_edges', 0)} curved edges)")
-                    if os.environ.get("HERTZON_CURVED_CHECK") == "1":
-                        v0, v1 = CV.curved_volume(field.mesh, CV.CTX.get("exclude", frozenset()))
-                        logger.info(f"Curved elements: volume straight {v0:.9e}, curved {v1:.9e}")
-            except Exception as e:  # noqa: BLE001
-                from loguru import logger
-                logger.warning(f"Curved elements failed ({e}); using straight elements")
-        return dataE, dataB, cscmap
-
-    tet_mass_stiffness_matrices._hertzon_curved = True
-    curlcurl.tet_mass_stiffness_matrices = tet_mass_stiffness_matrices
-
-    def ctx(fn):
-        def wrapped(self, field, materials, bcs, *a, **k):
-            try:      # faces with surface integrals (ports, absorbers, lumped elements, sheets) stay straight
-                CV.CTX["exclude"] = CV.exclude_tags(bcs)
-            except Exception:  # noqa: BLE001
-                CV.CTX["exclude"] = frozenset()
-            return fn(self, field, materials, bcs, *a, **k)
-        wrapped.__wrapped__ = fn
-        return wrapped
-
-    for name in ("assemble_freq_matrix", "assemble_scattering_matrix", "assemble_eig_matrix"):
-        fn = getattr(assembler.Assembler, name, None)
-        if fn is not None and not hasattr(fn, "__wrapped__"):
-            setattr(assembler.Assembler, name, ctx(fn))

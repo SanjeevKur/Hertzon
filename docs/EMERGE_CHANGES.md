@@ -49,14 +49,14 @@ these pull requests start from `main`, never from `hertzon`.
 These are new technical capability in EMerge's core, so they go to `hertzon` as new code next to the
 existing code, switched on by a setting, and marked as AI written (R3).
 
-| Item | Hertzon code today | Gain (EMERGE_INTEGRATION.md) |
-|---|---|---|
-| PARDISO complex symmetric LDL^T (mtype 6) | `fast_assembly._pardiso_solve` | 7–34 % per model |
-| Parallel removal of PEC rows/columns | `fast_assembly.submatrix` | 5–10 % |
-| PARDISO per worker thread in parallel sweeps (EMerge uses SuperLU there) | `mt_pardiso` | parallel sweeps 5× faster, no out-of-memory |
-| Far field for many excitations (phases once) as a new Rust kernel | `farfield_post.stratton_chu_multi` | 3.7–4.2× on 11 ports |
-| Error estimate for many excitations in one pass | – | up to about 9 % with many ports, low priority |
-| Curved (isoparametric) elements, natively in the Rust assembly | `curvilinear.py`, `ned2_kernels.py`, `emerge_patches.apply_curved` | accuracy on curved surfaces; the maintainer asked for this on `hertzon` |
+| Item | Hertzon code today | Gain (EMERGE_INTEGRATION.md) | Status |
+|---|---|---|---|
+| PARDISO complex symmetric LDL^T (mtype 6) | `fast_assembly._pardiso_solve` | 7–34 % per model | Waits for the maintainer's solver plans (SPARTA) |
+| Parallel removal of PEC rows/columns | – | 5–10 % | On `hertzon` (FennisRobert/EMerge#78); Hertzon's copy removed |
+| PARDISO per worker thread in parallel sweeps (EMerge uses SuperLU there) | `mt_pardiso` | parallel sweeps 5× faster, no out-of-memory | Waits for the maintainer's solver plans (SPARTA) |
+| Far field for many excitations (phases once) as a new Rust kernel | – | 3.7–4.6× on 11 ports | On `hertzon` (FennisRobert/EMerge#76); Hertzon calls `emr.sc_multi` |
+| Error estimate for many excitations in one pass | – | up to about 9 % with many ports, low priority | Open |
+| Curved (isoparametric) elements | `curvilinear.py` keeps only the map for the plots | accuracy on curved surfaces | On `hertzon` (FennisRobert/EMerge#77, `Settings.mw_curved_elements`); Hertzon's kernels removed |
 
 The maintainer may later take any of them into `main` in his own way.
 

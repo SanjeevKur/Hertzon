@@ -28,3 +28,6 @@ feature) in its own PR and move the entry to "Done" below.
 | ThinConductor sheet split on both sides in the solve | `emerge_patches.apply_thin_conductor` | `hertzon` branch `2811e9a` |
 | Port mode solve stops on `ArpackNoConvergence` | `emerge_patches._robust_eigs` | 3.0.0b5 |
 | Thin conductor split after a new mesh | `_thin_conductor_new_mesh` | 3.0.0b5 |
+| Far field of all ports in one pass, Rust kernel `emr.sc_multi` (FennisRobert/EMerge#76) | numpy/numba kernel in `farfield_post.stratton_chu_multi` | `hertzon` branch `e03a085` |
+| Curved (isoparametric) elements, `Settings.mw_curved_elements` (FennisRobert/EMerge#77) | `emerge_patches.apply_curved`, the element matrices in `curvilinear.py`, `ned2_kernels.py` | `hertzon` branch `e03a085` |
+| Parallel removal of the PEC rows and columns (FennisRobert/EMerge#78) | `fast_assembly.submatrix` and its source patch of `SolveRoutine.solve` | `hertzon` branch `e03a085` |
