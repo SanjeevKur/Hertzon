@@ -5,6 +5,11 @@ the GitHub release notes.
 
 ## Unreleased
 
+### Added
+- **Mesh refinement "AURA (EMerge, experimental)"**: EMerge's own local refinement as a choice next to Local
+  (Delaunay), with the same error estimate, convergence criterion and curved elements. A comparison script
+  measures the time to solution of both on the benchmark models (`examples/benchmark/mesher`).
+
 ### Changed
 - **EMerge 3.0.0b5 plus the fixes on its `hertzon` branch** (commit `2811e9a`; was 3.0.0a25, as advised in
   #25). Hertzon now installs EMerge from wheels built from a pinned commit, so solver fixes arrive without
