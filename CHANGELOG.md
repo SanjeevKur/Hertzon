@@ -11,6 +11,11 @@ the GitHub release notes.
   Local (Delaunay) on the benchmark models (`examples/benchmark/mesher`).
 
 ### Changed
+- **Assign Material only for solids**: greyed out in the ribbon, the Modeler menu and the context menus
+  when only sheets or lines are selected (they get a boundary such as Finite Conductivity or Impedance);
+  with solids and sheets selected the material goes to the solids. The object properties of sheets and
+  lines have no Material row. A material stored on a sheet by an
+  older project is kept and, as before, not used by the solve.
 - **AURA (EMerge) is the default mesh refinement for new setups** (was Local (Delaunay)). On the
   benchmark models it reached the convergence criterion in 0.35 to 0.6 times the time in three of four
   cases and was as accurate or more accurate per tetrahedron. Saved setups keep their method; Local (Delaunay) stays selectable.

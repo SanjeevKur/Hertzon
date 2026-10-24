@@ -732,3 +732,56 @@ def test_split_in_object_and_face_coordinate_systems():
     # custom plane: Base and Normal are local to the CS (local x = global y)
     assert _split_box(fcs, Plane="Custom", Base="0.5,0,0", Normal="1,0,0", Keep="Positive") == \
         pytest.approx([0, 1.5, 50, 4, 2, 52], abs=1e-3)
+
+
+def test_assign_material_only_for_solids(monkeypatch):
+    """Sheets carry no material (they get boundaries such as Finite Conductivity): Assign Material is greyed
+    out for a sheet selection, a mixed selection assigns the material to the solids only, and the object
+    properties of a sheet have no Material row."""
+    import os
+    import types
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    from PySide6.QtGui import QAction
+    from PySide6.QtWidgets import QApplication, QDialog, QMessageBox, QToolButton
+    from hertzon.gui import main_window as MW
+    from hertzon.gui.doc import Document, Pick
+    app = QApplication.instance() or QApplication([])  # noqa: F841
+    p = Project()
+    d = p.designs[0]
+    d.add_object("CreateBox", "Sub", Position="0,0,0", XSize="10", YSize="10", ZSize="1")
+    d.add_object("CreateRectangle", "Trace", Position="0,0,1", XSize="5", YSize="1", ZSize="0", WhichAxis="Z")
+    doc = Document(p)
+    doc.rebuild()
+    assert MW.material_targets(doc, ["Sub", "Trace"]) == (["Sub"], ["Trace"])
+    from hertzon.gui.doc import object_attributes
+    assert "Material" in [a.name for a in object_attributes(doc, "Sub")]
+    assert "Material" not in [a.name for a in object_attributes(doc, "Trace")]   # properties panel and dialog
+
+    infos, logs = [], []
+    win = types.SimpleNamespace(doc=doc, des=d, a_material=QAction("Assign Material..."),
+                                _mat_buttons=[QToolButton()], msgs=types.SimpleNamespace(add=lambda *a: logs.append(a)))
+    win.selected_objects = lambda need=1: doc.selected_objects()
+    doc.select([Pick("Trace")])
+    MW.MainWindow._update_sel_buttons(win)
+    assert not win.a_material.isEnabled() and not win._mat_buttons[0].isEnabled()
+    assert "Finite Conductivity" in win.a_material.toolTip()
+    monkeypatch.setattr(QMessageBox, "information", lambda *a: infos.append(a))
+    MW.MainWindow.assign_material(win)                  # e.g. through a custom shortcut: nothing changes
+    assert infos and d.obj("Trace").material == "vacuum"
+
+    class Dlg:
+        def __init__(self, *a):
+            pass
+
+        def exec(self):
+            return QDialog.Accepted
+
+        def selected(self):
+            return "copper"
+    monkeypatch.setattr(MW, "MaterialsDialog", Dlg)
+    doc.select([Pick("Sub"), Pick("Trace")])
+    MW.MainWindow._update_sel_buttons(win)
+    assert win.a_material.isEnabled() and win._mat_buttons[0].isEnabled()
+    MW.MainWindow.assign_material(win)
+    assert d.obj("Sub").material == "copper" and d.obj("Trace").material == "vacuum"
+    assert any("Trace" in a[1] for a in logs)

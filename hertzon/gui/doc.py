@@ -8,6 +8,7 @@ import gmsh
 import numpy as np
 from PySide6.QtCore import QObject, Signal
 
+from ..model import schema
 from ..model.design import Project, Design, project_from_dict
 from ..kernel import occ as K
 
@@ -204,6 +205,26 @@ class Document(QObject):
             return (-1e-3, -1e-3, -1e-3, 1e-3, 1e-3, 1e-3)
         b = np.array(boxes)
         return (*b[:, :3].min(0), *b[:, 3:].max(0))
+
+
+def material_targets(doc, names: list[str]) -> tuple[list[str], list[str]]:
+    """Split objects into solids, which take a material, and sheets/lines, which do not (a material on a
+    sheet is not used by the solve; old projects may still carry one)."""
+    solids, others = [], []
+    for n in names:
+        if not doc.design.has_obj(n):
+            continue
+        t = doc.tess.get(n)
+        dim = t.dim if t is not None else doc.design.obj(n).dim
+        (solids if dim == 3 else others).append(n)
+    return solids, others
+
+
+def object_attributes(doc, name: str) -> list:
+    """Attribute rows of an object: sheets and lines have no Material row."""
+    if material_targets(doc, [name])[0]:
+        return schema.OBJECT_ATTRIBUTES
+    return [p for p in schema.OBJECT_ATTRIBUTES if p.name != "Material"]
 
 
 def result_dir(doc, setup: str):
