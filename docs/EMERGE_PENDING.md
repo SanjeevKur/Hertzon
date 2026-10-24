@@ -17,6 +17,12 @@ when the check passes, remove the workaround in its own PR and move the entry to
 | Parallel sweep threads share one solver (`AutomaticRoutine` singleton) | `mt_pardiso._duplicate` | Fixed on EMerge `main` (`e80e840`), not yet in a release | Parallel sweep of the benchmark models with `HERTZON_EMERGE_NATIVE=mt_pardiso`: no crash, same S-parameters |
 | ThinConductor DoF split (fields at a conductor sheet read DoFs the solver does not use) | `emerge_patches.apply_thin_conductor` | The maintainer's rework on EMerge `main` (`77beeb6`, "Separate the two sides of a ThinConductor sheet in the solve"), not yet in a release | `HERTZON_EMERGE_NATIVE=thin_conductor` on the microstrip benchmark: no noise in field and surface current plots at the trace, S-parameters compared with the workaround (they may change, since the sheet may then be two-sided), adaptive meshing with a thin conductor still converges |
 
+## Needed before a Hertzon feature
+
+| Upstream fix | Hertzon feature that needs it | Waiting for |
+|---|---|---|
+| Far field with symmetry planes: radiated power halved per plane, directivity 3 dB too high per plane | Symmetry planes (half and quarter models); Hertzon does not mirror far fields yet | PR FennisRobert/EMerge#75 merged and released; until then do not offer symmetry planes for far fields |
+
 ## Done
 
 | Upstream fix | Removed workaround | EMerge version |
