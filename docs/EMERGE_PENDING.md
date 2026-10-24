@@ -15,9 +15,7 @@ feature) in its own PR and move the entry to "Done" below.
 
 ## Open: Hertzon features waiting for an EMerge fix
 
-| EMerge fix | Hertzon feature that needs it | Waiting for | Check before enabling |
-|---|---|---|---|
-| Far field with symmetry planes: radiated power halved per plane, directivity 3 dB too high per plane | Symmetry planes (half and quarter models); Hertzon does not mirror far fields yet | PR FennisRobert/EMerge#75 merged and in `packaging/emerge-commit` | A model solved in full and as a half model: same radiated power, gain and directivity |
+(none)
 
 ## Done
 
@@ -31,3 +29,4 @@ feature) in its own PR and move the entry to "Done" below.
 | Far field of all ports in one pass, Rust kernel `emr.sc_multi` (FennisRobert/EMerge#76) | numpy/numba kernel in `farfield_post.stratton_chu_multi` | `hertzon` branch `e03a085` |
 | Curved (isoparametric) elements, `Settings.mw_curved_elements` (FennisRobert/EMerge#77) | `emerge_patches.apply_curved`, the element matrices in `curvilinear.py`, `ned2_kernels.py` | `hertzon` branch `e03a085` |
 | Parallel removal of the PEC rows and columns (FennisRobert/EMerge#78) | `fast_assembly.submatrix` and its source patch of `SolveRoutine.solve` | `hertzon` branch `e03a085` |
+| Far field with symmetry planes: the radiated power is not scaled (FennisRobert/EMerge#75) | Feature enabled: `farfield_post` mirrors the stored surface at symmetry planes with the same scaling (Hertzon does not call EMerge's `farfield(syms=...)`) | `main` `0a607f2` |

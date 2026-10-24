@@ -42,7 +42,7 @@ these pull requests start from `main`, never from `hertzon`.
 | Port mode solve ends the whole solve on `ArpackNoConvergence` | `emerge_patches._robust_eigs` | – | No PR: since 3.0.0b5 the port mode solvers factorize the shift once, use an oversampled Krylov space and skip a failing shift. Three waveport runs without Hertzon's retry and all benchmark runs: no failure. Dropped from Hertzon |
 | Error estimate counts the current jump at finite-conductivity sheets as error | – | – | No PR. The face terms of EMerge's estimate contribute practically nothing (unnormalised coefficients); normalising them made the adaptive meshing worse on four models. Hertzon's patch changed no mesh and is removed |
 | gmsh fails on trimmed B-spline faces of CAD files | `emerge_patches.apply_mesh_fallback` | Meshing crash for imported CAD, not GUI specific | To do, low priority |
-| Far field with symmetry planes: radiated power scaled by `factor**2` although only the simulated part is integrated | – (Hertzon does not mirror yet) | Possible wrong radiated power for every user of `syms` | Open. EMerge's horn demo (quarter model) is no reference: 2.25 W cross its radiation boundary at the PML for 0.99 W into the port, so the check needs a model with the integration surface inside the air, as a full and a half model |
+| Far field with symmetry planes: radiated power scaled by `factor**2` although only the simulated part is integrated | – | Wrong radiated power (and directivity 3 dB too high per plane) for every user of `syms` | Fixed on `main` (#75, `0a607f2`), checked with a dipole as full and half model. Hertzon mirrors its stored surface fields itself with the same scaling (`farfield_post.mirrored`) |
 
 ### Speed features in the solver core: `hertzon` branch (R4, R6)
 

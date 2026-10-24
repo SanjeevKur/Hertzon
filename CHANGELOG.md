@@ -52,6 +52,11 @@ the GitHub release notes.
   conductors the line runs across the shorter side of the sheet as before.
 
 ### Fixed
+- **Far fields with symmetry planes**: the far field (gain, directivity, pattern, RCS) of a half or quarter
+  model now includes the mirror images at Symmetry boundaries (Perfect E or Perfect H, planes parallel to XY,
+  YZ or ZX). Before, only the simulated part radiated. Fields and radiated power refer to 1 W into the full
+  structure, as in EMerge's `farfield(syms=...)`. Checked with a dipole as full and half model: peak
+  directivity 1.645 and 1.650.
 - **Grid and axes stay at the origin**: with the model far from the origin of the working coordinate
   system, the grid now spans from that origin to the model instead of sitting under the model only, and the
   axis triad at the origin is drawn in full. Before, only its X/Y/Z captions were left floating in space.
