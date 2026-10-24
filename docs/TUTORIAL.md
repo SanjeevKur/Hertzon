@@ -31,7 +31,9 @@ is selected. In the middle, the **3D Modeler** tree lists the objects (solids by
 next to the 3D view. At the bottom are the **Message Manager** and the **Progress** of running analyses.
 
 **Selecting.** Press **O** to select whole objects and **F** to select single faces (E for edges, V for
-vertices). Click to select, Ctrl+click to add. **Edit > Select by Name** finds an object in a large model.
+vertices). Click to select, Ctrl+click to add. Drag a box with the left mouse button to select everything
+that lies completely inside it (objects, or faces, edges and vertices in those modes); Ctrl + drag adds to
+the selection. **Edit > Select by Name** finds an object in a large model.
 
 **Navigating.**
 
@@ -41,7 +43,7 @@ vertices). Click to select, Ctrl+click to add. **Edit > Select by Name** finds a
 | Pan | Shift + left drag | Ctrl + middle drag |
 | Zoom | Mouse wheel (at the cursor) | Right drag, Shift + middle drag, Alt + Shift + left drag |
 
-A plain left drag does not move the view. Without a middle button (touchpad), the
+A plain left drag does not move the view, it draws the selection box. Without a middle button (touchpad), the
 **Rotate** and **Pan** buttons on the Draw tab turn the left mouse button into rotate or pan mode
 until you press Esc or click the button again. **View > Fit All** (or the ribbon button) brings
 everything into view.

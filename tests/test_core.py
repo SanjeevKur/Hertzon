@@ -758,3 +758,49 @@ def test_assign_material_only_for_solids(monkeypatch):
     MW.MainWindow.assign_material(win)
     assert d.obj("Sub").material == "copper" and d.obj("Trace").material == "vacuum"
     assert any("Trace" in a[1] for a in logs)
+
+
+def test_box_selection_takes_only_what_lies_completely_inside():
+    """Left drag in the 3D view: objects (or faces) are selected only when all their points are inside the box."""
+    import types
+    from hertzon.gui import viewer as Vw
+    from hertzon.gui.doc import Pick
+    names = ("box_picks", "_box_parts")
+    View = type("View", (), {k: Vw.ModelerView.__dict__[k] for k in names})
+
+    def square(x0, size, faces=False):
+        P = np.array([[x0, 0, 0], [x0 + size, 0, 0], [x0 + size, size, 0], [x0, size, 0]], float)
+        tris = np.array([[0, 1, 2], [0, 2, 3]])
+        return types.SimpleNamespace(points=P, tris=tris, tri_face=np.array([0, 1]) if faces else np.zeros(2, int),
+                                     edges=[P[[0, 1]], P[[1, 2]]], vertices=P, dim=2)
+
+    shown = types.SimpleNamespace(GetVisibility=lambda: True)
+    hidden = types.SimpleNamespace(GetVisibility=lambda: False)
+    v = View()
+    v.doc = types.SimpleNamespace(selection_mode="object",
+                                  tess={"A": square(0, 1), "B": square(5, 1), "C": square(1, 1), "H": square(0, 1)})
+    v.actors = {n: types.SimpleNamespace(surface=hidden if n == "H" else shown, edges=None) for n in v.doc.tess}
+    objs = {n: types.SimpleNamespace(name=n, group="") for n in "ABCH"}
+    v.doc.design = types.SimpleNamespace(has_obj=objs.__contains__, obj=objs.__getitem__,
+                                         live_objects=lambda: list(objs.values()))
+    v._display_coords = lambda X: (np.asarray(X)[:, :2] * 10, np.ones(len(X), bool))   # 10 px per unit, top view
+    assert v.box_picks((-1, -1), (15, 15)) == [Pick("A", -1)]          # C sticks out, B is far away, H is hidden
+    assert v.box_picks((25, 15), (-1, -1)) == [Pick("A", -1), Pick("C", -1)]    # any drag direction
+    assert v.box_picks((2, 2), (8, 8)) == []                            # a box inside the object takes nothing
+    # a group counts only when all its shown members are inside: A and C grouped, the box holds only A
+    objs["A"].group = objs["C"].group = "G1"
+    assert v.box_picks((-1, -1), (15, 15)) == []
+    assert v.box_picks((25, 15), (-1, -1)) == [Pick("A", -1), Pick("C", -1)]
+    objs["H"].group = "G2"
+    objs["B"].group = "G2"                                              # H is hidden: B alone decides
+    assert v.box_picks((45, -1), (65, 15)) == [Pick("B", -1)]
+    v._display_coords = lambda X: (np.asarray(X)[:, :2] * 10, np.zeros(len(X), bool))   # behind the camera
+    assert v.box_picks((-100, -100), (100, 100)) == []
+    v._display_coords = lambda X: (np.asarray(X)[:, :2] * 10, np.ones(len(X), bool))
+    v.doc.tess = {"A": square(0, 1, faces=True)}
+    v.doc.selection_mode = "face"
+    assert v.box_picks((-1, -1), (11, 11)) == [Pick("A", 0), Pick("A", 1)]
+    v.doc.selection_mode = "edge"
+    assert v.box_picks((-1, -1), (11, 1)) == [Pick("A", 0)]          # the bottom edge only
+    v.doc.selection_mode = "vertex"
+    assert v.box_picks((5, -1), (11, 11)) == [Pick("A", 1), Pick("A", 2)]

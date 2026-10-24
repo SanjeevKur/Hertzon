@@ -13,6 +13,10 @@ the GitHub release notes.
   objects again. Groups are saved in the project. SMD components (C, L, R, Touchstone parts) are inserted as
   a group of pads, terminations and element sheet, and the integration line of a lumped port or element now
   moves with its objects.
+- **Box selection in the 3D view**: a left drag draws a rectangle and selects every object that lies
+  completely inside it (in face, edge or vertex mode: every face, edge or vertex completely inside).
+  Ctrl + drag adds to the selection. A group is selected only when all its members are inside. Hidden
+  objects are skipped; a click still selects one item.
 - **Mesh refinement "AURA (EMerge)"**, EMerge's own local refinement, with Hertzon's error estimate,
   convergence criterion and curved elements. A comparison script measures the time to solution against
   Local (Delaunay) on the benchmark models (`examples/benchmark/mesher`).

@@ -385,6 +385,7 @@ class ModelerView(QWidget):
         self._snap_cache: dict[int, tuple] = {}
         self._snap_marker = None
         self._press_pos = None
+        self._band = None               # plain left drag on the model: (start pos, fill actor, outline actor)
         self._navigating = set()        # mouse buttons currently moving the camera (also while drawing)
         self.nav_mode = ""              # "rotate" / "pan": the left mouse moves the camera until switched off
         self.on_projection = None       # callback(orthographic: bool) after the projection changed
@@ -568,6 +569,9 @@ class ModelerView(QWidget):
         self._press_pos = None
         self._rpress_pos = None
         self._last_hits = None
+        if getattr(self, "_band", None) is not None:
+            self._show_band(None)
+            self._band = None
         try:
             for end in (self.style.EndRotate, self.style.EndPan, self.style.EndDolly, self.style.EndSpin,
                         self.style.EndZoom):
@@ -674,12 +678,17 @@ class ModelerView(QWidget):
             self._panning = True
             self.style.OnMiddleButtonDown()     # Shift + left drag pans
         else:
-            self._dolly = False                 # plain left drag: no camera move (rotate with the middle button)
+            self._dolly = False                 # plain left drag: box selection (rotate with the middle button)
+            self._band = (self._press_pos, None, None)
 
     def _on_left_release(self, obj, ev):
         pos = self._event_pos()
         moved = self._press_pos is None or abs(pos[0] - self._press_pos[0]) + abs(pos[1] - self._press_pos[1]) > 3
         self._press_pos = None
+        band = self._band
+        if band is not None:
+            self._show_band(None)
+            self._band = None
         if self.draw is not None:
             if "left" in self._navigating:
                 self._navigating.discard("left")
@@ -699,9 +708,18 @@ class ModelerView(QWidget):
         self._navigating.discard("left")
         if self.nav_mode:
             return                              # Rotate / Pan mode: the left mouse does not select
+        add = bool(self.plotter.iren.interactor.GetControlKey())
         if not moved:
-            add = bool(self.plotter.iren.interactor.GetControlKey())
             self.picked.emit(self.pick(pos), add)
+        elif band is not None:
+            picks = self.box_picks(band[0], pos)
+            if add:     # Ctrl + drag adds to the selection (a Ctrl click on one item toggles it)
+                have = {(p.obj, p.index) for p in self.doc.selection}
+                picks = [p for p in picks if (p.obj, p.index) not in have]
+                if picks:
+                    self.picked.emit(picks, True)
+            else:
+                self.picked.emit(picks, False)
 
     def _on_right_press(self, obj, ev):
         self._rpress_pos = self._event_pos()
@@ -778,6 +796,14 @@ class ModelerView(QWidget):
             self._show_dimensions(p, pos)
             self._update_preview()
             self.cursorMoved.emit(p)
+            return
+        if self._band is not None and self._press_pos is not None:
+            pos = self._event_pos()
+            p0 = self._band[0]
+            if self._band[1] is not None or abs(pos[0] - p0[0]) + abs(pos[1] - p0[1]) > 3:
+                if self._hover_actors:
+                    self._clear_hover(render=False)
+                self._show_band(pos)
             return
         self.style.OnMouseMove()
         if self.prehighlight and not self._navigating and self._press_pos is None and self._rpress_pos is None:
@@ -1050,6 +1076,101 @@ class ModelerView(QWidget):
                 return []
             return [Pick(name, int(self.point_picker.GetPointId()))]
         return []
+
+    # ------------------------------------------------------------------------------------------
+    # box selection
+    # ------------------------------------------------------------------------------------------
+    def _show_band(self, pos) -> None:
+        """Draw the selection rectangle from the press position to pos (None removes it)."""
+        if self._band is None:
+            return
+        p0, fill, line = self._band
+        ren = self.plotter.renderer
+        if pos is None:
+            for act in (fill, line):
+                if act is not None:
+                    ren.RemoveViewProp(act)
+            self._band = (p0, None, None)
+            self.plotter.render()
+            return
+        x0, y0 = p0
+        x1, y1 = pos
+        corners = [(x0, y0), (x1, y0), (x1, y1), (x0, y1)]
+        if fill is None:
+            fill, line = vtk.vtkActor2D(), vtk.vtkActor2D()
+            for act, opacity in ((fill, 0.12), (line, 0.9)):
+                m = vtk.vtkPolyDataMapper2D()
+                act.SetMapper(m)
+                act.GetProperty().SetColor(*_rgb(SEL_EDGE))
+                act.GetProperty().SetOpacity(opacity)
+                act.PickableOff()
+                ren.AddViewProp(act)
+            line.GetProperty().SetLineWidth(1.5)
+            self._band = (p0, fill, line)
+        pts = vtk.vtkPoints()
+        for x, y in corners:
+            pts.InsertNextPoint(x, y, 0)
+        for act, closed in ((fill, False), (line, True)):
+            cells = vtk.vtkCellArray()
+            ids = [0, 1, 2, 3, 0] if closed else [0, 1, 2, 3]
+            cells.InsertNextCell(len(ids))
+            for i in ids:
+                cells.InsertCellPoint(i)
+            pd = vtk.vtkPolyData()
+            pd.SetPoints(pts)
+            pd.SetLines(cells) if closed else pd.SetPolys(cells)
+            act.GetMapper().SetInputData(pd)
+        self.plotter.render()
+
+    def _box_parts(self, name: str, t, mode: str) -> list[tuple[int, np.ndarray]]:
+        """The selectable parts of one object in a selection mode: (pick index, its points in world)."""
+        if mode == "object":
+            X = [np.asarray(t.points, float).reshape(-1, 3)] + [np.asarray(e, float).reshape(-1, 3)
+                                                                  for e in t.edges]
+            X = np.vstack(X) if X else np.empty((0, 3))
+            return [(-1, X)] if len(X) else []
+        if mode == "face":
+            if not len(t.tris):
+                return []
+            tris, tf, P = np.asarray(t.tris), np.asarray(t.tri_face), np.asarray(t.points, float)
+            return [(int(f), P[np.unique(tris[tf == f])]) for f in np.unique(tf)]
+        if mode == "edge":
+            return [(i, np.asarray(e, float).reshape(-1, 3)) for i, e in enumerate(t.edges) if len(e)]
+        if mode == "vertex":
+            return [(i, np.asarray(v, float).reshape(1, 3)) for i, v in enumerate(np.asarray(t.vertices))]
+        return []
+
+    def box_picks(self, p0, p1) -> list[Pick]:
+        """Everything (objects, or faces / edges / vertices in those modes) of the visible objects that
+        lies completely inside the screen rectangle p0-p1 and in front of the camera."""
+        xmin, xmax = sorted((p0[0], p1[0]))
+        ymin, ymax = sorted((p0[1], p1[1]))
+        mode = self.doc.selection_mode
+        out, seen = [], set()
+        for name, t in self.doc.tess.items():
+            a = self.actors.get(name)
+            if a is None:
+                continue
+            shown = [act for act in (a.surface, a.edges) if act is not None]
+            if not shown or not any(act.GetVisibility() for act in shown):
+                continue
+            seen.add(name)
+            for index, X in self._box_parts(name, t, mode):
+                if not len(X):
+                    continue
+                xy, ok = self._display_coords(X)
+                if ok.all() and (xy[:, 0] >= xmin).all() and (xy[:, 0] <= xmax).all() \
+                        and (xy[:, 1] >= ymin).all() and (xy[:, 1] <= ymax).all():
+                    out.append(Pick(name, index))
+        if mode == "object":
+            # a group is one unit: take it only when every shown member is inside (the selection expands
+            # a member to its whole group)
+            from ..model import groups as G
+            des = self.doc.design
+            inside = {p.obj for p in out}
+            out = [p for p in out if not des.has_obj(p.obj) or not des.obj(p.obj).group
+                   or set(G.members(des, des.obj(p.obj).group)) & seen <= inside]
+        return out
 
     # ------------------------------------------------------------------------------------------
     # geometry display
