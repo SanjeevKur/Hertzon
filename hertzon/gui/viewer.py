@@ -1213,6 +1213,7 @@ class ModelerView(QWidget):
             self._style_obj(name)
         self.update_grid()
         self.refresh_selection()
+        self._refresh_assignments()
         if self._first_fit and self.doc.tess:
             self._first_fit = False
             self.fit_all()
@@ -1398,6 +1399,7 @@ class ModelerView(QWidget):
         for act in self.assignment_actors:
             self.plotter.remove_actor(act, render=False)
         self.assignment_actors = []
+        self._shown = (list(assignments), kind_colors)
         colors = {**BOUNDARY_COLORS, **EXCITATION_COLORS, **(kind_colors or {})}
         for a in assignments:
             color = colors.get(a.kind, "#ff00ff")
@@ -1421,7 +1423,8 @@ class ModelerView(QWidget):
             line = a.props.get("IntegrationLine", "").strip() if hasattr(a, "props") else ""
             if line:
                 try:
-                    pts = self.doc.evaluator().points(line)
+                    from ..model.objframe import global_points
+                    pts = global_points(self.doc.design, a, "IntegrationLine", self.doc.evaluator())
                     if len(pts) == 2:
                         p0, p1 = np.asarray(pts[0]), np.asarray(pts[1])
                         arrow = pv.Arrow(start=p0, direction=p1 - p0, scale=float(np.linalg.norm(p1 - p0)),
@@ -1431,6 +1434,21 @@ class ModelerView(QWidget):
                 except Exception:  # noqa: BLE001
                     pass
         self.plotter.render()
+
+    def _refresh_assignments(self) -> None:
+        """Draws the shown boundaries/excitations again on the rebuilt geometry, so faces and integration
+        lines follow their moved objects."""
+        shown, colors = getattr(self, "_shown", ([], None))
+        if not shown:
+            return
+        des = self.doc.design
+        now = []
+        for a in shown:
+            try:
+                now.append(des.assignment(a.name))
+            except (KeyError, AttributeError):
+                pass                        # deleted meanwhile
+        self.show_assignments(now, colors)
 
     def _plane_wave_arrows(self, a) -> None:
         """draws the incident plane wave as its propagation vector k with the E vector at its tip."""

@@ -59,6 +59,7 @@ Conventions
 - Sheets (CreateRectangle, CreateCircle ...) model ports and thin metal: assign "Perfect E" or
   "Finite Conductivity" to a sheet object for traces, patches and ground planes.
 - Ports: a "Lumped Port" is a sheet between two conductors with an IntegrationLine from one to the other;
+  the line is in the coordinates of the sheet as created (before its Move/Rotate/Mirror/Scale) and follows it;
   a "Wave Port" is a sheet (or outer face) covering the cross section of a waveguide or line at the
   boundary of the solution region. Port numbers set S(i,j).
 - Metal volumes: material "pec" or "copper" (not meshed inside). Air/vacuum boxes are solved inside.

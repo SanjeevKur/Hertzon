@@ -173,7 +173,8 @@ BOUNDARIES: dict[str, list[Prop]] = {
                                                     "Lumped Elements tab (information only)"),
                    P("IntegrationLine", "points", "", help="Start;End point of the current flow line, from one conductor to the other. Set "
                      "automatically between the two conductors touching the sheet; right click the boundary to "
-                     "draw it in the 3D view or to place it automatically again")],
+                     "draw it in the 3D view or to place it automatically again. Given in the coordinates of the sheet as created: "
+                     "the line moves, rotates and mirrors with its object")],
     "Radiation": [P("Order", "choice", "First order", choices=("First order", "Second order")),
                   P("FarFieldReference", "bool", "True", label="Include for near/far field calculation")],
     "PML": [P("Thickness", "length", "", help="Empty = lambda/4 at lowest frequency"),
@@ -206,7 +207,8 @@ EXCITATIONS: dict[str, list[Prop]] = {
     "Lumped Port": [P("PortNumber", "int", "1"), P("Impedance", "expr", "50ohm", label="Full port impedance"),
                     P("IntegrationLine", "points", "", help="Start;End of the voltage line, from one conductor to the other. Set "
                      "automatically between the two conductors touching the sheet (empty = auto); right click the "
-                     "port to draw it in the 3D view or to place it automatically again")],
+                     "port to draw it in the 3D view or to place it automatically again. Given in the coordinates of the sheet as "
+                     "created: the line moves, rotates and mirrors with its object")],
     "Floquet Port": [P("PortNumber", "int", "1"), P("NumberOfModes", "int", "2"),
                      P("Permittivity", "expr", "1", label="Medium permittivity")],
     "Incident Plane Wave": [P("VectorInput", "choice", "Cartesian", label="Vector input format",
