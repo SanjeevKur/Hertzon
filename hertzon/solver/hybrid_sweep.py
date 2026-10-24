@@ -62,7 +62,7 @@ class Hybrid:
         """(x on the solve dofs, relative residual) in the basis, or None."""
         if self.V is None or self.ids is None or not np.array_equal(self.ids, solve_ids):
             return None
-        from .fast_assembly import submatrix
+        from emerge._emerge.mth.csc_submatrix import csc_submatrix as submatrix
         Asel = submatrix(A, solve_ids)
         bsel = np.asarray(b2[solve_ids, :], dtype=np.complex128)
         bn = np.maximum(np.linalg.norm(bsel, axis=0), 1e-300)

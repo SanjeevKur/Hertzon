@@ -194,20 +194,18 @@ def test_edit_sources_apply_keeps_dialog_open():
     assert SRC.defaults(des)
 
 
-def test_fast_assembly_patches_and_sparse_helpers():
-    """The faster solve replaces EMerge's code by a source pattern; it must still match, and the sparse
-    helpers must give scipy's results."""
+def test_fast_assembly_sparse_helpers():
+    """The upper triangle for the complex symmetric PARDISO factorization; EMerge's parallel removal of the
+    PEC rows and columns (FennisRobert/EMerge#78), which Hertzon's sweeps use too, matches scipy."""
     import scipy.sparse as sp
     from hertzon.solver import fast_assembly as FA
-    from emerge._emerge import solver
-    assert FA._patched(solver.SolveRoutine.solve, [(FA.re.compile(r"Asel = A\[:, solve_ids\]\[solve_ids, :\]"),
-                                                    "x")])[1] == 1
+    from emerge._emerge.mth.csc_submatrix import csc_submatrix
     rng = np.random.default_rng(0)
     M = sp.random(300, 300, density=0.05, random_state=1) + 1j * sp.random(300, 300, density=0.05, random_state=2)
     A = (M + M.T + sp.identity(300)).tocsc()
     A.sort_indices()
     ids = np.sort(rng.choice(300, 250, replace=False))
-    S0, S1 = A[:, ids][ids, :], FA.submatrix(A, ids)
+    S0, S1 = A[:, ids][ids, :], csc_submatrix(A, ids)
     S0.sort_indices()
     assert np.array_equal(S0.indptr, S1.indptr) and np.array_equal(S0.indices, S1.indices)
     assert np.array_equal(S0.data, S1.data)
@@ -216,46 +214,21 @@ def test_fast_assembly_patches_and_sparse_helpers():
     assert FA.upper_symmetric((A + sp.random(300, 300, density=0.01, random_state=3)).tocsc()) is None
 
 
-def test_curved_kernels_match_emerge_element_matrices():
-    """The curved elements use EMerge 2.8.9's numba basis functions (ned2_kernels); with zero edge
-    displacement they must give the element matrices of the installed EMerge (also EMerge 3's compiled
-    assembly: same DoF codes and local edge/face order)."""
+def test_curved_map_for_plots():
+    """The solve uses EMerge's curved elements (FennisRobert/EMerge#77); the plots map the same geometry:
+    without displacement the map is the straight tetrahedron, with one it moves that edge midpoint."""
     from hertzon.solver import curvilinear as CV
-    from hertzon.solver import ned2_kernels as NK
-    from emerge._emerge.elements.dofsets import ElementSpace
-    try:
-        from emr import curlcurl as CC         # EMerge 3
-    except ImportError:
-        from emerge._emerge.physics.microwave.assembly import curlcurl as CC
-    rng = np.random.default_rng(1)
-    nodes = np.array([[0, 1, 0, 0, 1], [0, 0, 1, 0, 1], [0, 0, 0, 1, 1]], float) * 1e-3 + rng.normal(0, 1e-4, (3, 5))
-    tets = np.array([[0, 1], [1, 2], [2, 3], [3, 4]], np.int64)           # two tets sharing face 1-2-3
-    st = np.sort(tets, axis=0)
-    edges = np.unique(np.concatenate([st[[a, b]] for a, b in ((0, 1), (0, 2), (0, 3), (1, 2), (1, 3), (2, 3))],
-                                     axis=1), axis=1)
-    tris = np.unique(np.concatenate([st[list(t)] for t in ((0, 1, 2), (0, 1, 3), (0, 2, 3), (1, 2, 3))], axis=1),
-                     axis=1)
-    ekey = {tuple(e): i for i, e in enumerate(edges.T.tolist())}
-    tkey = {tuple(t): i for i, t in enumerate(tris.T.tolist())}
-    t2e = np.array([[ekey[(st[a, k], st[b, k])] for k in range(2)]
-                    for a, b in ((0, 1), (0, 2), (0, 3), (1, 2), (1, 3), (2, 3))], np.int64)
-    t2t = np.array([[tkey[tuple(st[list(t), k])] for k in range(2)]
-                    for t in ((0, 1, 2), (0, 1, 3), (0, 2, 3), (1, 2, 3))], np.int64)
-    er = np.repeat(np.array([[2.2, 0.1, 0], [0.1, 2.0, 0], [0, 0, 1.7]], complex)[:, :, None], 2, axis=2)
-    ur = np.repeat((np.eye(3, dtype=complex) * (1.3 - 0.1j))[:, :, None], 2, axis=2)
-    _, build = CV.kernels()
-    for sp in ElementSpace:
-        codes = np.array(sp.get_set().set3d.codes, dtype=np.int64)
-        nd = len(codes)
-        t2f = np.arange(2 * nd, dtype=np.int64).reshape(nd, 2)
-        E0, B0 = CC._matrix_builder(nodes, tets, tris, edges, t2f, t2e, t2t, ur, er, np.arange(2, dtype=np.int64),
-                                    codes)[:2]
-        E1, B1 = np.zeros(2 * nd * nd, complex), np.zeros(2 * nd * nd, complex)
-        build(nodes, tets, tris, edges, t2e, t2t, ur, er, np.arange(2, dtype=np.int64), np.arange(2, dtype=np.int64),
-              np.zeros((2, 6, 3)), codes, CV._QP, E1, B1)
-        assert np.abs(E1 - np.asarray(E0)).max() < 1e-9 * np.abs(E0).max(), sp
-        assert np.abs(B1 - np.asarray(B0)).max() < 1e-9 * np.abs(B0).max(), sp
-    assert NK.matinv(ur[:, :, 0])[0, 0] == pytest.approx(1 / (1.3 - 0.1j))
+    from emerge._emerge.settings import Settings
+    assert Settings().mw_curved_elements is False
+    X = np.array([[[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]]], float)
+    lam = np.vstack([np.eye(4), [[0.5, 0.5, 0, 0]]])
+    pos, D = CV.curved_map(X, np.zeros((1, 6, 3)), lam)
+    assert np.allclose(pos[0], lam @ X[0]) and np.allclose(D, np.eye(3))
+    d = np.zeros((1, 6, 3))
+    d[0, 0] = [0, -0.1, 0]                      # edge 0-1 bulges outwards
+    pos, D = CV.curved_map(X, d, lam)
+    assert np.allclose(pos[0, 4], [0.5, -0.1, 0]) and np.allclose(pos[0, :4], X[0])
+    assert np.all(np.linalg.det(D) > 0)
 
 
 def test_emerge_material_library():

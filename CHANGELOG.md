@@ -19,6 +19,12 @@ the GitHub release notes.
 - **AURA (EMerge) is the default mesh refinement for new setups** (was Local (Delaunay)). On the
   benchmark models it reached the convergence criterion in 0.35 to 0.6 times the time in three of four
   cases and was as accurate or more accurate per tetrahedron. Saved setups keep their method; Local (Delaunay) stays selectable.
+- **EMerge `e03a085` (its `hertzon` branch)**, which now contains three of Hertzon's speed features: the
+  far field of all ports in one pass, the curved elements on curved surfaces and the faster removal of the
+  PEC unknowns before each solve. Hertzon uses EMerge's versions and drops its own (about 1200 lines).
+  Results and meshes are the same on all benchmark models; far fields of many ports are computed about
+  twice as fast, and the one-time compilation of the curved element kernels after an installation
+  (about a minute) is gone.
 - **EMerge 3.0.0b5 plus the fixes on its `hertzon` branch** (commit `2811e9a`; was 3.0.0a25, as advised in
   #25). Hertzon now installs EMerge from wheels built from a pinned commit, so solver fixes arrive without
   waiting for a release. Thin conductors with thickness (two-sided Finite Conductivity) are now solved

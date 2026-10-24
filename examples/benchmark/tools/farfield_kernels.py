@@ -1,10 +1,10 @@
-"""Far field from stored boundary fields: Hertzon's multi-port kernel against EMerge's Rust kernel.
+"""Far field from stored boundary fields: the multi-port kernel against the per-port kernel (both EMerge).
 
     python farfield_kernels.py HUYGENS_NPZ [STEP_DEG ...]
 
 For every angular step the far field of all ports is computed once with
-hertzon.solver.farfield_post.stratton_chu_multi (phase matrix once for all ports) and once with
-emr.sc.stratton_chu_ff per port, as EMerge's MWField.farfield does. Prints the times and the largest
+hertzon.solver.farfield_post.stratton_chu_multi (EMerge's emr.sc_multi: phase factors once for all ports)
+and once with emr.sc.stratton_chu_ff per port, as EMerge's MWField.farfield does. Prints the times and the largest
 difference relative to the peak field.
 """
 import sys
@@ -38,7 +38,7 @@ def main(path: str, steps: list[float]) -> None:
         B = [stratton_chu_ff(E, H, vis, wns, np.array([T, P]), np.float64(k0))[0] for E, H in zip(Es, Hs)]
         tb = time.perf_counter() - t
         d = max(np.max(np.abs(a - b)) / np.max(np.abs(b)) for a, b in zip(A, B))
-        print(f"step {st:g} deg, {T.size} directions: Hertzon multi-port {ta:.3f} s, "
+        print(f"step {st:g} deg, {T.size} directions: multi-port {ta:.3f} s, "
               f"EMerge Rust per port {tb:.3f} s ({tb / ta:.1f}x), max rel. difference {d:.1e}")
 
 

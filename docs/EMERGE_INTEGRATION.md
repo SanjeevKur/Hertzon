@@ -78,6 +78,29 @@ which are now solved with separate fields on both sides (more conductor loss; th
 loss of a stripline against Wheeler's incremental inductance rule). No case got slower beyond the noise
 (the microstrip b5 run was the first after the warm-up and slower than usual).
 
+## Step 4: Hertzon's speed features in EMerge (`e03a085`)
+
+Three of Hertzon's replacements are now EMerge code on its `hertzon` branch, and Hertzon uses them:
+the far field of all ports in one pass (FennisRobert/EMerge#76, Rust kernel `emr.sc_multi`), curved
+elements (#77, `Settings.mw_curved_elements`, set from the setup option "Curved elements") and the parallel
+removal of the PEC rows and columns (#78). Hertzon's own versions are removed (about 1200 lines, among them
+`ned2_kernels.py`, the numba copy of EMerge 2.8.9's basis functions). All five cases, `2811e9a` with
+Hertzon's versions against `e03a085` with EMerge's:
+
+| Case | `2811e9a` | `e03a085` | Results |
+|---|---|---|---|
+| microstrip | 32.0 s | 24.2 s | same meshes, S-parameters identical |
+| hairpin | 71.2 s | 61.1 s | same meshes, S-parameters identical |
+| patch | 73.1 s | 67.4 s | same meshes, S-parameters identical, far field within 5e-10 |
+| waveport | 25.5 s | 24.3 s | same meshes (curved post), adaptive and discrete within 2e-14 |
+| rotman | 69.0 s | 68.4 s | same meshes, S-parameters identical, far fields within 4e-10 |
+
+No case got slower; the differences are within the run-to-run noise, except that the first waveport run
+on `2811e9a` took 104 s: Hertzon's numba kernels for the curved elements were compiled first (80 s, cached
+on disk afterwards, normally during the warm-up after the installation). EMerge's kernel is compiled Rust,
+so this compilation is gone. The interpolating sweep of the waveport is not reproducible from run to run
+(see open issues), on both commits.
+
 ## Replacements that stay for now (candidates for EMerge's `hertzon` branch)
 
 Each row: the replacement switched off, i.e. EMerge's own code, relative to Hertzon with all replacements
@@ -85,8 +108,7 @@ on (EMerge 3.0.0b5).
 
 | Replacement | microstrip | hairpin | patch | rotman | Results |
 |---|---|---|---|---|---|
-| All of `fast_assembly` off (`HERTZON_SLOW_ASSEMBLY=1`) | +8 % | +40 % | +44 % | +17 % | same |
-| Only PARDISO LDLT off (`HERTZON_PARDISO_STRUCT=1`) | +9 % | +34 % | +34 % | +7 % | same |
+| PARDISO LDLT off (`HERTZON_PARDISO_STRUCT=1`) | +9 % | +34 % | +34 % | +7 % | same |
 | Reduced basis in the interpolating sweep off | +30 % | +48 % | +30 % | – | same within tolerance |
 | `mt_pardiso` off, sweep frequencies in parallel | +442 % | out of memory | out of memory | – | – |
 | Thin conductor DoF numbering off | ±0 | ±0 | ±0 | ±0 | S identical |
@@ -99,12 +121,6 @@ mtype 6 (complex symmetric, upper triangle) needs about half the factor memory a
 second order cases. Hertzon uses it only when EMerge classifies the matrix as symmetric and a random
 bilinear test confirms it, and falls back to LU on any PARDISO error.
 **Proposal:** move into EMerge's PARDISO interface, with this benchmark.
-
-### Removing the PEC rows and columns (`fast_assembly.submatrix`)
-
-`SolveRoutine.solve` builds `A[:, solve_ids][solve_ids, :]` with scipy fancy indexing on one core. Hertzon
-does it in a parallel two-pass CSC copy. Worth 5–10 % (difference of the two `fast_assembly` rows).
-**Proposal:** move into `SolveRoutine.solve`, small.
 
 ### PARDISO in parallel sweeps (`mt_pardiso`)
 
@@ -132,23 +148,6 @@ factorization); only those that the basis cannot reach are factorized. 30–48 %
 **Proposal:** compare with EMerge's `run_adaptive_sweep` (AAA) before deciding whether this goes upstream
 or Hertzon switches to it.
 
-### Far field for many ports (`farfield_post.stratton_chu_multi`)
-
-EMerge's `MWField.farfield` calls the Rust kernel `emr.sc.stratton_chu_ff` once per excitation, and each call
-computes all phase factors exp(jk r·x) again. Hertzon computes them once per frequency and multiplies them
-with all excitations in one BLAS call. Rotman lens, 11 ports, 2907 surface points:
-
-| Angular step | Directions | Hertzon, all ports | EMerge Rust, per port | Ratio |
-|---|---|---|---|---|
-| 5° | 2701 | 0.26 s | 1.08 s | 4.2× |
-| 2° | 16471 | 1.56 s | 6.06 s | 3.9× |
-| 1° | 65341 | 6.27 s | 22.9 s | 3.7× |
-
-Largest difference 4e-10 relative to the peak field.
-**Proposal:** a multi-excitation variant of `stratton_chu_ff` (phases once, then all E/H sets), and a public
-function that returns the integration points and weighted normals, so Hertzon can call the Rust kernel on
-its stored boundary fields.
-
 ### Error estimate with many excitations
 
 EMerge 3 computes the error estimate in Rust (`emr.adaptive_mesh.compute_error_single`), in parallel over
@@ -166,6 +165,13 @@ excitations in one pass over the tetrahedra (geometry and neighbour data once).
 
 ## Removed
 
+- `fast_assembly.submatrix` (parallel removal of the PEC rows and columns, 5–10 %): in EMerge since
+  FennisRobert/EMerge#78 (Rust, 9–13× faster than scipy's indexing, bit-identical).
+- The far field kernel of `farfield_post.stratton_chu_multi` (phase factors once for all ports, 3.7–4.2×
+  faster than one call per port): `farfield_post` calls EMerge's `emr.sc_multi` (#76), which is about
+  twice as fast again.
+- The curved elements (`emerge_patches.apply_curved`, the element matrices in `curvilinear.py`,
+  `ned2_kernels.py`): EMerge's own since #77. `curvilinear.py` keeps the curved map for the plots.
 - `bridge._with_conductor_sheets`, which passed conductor sheets to the error estimate like PEC faces.
   It changed nothing: microstrip and hairpin give the same meshes and S-parameters without it (the face
   terms of EMerge's estimate contribute practically nothing, see
@@ -186,10 +192,10 @@ excitations in one pass over the tetrahedra (geometry and neighbour data once).
 
 ## Hertzon features built on EMerge (stay in Hertzon)
 
-Curved (isoparametric) elements, Hertzon's own refinement methods, lazy field evaluation, stored boundary
+Hertzon's own refinement methods, lazy field evaluation, stored boundary
 fields for far fields after the solve, far field quantities (realized gain, efficiency, superposition of
-ports), face matching. Curved elements patch `Assembler.assemble_*` and keep a numba copy of the 2.8.9
-basis functions; the plan is to implement them natively in EMerge.
+ports), face matching. Curved elements are EMerge's (#77); Hertzon only switches them on and draws the curved
+tetrahedra.
 
 ## Open issues found on the way (Hertzon)
 

@@ -8,32 +8,6 @@ from __future__ import annotations
 
 import numpy as np
 
-Z0 = 376.730313412
-
-
-_CEXP = None
-
-
-def _cexp(x: np.ndarray) -> np.ndarray:
-    """exp(1j * x) on all cores (numpy's exp is single-threaded and dominated the far field time)."""
-    global _CEXP
-    if _CEXP is None:
-        try:
-            from numba import njit, prange
-            import math
-
-            @njit(parallel=True, cache=True, fastmath=False)
-            def k(a):
-                out = np.empty(a.shape, np.complex128)
-                for i in prange(a.shape[0]):
-                    for j in range(a.shape[1]):
-                        out[i, j] = complex(math.cos(a[i, j]), math.sin(a[i, j]))
-                return out
-            _CEXP = k
-        except Exception:  # noqa: BLE001
-            _CEXP = lambda a: np.exp(1j * a)  # noqa: E731
-    return _CEXP(np.ascontiguousarray(x, np.float64))
-
 
 def stratton_chu(E: np.ndarray, H: np.ndarray, vis: np.ndarray, wns: np.ndarray,
                  th: np.ndarray, ph: np.ndarray, k0: float, progress=None) -> np.ndarray:
@@ -43,34 +17,24 @@ def stratton_chu(E: np.ndarray, H: np.ndarray, vis: np.ndarray, wns: np.ndarray,
 
 def stratton_chu_multi(Es: list, Hs: list, vis: np.ndarray, wns: np.ndarray, th: np.ndarray, ph: np.ndarray,
                        k0: float, progress=None) -> list:
-    """stratton_chu for several excitations at one frequency: the phase matrix exp(jk r.x) is the same for
-    all of them, so it is computed once and multiplied with every excitation in one BLAS call."""
-    Es = [np.asarray(E, np.complex128) for E in Es]
-    Hs = [np.asarray(H, np.complex128) for H in Hs]
-    keep = np.zeros(vis.shape[1], bool)
-    for E in Es:                        # sources that matter for any excitation
-        mag = np.sqrt((np.abs(E) ** 2).sum(0))
-        if mag.size:
-            keep |= mag > mag.max() * 1e-3
-    vis, wns = vis[:, keep], wns[:, keep]
-    r = np.stack([np.sin(th) * np.cos(ph), np.sin(th) * np.sin(ph), np.cos(th)]).T   # (N, 3)
+    """stratton_chu for several excitations at one frequency with EMerge's kernel emr.sc_multi (the phase
+    factor exp(jk r.x) is computed once for all excitations), in blocks of directions for the progress bar."""
+    from emr.sc_multi import stratton_chu_ff_multi
     ne = len(Es)
-    # columns: n x E then n x H of every excitation (M, 6 * ne)
-    src = np.concatenate([np.cross(wns.T, E[:, keep].T) for E in Es] + [np.cross(wns.T, H[:, keep].T) for H in Hs],
-                         axis=1)
-    out = np.zeros((ne, r.shape[0], 3), np.complex128)
-    # sum over the sources first: A = sum G n x E, B = sum G n x H (r is constant per direction)
-    step = max(1, 4_000_000 // max(1, src.shape[0]))
-    for a in range(0, r.shape[0], step):
-        rr = r[a:a + step]
-        G = _cexp(k0 * (rr @ vis))                               # (n, M)
-        AB = (G @ src).reshape(len(rr), 2, ne, 3)
-        for i in range(ne):
-            A, B = AB[:, 0, i], AB[:, 1, i]
-            out[i, a:a + step] = -1j * k0 / (4 * np.pi) * np.cross(rr, A - Z0 * np.cross(rr, B))
+    Ein = np.ascontiguousarray(np.concatenate([np.asarray(E, np.complex128) for E in Es], axis=0))
+    Hin = np.ascontiguousarray(np.concatenate([np.asarray(H, np.complex128) for H in Hs], axis=0))
+    vis = np.ascontiguousarray(vis, np.float64)
+    wns = np.ascontiguousarray(wns, np.float64)
+    tp = np.ascontiguousarray([np.ravel(th), np.ravel(ph)], np.float64)
+    n = tp.shape[1]
+    step = n if progress is None else max(1, -(-n // 20))
+    out = np.empty((3 * ne, n), np.complex128)
+    for a in range(0, n, step):
+        out[:, a:a + step] = stratton_chu_ff_multi(Ein, Hin, vis, wns, np.ascontiguousarray(tp[:, a:a + step]),
+                                                   np.float64(k0))[0]
         if progress is not None:
-            progress(min(1.0, (a + step) / r.shape[0]))
-    return [o.T for o in out]
+            progress(min(1.0, (a + step) / n))
+    return [out[3 * i:3 * i + 3] for i in range(ne)]
 
 
 def compute_sphere(huy: dict, props: dict, ev, design=None, plane_wave=None, progress=None) -> dict:
