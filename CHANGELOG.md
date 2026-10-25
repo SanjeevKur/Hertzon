@@ -3,7 +3,7 @@
 All notable changes of each release. The release workflow copies the section of the released version into
 the GitHub release notes.
 
-## Unreleased
+## 0.2.0 (2026-10-25)
 
 ### Added
 - **Animations as GIF**: **Export GIF...** in the animation bar (or Fields > Export Animation as GIF...)
