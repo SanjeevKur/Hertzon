@@ -1,12 +1,13 @@
 r"""Fields Calculator (Results > Fields > Calculator): the Equations tab next to the 3D Modeler.
 
-In the middle the equation with its name, typed into the typeset formula editor (Formula: \times + Space gives
-×, \iint + Space a surface integral) or as one line of text (Text: the same function names as the report
-expressions); right a check of the equation (its value once on a chosen solution) and where it is used. The
-tab only defines equations: they are used in Plot Fields (fields) and in reports (values). The building blocks (fields, symbols, structures) are on the Equation page of the main ribbon, shown while the tab
-is open. An operation over a geometry (integral, maximum, ...) switches to the 3D Modeler and asks for the face,
-object or line; the pick goes below the sign. Equations are saved with the design (always as text), are listed
-in the project tree under Equations."""
+The tab only defines equations; they are used in Plot Fields (fields) and in reports (values). In the middle the
+equation with its name, typed into the typeset formula editor (Formula: \times + Space gives ×, \iint + Space a
+surface integral) or as one line of text (Text: the same function names as the report expressions); right its
+type (scalar or vector, field or value), unit and where it is used. The building blocks (fields, symbols,
+structures) are on the Equation page of the main ribbon, shown while the tab is open. An operation over a
+geometry (integral, maximum, ...) switches to the 3D Modeler and asks for the face, object or line; the pick
+goes below the sign. Equations are saved with the design (always as text) and are listed in the project tree
+under Equations."""
 from __future__ import annotations
 
 import io
@@ -14,8 +15,8 @@ import re
 
 from PySide6.QtCore import QRectF, QSize, QStringListModel, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QFont, QIcon, QPainter, QPixmap, QTextCharFormat, QTextCursor
-from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox, QCompleter, QDialog, QDialogButtonBox,
-                               QDoubleSpinBox, QFormLayout, QGridLayout, QHBoxLayout, QLabel, QLineEdit,
+from PySide6.QtWidgets import (QCheckBox, QComboBox, QCompleter, QDialog, QDialogButtonBox,
+                               QFormLayout, QGridLayout, QHBoxLayout, QLabel, QLineEdit,
                                QListWidget, QMenu, QMessageBox, QPlainTextEdit, QPushButton, QSizePolicy,
                                QSplitter, QStackedWidget, QTextEdit, QToolButton, QVBoxLayout, QWidget)
 
@@ -70,7 +71,7 @@ def call_at(text: str, pos: int) -> tuple[str, int] | None:
 
 
 class ExprEdit(QPlainTextEdit):
-    """The expression line: Enter checks, errors are underlined, names complete as you type."""
+    """The expression line: errors are underlined, names complete as you type."""
 
     submitted = Signal()
 
@@ -399,7 +400,7 @@ class PickBar(QDialog):
 
 class EquationsTab(QWidget):
     """The Fields Calculator as the Equations tab next to the 3D Modeler: in the middle the formula with its
-    name, right its check on a chosen solution, frequency, excitation and phase. The building blocks are on
+    name, right its type, unit and uses. The building blocks are on
     the Equation page of the main ribbon (build_ribbon), shown while this tab is open; the saved equations
     are in the project tree."""
 
@@ -585,7 +586,7 @@ class EquationsTab(QWidget):
         if self.fe is not None:
             self.fe.setMinimumHeight(220)
             self.fe.latex_changed.connect(self._tex_changed)
-            self.fe.submitted.connect(self.evaluate)
+            self.fe.submitted.connect(self._analyze)
             self.fe.pick_requested.connect(self.pick)
             self.stack.addWidget(self.fe)
         linear = QWidget()
@@ -603,7 +604,7 @@ class EquationsTab(QWidget):
         self.edit.setFixedHeight(self.edit.fontMetrics().lineSpacing() * 2 + 16)
         self.edit.textChanged.connect(self._text_changed)
         self.edit.cursorPositionChanged.connect(self._signature)
-        self.edit.submitted.connect(self.evaluate)
+        self.edit.submitted.connect(self._analyze)
         ll.addWidget(self.edit)
         self.stack.addWidget(linear)
         lay.addWidget(self.stack, 1)
@@ -618,15 +619,11 @@ class EquationsTab(QWidget):
         self.sig.setProperty("role", "muted")
         self.sig.linkActivated.connect(self.insert_text)
         lay.addWidget(self.sig)
-        self.chips = QLabel()
-        self.chips.setWordWrap(True)
-        self.chips.setTextFormat(Qt.RichText)
-        lay.addWidget(self.chips)
         lay.addStretch(0)
         srow = QHBoxLayout()
         self.status = QLabel()
         srow.addWidget(self.status, 1)
-        keys = QLabel("\\ and a name, then Space: symbol or structure · Tab: next box · Enter: check")
+        keys = QLabel("\\ and a name, then Space: symbol or structure · Tab: next box")
         keys.setProperty("role", "muted")
         srow.addWidget(keys)
         lay.addLayout(srow)
@@ -639,49 +636,27 @@ class EquationsTab(QWidget):
         lay = QVBoxLayout(w)
         lay.setContentsMargins(14, 12, 14, 10)
         lay.setSpacing(8)
-        lay.addWidget(_h("CHECK ON"))
-        self.sol = QComboBox()
-        self.sol.setMinimumWidth(200)
-        self.freq = QComboBox()
-        self.port = QComboBox()
-        self.phase = QDoubleSpinBox()
-        self.phase.setRange(-360, 360)
-        self.phase.setSuffix("°")
-        self.phase.setToolTip("Phase for inst() and for the preview in the 3D view")
-        form = QFormLayout()
-        form.setContentsMargins(0, 0, 0, 0)
-        form.addRow("Solution", self.sol)
-        form.addRow("Frequency", self.freq)
-        pp = QHBoxLayout()
-        pp.addWidget(self.port, 1)
-        pp.addWidget(QLabel("Phase"))
-        pp.addWidget(self.phase, 1)
-        form.addRow("Port", pp)
-        lay.addLayout(form)
-        self.sol.currentTextChanged.connect(self._solution_changed)
-        self.freq.currentIndexChanged.connect(lambda *_: self._context_changed())
-        self.port.currentIndexChanged.connect(lambda *_: self._context_changed())
-        self.phase.valueChanged.connect(lambda *_: self._context_changed())
-        act = QHBoxLayout()
-        ev = QPushButton("Check")
-        ev.setObjectName("Primary")
-        ev.setToolTip("Compute the value once on the solution above, to check the equation (Enter)")
-        ev.clicked.connect(self.evaluate)
-        act.addWidget(ev)
-        act.addStretch(1)
-        lay.addLayout(act)
+        lay.addWidget(_h("TYPE"))
+        self.kind = QLabel("—")
+        self.kind.setObjectName("Value")
+        lay.addWidget(self.kind)
+        self.kind_note = QLabel()
+        self.kind_note.setWordWrap(True)
+        self.kind_note.setProperty("role", "muted")
+        lay.addWidget(self.kind_note)
         lay.addSpacing(6)
-        lay.addWidget(_h("RESULT"))
-        self.result = QLabel("—")
-        self.result.setObjectName("Value")
-        self.result.setTextInteractionFlags(Qt.TextSelectableByMouse)
-        self.result.setWordWrap(True)
-        lay.addWidget(self.result)
-        self.result_note = QLabel()
-        self.result_note.setWordWrap(True)
-        self.result_note.setProperty("role", "muted")
-        lay.addWidget(self.result_note)
-
+        lay.addWidget(_h("UNIT"))
+        self.unit = QLabel("—")
+        self.unit.setObjectName("Value")
+        self.unit.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        lay.addWidget(self.unit)
+        lay.addSpacing(6)
+        lay.addWidget(_h("DETAILS"))
+        self.details = QLabel("—")
+        self.details.setWordWrap(True)
+        self.details.setProperty("role", "muted")
+        lay.addWidget(self.details)
+        lay.addSpacing(6)
         lay.addWidget(_h("USED BY"))
         self.used = QLabel("—")
         self.used.setWordWrap(True)
@@ -692,8 +667,7 @@ class EquationsTab(QWidget):
 
     # ---- context ---------------------------------------------------------------------------------
     def refresh(self) -> None:
-        """Geometry names for completion, solutions."""
-        self._fill_solutions()
+        """Names for completion and for the formula editor."""
         env = CB.make_env(self.doc)
         words = list(L.SYMBOLS) + list(L.SIGNATURES) + list(env.named) + list(env.functions) + \
             list(env.geometry) + [c for c in env.cs_names]
@@ -705,57 +679,10 @@ class EquationsTab(QWidget):
     def _doc_changed(self, what: str) -> None:
         if what in ("results", "analysis", "fields", "model", "all", "design"):
             cur = self.current
-            if what in ("results", "analysis", "all", "design"):
-                self._fill_solutions()
             if cur and not any(e.name == cur for e in self.doc.design.field_exprs):
                 self.current = None
                 self._dirty_changed()
             self._used_by()
-
-    def _fill_solutions(self) -> None:
-        cur = self.sol.currentText()
-        self.sol.blockSignals(True)
-        self.sol.clear()
-        sols = CB.field_solutions(self.doc) if self.doc.project.path else []
-        self.sol.addItems(sols or ["(no field solution: analyze with Save fields)"])
-        if cur in sols:
-            self.sol.setCurrentText(cur)
-        self.sol.blockSignals(False)
-        self._solution_changed(self.sol.currentText())
-
-    def _solution_changed(self, text: str) -> None:
-        self.freq.blockSignals(True)
-        self.port.blockSignals(True)
-        f0, p0 = self.freq.currentIndex(), self.port.currentText()
-        self.freq.clear()
-        self.port.clear()
-        try:
-            fr = CB.frequencies(self.doc, text) if " : " in text else []
-        except Exception:  # noqa: BLE001
-            fr = []
-        self.freq.addItems([f"{f / 1e9:.6g} GHz" for f in fr] or ["—"])
-        if 0 <= f0 < self.freq.count():
-            self.freq.setCurrentIndex(f0)
-        ports = [str(int(p.props.get("PortNumber", i + 1) or i + 1)) for i, p in enumerate(self.doc.design.ports())]
-        self.port.addItems(ports or ["1"])
-        if p0 in ports:
-            self.port.setCurrentText(p0)
-        self.freq.blockSignals(False)
-        self.port.blockSignals(False)
-        self._context_changed()
-
-    def context(self) -> tuple[str, int, int, float]:
-        return (self.sol.currentText(), max(0, self.freq.currentIndex()), int(self.port.currentText() or 1),
-                self.phase.value())
-
-    def _context_changed(self) -> None:
-        ctx = self.context()
-        if ctx == getattr(self, "_ctx", None):      # the lists were filled again (save, refresh): same result
-            return
-        self._ctx = ctx
-        if self.result.text() not in ("—", "", "Field"):
-            self.result.setText("—")
-            self.result_note.setText("Context changed: Check again")
 
     # ---- equations -----------------------------------------------------------------------------
     def _load_library(self, key: str) -> None:
@@ -775,7 +702,6 @@ class EquationsTab(QWidget):
         self.edit.setPlainText(e.expr)
         self.saved_text = self._state()
         self._dirty_changed()
-        self._clear_result()
         self._used_by()
 
     def new(self) -> None:
@@ -784,15 +710,9 @@ class EquationsTab(QWidget):
         self.desc.clear()
         self.edit.clear()
         self.saved_text = self._state()
-        self._clear_result()
-        self.result_note.setText("Type an expression, use the building blocks, or start from the Library.")
         self._dirty_changed()
         self._used_by()
         self.focus_editor()
-
-    def _clear_result(self) -> None:
-        self.result.setText("—")
-        self.result_note.setText("")
 
     def _state(self) -> str:
         return f"{self.name.text()}\n{self.desc.text()}\n{self.edit.toPlainText()}"
@@ -919,7 +839,7 @@ class EquationsTab(QWidget):
         self.edit.underline(None, None)
         self.astext.setText(f"as text:  {text}" if text else "")
         if self.mode == "pro" and self.tex_error:
-            self.chips.setText("")
+            self._show_kind(None)
             self.status.setText(f"<span style='color:{ERR}'>⚠ {self.tex_error}</span>")
             self.astext.setText(f"<span style='color:{ERR}'>⚠ {self.tex_error}</span>")
             return
@@ -927,7 +847,7 @@ class EquationsTab(QWidget):
             self.formula.clear()
             self.formula.setText("<span style='color:#98a0ae;font-size:15px'>The formula appears here as you "
                                  "type or click the building blocks</span>")
-            self.chips.setText("")
+            self._show_kind(None)
             self.status.setText("")
             return
         env = CB.make_env(self.doc)
@@ -935,7 +855,7 @@ class EquationsTab(QWidget):
             self.info = L.analyze(self.edit.toPlainText(), env)
         except L.CalcError as e:
             self.edit.underline(e.pos, e.end)
-            self.chips.setText("")
+            self._show_kind(None)
             self.status.setText(f"<span style='color:{ERR}'>⚠ {e}</span>")
             if self.mode == "pro":
                 self.astext.setText(f"as text:  {text}   <span style='color:{ERR}'>⚠ {e}</span>")
@@ -949,19 +869,29 @@ class EquationsTab(QWidget):
         else:
             self.formula.setText(text)
 
-        def chip(t, bg="#e8ecf4", fg="#1d2330"):
-            return f"<span style='background:{bg};color:{fg}'>&nbsp;{t}&nbsp;</span>"
-        chips = [chip(f"<b>{i.kind}</b>", "#dfeee4", "#1b6b3a"), chip(UN.describe(i.unit)),
-                 chip("complex" if i.cx else "real")]
-        chips += [chip(c) for c in L.conventions_text(i)]
-        if i.normals:
-            chips.append(chip("direction: " + ", ".join(dict.fromkeys(g.label() for g in i.normals))))
-        if i.deps:
-            chips.append(chip("uses " + ", ".join(dict.fromkeys(i.deps))))
-        if i.surf and i.field:
-            chips.append(chip("faces only"))
-        self.chips.setText("&nbsp;&nbsp;".join(chips))
+        self._show_kind(i)
         self.status.setText("✓ No errors")
+
+    def _show_kind(self, i: L.Info | None) -> None:
+        """Right: scalar or vector, field or value, and the unit of the equation."""
+        if i is None:
+            for w in (self.kind, self.unit):
+                w.setText("—")
+            self.kind_note.setText("")
+            self.details.setText("—")
+            return
+        self.kind.setText(f"{'Vector' if i.vec else 'Scalar'} {'field' if i.field else 'value'}")
+        self.kind_note.setText("A value at every point: plot it with Plot Fields (Quantity)." if i.field else
+                               "One number per frequency: show it in a report (category Fields).")
+        self.unit.setText(UN.label(i.unit) or "1")
+        det = ["complex" if i.cx else "real"] + list(L.conventions_text(i))
+        if i.normals:
+            det.append("direction: " + ", ".join(dict.fromkeys(g.label() for g in i.normals)))
+        if i.deps:
+            det.append("uses " + ", ".join(dict.fromkeys(i.deps)))
+        if i.surf and i.field:
+            det.append("on faces only")
+        self.details.setText("<br>".join(det))
 
     def _signature(self) -> None:
         self.sig.setText(self._signature_html())
@@ -1031,41 +961,6 @@ class EquationsTab(QWidget):
             c.movePosition(QTextCursor.Left)
             self.edit.setTextCursor(c)
         self._analyze()
-
-    # ---- evaluation ------------------------------------------------------------------------------
-    def evaluate(self) -> None:
-        self._analyze()
-        if self.info is None:
-            return
-        if self.info.field:
-            self.result.setText("Field")
-            self.result_note.setText(f"A value at every point ({UN.describe(self.info.unit)}). Save it, then plot "
-                                     "it with Plot Fields (Quantity) or from the project tree.")
-            return
-        self._evaluate_text(self.edit.toPlainText())
-
-    def _evaluate_text(self, text: str) -> None:
-        sol, fi, port, phase = self.context()
-        if " : " not in sol:
-            self.result.setText("—")
-            self.result_note.setText("No solution with saved fields: analyze with 'Save fields' in the setup.")
-            return
-        QApplication.setOverrideCursor(Qt.WaitCursor)
-        try:
-            r = CB.evaluate(self.doc, text, sol, fi, port, phase)
-        except Exception as e:  # noqa: BLE001
-            self.result.setText("—")
-            self.result_note.setText(f"<span style='color:{ERR}'>{e}</span>")
-            pos = getattr(e, "pos", None)
-            if pos is not None and text == self.edit.toPlainText():
-                self.edit.underline(pos, getattr(e, "end", None))
-            return
-        finally:
-            QApplication.restoreOverrideCursor()
-        self.result.setText(r.text())
-        notes = [f"{sol} · {self.freq.currentText()} · port {port}" + (f" · phase {phase:g}°" if phase else "")]
-        notes += L.conventions_text(r.info) + r.notes
-        self.result_note.setText("<br>".join(notes))
 
     def closing(self) -> None:
         """The tab is closed."""

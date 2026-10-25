@@ -7,8 +7,8 @@ the GitHub release notes.
 
 ### Added
 - **Fields Calculator** (Calculator in the Results ribbon): an Equations tab next to the 3D Modeler for
-  equations of the stored fields. The tab only defines them: a Check computes the value once on a chosen
-  solution, frequency, port and phase, and the saved equations are used in Plot Fields and in reports. While the tab is open the ribbon has an Equation page with fields, symbols, fractions, roots,
+  equations of the stored fields. The tab only defines them and shows their type (scalar or vector, field or
+  value) and unit; saved equations are used in Plot Fields (fields) and in reports (values). While the tab is open the ribbon has an Equation page with fields, symbols, fractions, roots,
   integrals, large operators, brackets, functions and the library. The formula is typed into a typeset
   formula editor as in a desktop office program: a command after a backslash turns into its symbol with
   Space (`\times` gives ×, `\curl` gives ∇×, `\iint` a surface integral). Text shows the same formula as one
@@ -16,8 +16,8 @@ the GitHub release notes.
   switches to the 3D Modeler and asks for the face, object or line, then comes back with it
   below the sign. Examples:
   `flux(Port1, re(S))`, `int_line(Radial, E)`, `max(Dielectric, |E|)` or
-  `int_vol(Dielectric, 0.5*omega*eps0*eps_r*tand*|E|^2)`. Each expression shows its kind (field or value),
-  unit and a typeset formula while you type; errors are underlined where they are. Integrals over lines,
+  `int_vol(Dielectric, 0.5*omega*eps0*eps_r*tand*|E|^2)`. Each equation shows its type and unit and a typeset
+  formula while you type; errors are underlined where they are. Integrals over lines,
   faces and volumes of model and non-model objects, cut planes (`cut_xy(10mm)`), points, components in
   cylindrical and spherical coordinate systems, curl, divergence and gradient. Values are computed on the
   solver's elements with their quadrature, curved elements included. Equations and user functions are saved
