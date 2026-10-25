@@ -7,8 +7,8 @@ the GitHub release notes.
 
 ### Added
 - **Fields Calculator** (Calculator in the Results ribbon): an Equations tab next to the 3D Modeler for
-  equations of the stored fields, with the result on the chosen solution, frequency, port and phase beside
-  them. While the tab is open the ribbon has an Equation page with fields, symbols, fractions, roots,
+  equations of the stored fields. The tab only defines them: a Check computes the value once on a chosen
+  solution, frequency, port and phase, and the saved equations are used in Plot Fields and in reports. While the tab is open the ribbon has an Equation page with fields, symbols, fractions, roots,
   integrals, large operators, brackets, functions and the library. The formula is typed into a typeset
   formula editor as in a desktop office program: a command after a backslash turns into its symbol with
   Space (`\times` gives ×, `\curl` gives ∇×, `\iint` a surface integral). Text shows the same formula as one

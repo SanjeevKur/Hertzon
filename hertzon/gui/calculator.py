@@ -2,11 +2,11 @@ r"""Fields Calculator (Results > Fields > Calculator): the Equations tab next to
 
 In the middle the equation with its name, typed into the typeset formula editor (Formula: \times + Space gives
 ×, \iint + Space a surface integral) or as one line of text (Text: the same function names as the report
-expressions); right the solution, frequency, excitation and phase it is evaluated on, and the result. The
-building blocks (fields, symbols, structures) are on the Equation page of the main ribbon, shown while the tab
+expressions); right a check of the equation (its value once on a chosen solution) and where it is used. The
+tab only defines equations: they are used in Plot Fields (fields) and in reports (values). The building blocks (fields, symbols, structures) are on the Equation page of the main ribbon, shown while the tab
 is open. An operation over a geometry (integral, maximum, ...) switches to the 3D Modeler and asks for the face,
 object or line; the pick goes below the sign. Equations are saved with the design (always as text), are listed
-in the project tree under Equations, and appear in Plot Fields (fields) and in reports (values)."""
+in the project tree under Equations."""
 from __future__ import annotations
 
 import io
@@ -27,7 +27,6 @@ from . import calc_bridge as CB
 from . import fields as F
 from . import formula_editor as FE
 
-PREVIEW = "Fields Calculator"         # name of the live preview overlay in the 3D view
 _IDENT = re.compile(r"^[A-Za-z_][A-Za-z_0-9]*$")
 ERR = "#c0392b"
 MUTED = "#6b7280"
@@ -71,7 +70,7 @@ def call_at(text: str, pos: int) -> tuple[str, int] | None:
 
 
 class ExprEdit(QPlainTextEdit):
-    """The expression line: Enter evaluates, errors are underlined, names complete as you type."""
+    """The expression line: Enter checks, errors are underlined, names complete as you type."""
 
     submitted = Signal()
 
@@ -400,7 +399,7 @@ class PickBar(QDialog):
 
 class EquationsTab(QWidget):
     """The Fields Calculator as the Equations tab next to the 3D Modeler: in the middle the formula with its
-    name, right the result on the chosen solution, frequency, excitation and phase. The building blocks are on
+    name, right its check on a chosen solution, frequency, excitation and phase. The building blocks are on
     the Equation page of the main ribbon (build_ribbon), shown while this tab is open; the saved equations
     are in the project tree."""
 
@@ -627,7 +626,7 @@ class EquationsTab(QWidget):
         srow = QHBoxLayout()
         self.status = QLabel()
         srow.addWidget(self.status, 1)
-        keys = QLabel("\\ and a name, then Space: symbol or structure · Tab: next box · Enter: evaluate")
+        keys = QLabel("\\ and a name, then Space: symbol or structure · Tab: next box · Enter: check")
         keys.setProperty("role", "muted")
         srow.addWidget(keys)
         lay.addLayout(srow)
@@ -640,7 +639,7 @@ class EquationsTab(QWidget):
         lay = QVBoxLayout(w)
         lay.setContentsMargins(14, 12, 14, 10)
         lay.setSpacing(8)
-        lay.addWidget(_h("EVALUATE ON"))
+        lay.addWidget(_h("CHECK ON"))
         self.sol = QComboBox()
         self.sol.setMinimumWidth(200)
         self.freq = QComboBox()
@@ -664,19 +663,12 @@ class EquationsTab(QWidget):
         self.port.currentIndexChanged.connect(lambda *_: self._context_changed())
         self.phase.valueChanged.connect(lambda *_: self._context_changed())
         act = QHBoxLayout()
-        ev = QPushButton("Evaluate")
+        ev = QPushButton("Check")
         ev.setObjectName("Primary")
-        ev.setToolTip("Evaluate on the solution above (Enter)")
+        ev.setToolTip("Compute the value once on the solution above, to check the equation (Enter)")
         ev.clicked.connect(self.evaluate)
         act.addWidget(ev)
-        pf = QPushButton("Plot Field")
-        pf.setToolTip("Plot this field in the 3D Modeler")
-        pf.clicked.connect(self.plot_field)
-        act.addWidget(pf)
-        ar = QPushButton("Add to Report")
-        ar.setToolTip("Show this value over frequency in a report")
-        ar.clicked.connect(self.add_to_report)
-        act.addWidget(ar)
+        act.addStretch(1)
         lay.addLayout(act)
         lay.addSpacing(6)
         lay.addWidget(_h("RESULT"))
@@ -690,76 +682,12 @@ class EquationsTab(QWidget):
         self.result_note.setProperty("role", "muted")
         lay.addWidget(self.result_note)
 
-        # a field: reduce it to a value, show it in 3D
-        self.field_box = QWidget()
-        fl = QVBoxLayout(self.field_box)
-        fl.setContentsMargins(0, 6, 0, 0)
-        fl.addWidget(_h("REDUCE TO A VALUE"))
-        rr = QHBoxLayout()
-        self.red_fn = QComboBox()
-        self.red_fn.addItems(["Maximum", "Minimum", "Average", "Integral", "Value at point"])
-        self.red_fn.currentIndexChanged.connect(lambda *_: self._fill_reduce_geometries())
-        self.red_geo = QComboBox()
-        self.red_geo.setEditable(True)
-        rr.addWidget(self.red_fn)
-        rr.addWidget(QLabel("over"))
-        rr.addWidget(self.red_geo, 1)
-        fl.addLayout(rr)
-        rb = QHBoxLayout()
-        b = QPushButton("Evaluate")
-        b.clicked.connect(self._reduce)
-        u = QPushButton("Use as expression")
-        u.clicked.connect(lambda: self._reduce(use=True))
-        rb.addWidget(b)
-        rb.addWidget(u)
-        fl.addLayout(rb)
-        fl.addSpacing(6)
-        fl.addWidget(_h("SHOW IN 3D"))
-        pr = QHBoxLayout()
-        self.live = QCheckBox("Live on")
-        self.live.setToolTip("Show the field in the 3D view while you type")
-        self.live.toggled.connect(lambda on: self._preview() if on else self._remove_preview())
-        self.target = QComboBox()
-        self.target.addItems(["Cut XY", "Cut YZ", "Cut XZ", "3D selection", "Inside selected solids"])
-        self.target.currentIndexChanged.connect(lambda *_: self._preview())
-        pr.addWidget(self.live)
-        pr.addWidget(self.target, 1)
-        fl.addLayout(pr)
-        lay.addWidget(self.field_box)
-
-        # a value: over frequency
-        self.freq_box = QWidget()
-        ql = QVBoxLayout(self.freq_box)
-        ql.setContentsMargins(0, 6, 0, 0)
-        hr = QHBoxLayout()
-        hr.addWidget(_h("OVER FREQUENCY"))
-        hr.addStretch(1)
-        self.b_sweep = QPushButton("Compute")
-        self.b_sweep.setToolTip("Evaluate at every frequency with saved fields of the solution")
-        self.b_sweep.clicked.connect(self._over_frequency)
-        hr.addWidget(self.b_sweep)
-        ql.addLayout(hr)
-        from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
-        from matplotlib.figure import Figure
-        self.fig = Figure(figsize=(3, 1.5), dpi=90)
-        self.fig.patch.set_facecolor("#fbfbfc")
-        self.canvas = FigureCanvasQTAgg(self.fig)
-        self.canvas.setMinimumHeight(140)
-        ql.addWidget(self.canvas)
-        self.freq_note = QLabel()
-        self.freq_note.setProperty("role", "muted")
-        ql.addWidget(self.freq_note)
-        lay.addWidget(self.freq_box)
-
         lay.addWidget(_h("USED BY"))
         self.used = QLabel("—")
         self.used.setWordWrap(True)
         self.used.setProperty("role", "muted")
         lay.addWidget(self.used)
         lay.addStretch(1)
-        cp = QPushButton("Copy value")
-        cp.clicked.connect(lambda: QApplication.clipboard().setText(self.result.text()))
-        lay.addWidget(cp)
         return w
 
     # ---- context ---------------------------------------------------------------------------------
@@ -772,7 +700,6 @@ class EquationsTab(QWidget):
         self.edit.set_words(words)
         if self.fe is not None:
             self.fe.set_shortcuts(shortcuts(env))
-        self._fill_reduce_geometries()
         self._analyze()
 
     def _doc_changed(self, what: str) -> None:
@@ -828,11 +755,7 @@ class EquationsTab(QWidget):
         self._ctx = ctx
         if self.result.text() not in ("—", "", "Field"):
             self.result.setText("—")
-            self.result_note.setText("Context changed: Evaluate again")
-        self.fig.clear()
-        self.canvas.draw_idle()
-        self.freq_note.setText("")
-        self._preview()
+            self.result_note.setText("Context changed: Check again")
 
     # ---- equations -----------------------------------------------------------------------------
     def _load_library(self, key: str) -> None:
@@ -870,9 +793,6 @@ class EquationsTab(QWidget):
     def _clear_result(self) -> None:
         self.result.setText("—")
         self.result_note.setText("")
-        self.fig.clear()
-        self.canvas.draw_idle()
-        self.freq_note.setText("")
 
     def _state(self) -> str:
         return f"{self.name.text()}\n{self.desc.text()}\n{self.edit.toPlainText()}"
@@ -1002,8 +922,6 @@ class EquationsTab(QWidget):
             self.chips.setText("")
             self.status.setText(f"<span style='color:{ERR}'>⚠ {self.tex_error}</span>")
             self.astext.setText(f"<span style='color:{ERR}'>⚠ {self.tex_error}</span>")
-            self.field_box.setVisible(False)
-            self.freq_box.setVisible(False)
             return
         if not text:
             self.formula.clear()
@@ -1011,8 +929,6 @@ class EquationsTab(QWidget):
                                  "type or click the building blocks</span>")
             self.chips.setText("")
             self.status.setText("")
-            self.field_box.setVisible(False)
-            self.freq_box.setVisible(False)
             return
         env = CB.make_env(self.doc)
         try:
@@ -1025,8 +941,6 @@ class EquationsTab(QWidget):
                 self.astext.setText(f"as text:  {text}   <span style='color:{ERR}'>⚠ {e}</span>")
             self.formula.clear()
             self.formula.setText(f"<span style='color:{ERR};font-size:14px'>{e}</span>")
-            self.field_box.setVisible(False)
-            self.freq_box.setVisible(False)
             return
         i = self.info
         pm = render_tex(i.tex, px=30)
@@ -1048,11 +962,6 @@ class EquationsTab(QWidget):
             chips.append(chip("faces only"))
         self.chips.setText("&nbsp;&nbsp;".join(chips))
         self.status.setText("✓ No errors")
-        self.field_box.setVisible(i.field)
-        self.freq_box.setVisible(not i.field and not i.vec)
-        self._fill_reduce_geometries()
-        if self.live.isChecked():
-            self._preview()
 
     def _signature(self) -> None:
         self.sig.setText(self._signature_html())
@@ -1130,10 +1039,8 @@ class EquationsTab(QWidget):
             return
         if self.info.field:
             self.result.setText("Field")
-            self.result_note.setText("A value at every point: plot it (Plot Field…, or Show in 3D below), or "
-                                     "reduce it to a value.")
-            if self.live.isChecked():
-                self._preview()
+            self.result_note.setText(f"A value at every point ({UN.describe(self.info.unit)}). Save it, then plot "
+                                     "it with Plot Fields (Quantity) or from the project tree.")
             return
         self._evaluate_text(self.edit.toPlainText())
 
@@ -1160,135 +1067,9 @@ class EquationsTab(QWidget):
         notes += L.conventions_text(r.info) + r.notes
         self.result_note.setText("<br>".join(notes))
 
-    def _over_frequency(self) -> None:
-        text = self.edit.toPlainText().strip()
-        sol, _, port, _ = self.context()
-        if not text or self.info is None or " : " not in sol:
-            return
-        if self.freq.count() < 2:
-            # one frequency: use a sweep with saved fields instead
-            for s in CB.field_solutions(self.doc):
-                try:
-                    if len(CB.frequencies(self.doc, s)) > 1:
-                        sol = s
-                        break
-                except Exception:  # noqa: BLE001
-                    continue
-            else:
-                self.freq_note.setText("Needs a sweep with saved fields")
-                return
-        QApplication.setOverrideCursor(Qt.WaitCursor)
-        try:
-            f, v = CB.over_frequency(self.doc, text, sol, port)
-        except Exception as e:  # noqa: BLE001
-            self.result_note.setText(f"<span style='color:{ERR}'>{e}</span>")
-            return
-        finally:
-            QApplication.restoreOverrideCursor()
-        import numpy as np
-        y = np.real(v) if np.allclose(np.imag(v), 0, atol=1e-12 * max(np.abs(v).max(), 1e-30)) else np.abs(v)
-        self.fig.clear()
-        ax = self.fig.add_axes([0.2, 0.2, 0.76, 0.74])
-        k = max(float(np.abs(y).max()), 1e-300)
-        exp3 = int(np.floor(np.log10(k) / 3) * 3) if UN.label(self.info.unit) else 0
-        pre = {-15: "f", -12: "p", -9: "n", -6: "µ", -3: "m", 0: "", 3: "k", 6: "M", 9: "G"}.get(exp3, "")
-        if not pre and exp3:
-            exp3 = 0
-        ax.plot(f / 1e9, y / 10.0 ** exp3, marker="o" if len(f) < 12 else None, color="#2f5bd3", lw=1.6, ms=3)
-        ax.tick_params(labelsize=7)
-        ax.margins(x=0.03, y=0.15)
-        self.freq_note.setText(f"{pre}{UN.label(self.info.unit)} over GHz · {sol}")
-        ax.grid(True, alpha=0.3)
-        for s in ("top", "right"):
-            ax.spines[s].set_visible(False)
-        self.canvas.draw_idle()
-
-    def _fill_reduce_geometries(self) -> None:
-        cur = self.red_geo.currentText()
-        env = CB.make_env(self.doc)
-        dims = [{0, 1, 2, 3}, {0, 1, 2, 3}, {1, 2, 3}, {1, 2, 3}, {0}][self.red_fn.currentIndex()]
-        names = [n for n, g in env.geometry.items() if set(g.dims) & dims]
-        if 2 in dims:
-            names += ["cut_xy(0)", "cut_yz(0)", "cut_xz(0)"]
-        if 0 in dims:
-            names += ["point(0, 0, 0)"]
-        self.red_geo.blockSignals(True)
-        self.red_geo.clear()
-        self.red_geo.addItems(names)
-        if cur:
-            self.red_geo.setCurrentText(cur)
-        self.red_geo.blockSignals(False)
-
-    def _reduced(self) -> str | None:
-        text = self.edit.toPlainText().strip()
-        geo = self.red_geo.currentText().strip()
-        if not text or not geo or self.info is None:
-            return None
-        i = self.red_fn.currentIndex()
-        inner = text
-        if i in (0, 1, 2) and (self.info.vec or self.info.cx):
-            inner = f"|{text}|" if not text.startswith("|") or not text.endswith("|") else text
-        if i == 3:
-            env = CB.make_env(self.doc)
-            try:
-                items = L.geometry_items(L.parse(geo), env)
-                dims = set.union(*(L.geometry_dims(g, env)[0] for g in items))
-            except L.CalcError:
-                dims = {3}
-            fn = "int_vol" if 3 in dims else "int_surf" if 2 in dims else "int_line"
-            return f"{fn}({geo}, {text})"
-        return f"{['max', 'min', 'avg', '', 'at'][i]}({geo}, {inner if i != 4 else text})"
-
-    def _reduce(self, use: bool = False) -> None:
-        expr = self._reduced()
-        if expr is None:
-            return
-        if use:
-            self.edit.setPlainText(expr)
-            self.current = None if self.current and not self.name.text() else self.current
-            self.evaluate()
-            return
-        self._evaluate_text(expr)
-        self.result_note.setText(f"{expr}<br>" + self.result_note.text())
-
-    # ---- 3D preview ------------------------------------------------------------------------------
-    def _preview(self) -> None:
-        if not self.live.isChecked():
-            return
-        view = self.win.view
-        i = self.info
-        sol, fi, port, phase = self.context()
-        if i is None or not i.field or " : " not in sol:
-            view.remove_overlay(PREVIEW)
-            return
-        t = self.target.currentText()
-        plane, faces, objs = "", [], []
-        if t.startswith("Cut"):
-            plane = t[4:] + "@"
-        else:
-            faces, objs = self.win._plot_selection()
-            if not faces and not objs:
-                self.result_note.setText("Select objects or faces in the 3D view for the preview")
-                return
-        try:
-            meshes, info = F.make_overlay(self.doc, view, "=" + self.edit.toPlainText(), sol, fi, port, phase,
-                                          faces, objs, plane, attrs={"PlotType": "Smooth Shaded",
-                                                                     "Volume": t.startswith("Inside")})
-        except Exception as e:  # noqa: BLE001
-            self.result_note.setText(f"<span style='color:{ERR}'>Preview: {e}</span>")
-            return
-        view.set_overlay(PREVIEW, meshes)
-        self.win.hint.setText(info.replace("=" + self.edit.toPlainText(), self.name.text() or "expression"))
-
-    def _remove_preview(self) -> None:
-        try:
-            self.win.view.remove_overlay(PREVIEW)
-        except Exception:  # noqa: BLE001
-            pass
-
     def closing(self) -> None:
-        """The tab is closed: no preview stays in the 3D view."""
-        self.live.setChecked(False)
+        """The tab is closed."""
+        self._timer.stop()
 
     # ---- lifecycle -------------------------------------------------------------------------------
     def _check_name(self, name: str) -> str | None:
@@ -1385,42 +1166,6 @@ class EquationsTab(QWidget):
         self.doc.changed.emit("fields")
         self.new()
         self.refresh()
-
-    # ---- outputs ---------------------------------------------------------------------------------
-    def _ensure_saved(self, what: str) -> str | None:
-        if self.current and self._state() == self.saved_text:
-            return self.current
-        if not self.name.text().strip():
-            self.name.setFocus()
-            self.status.setText(f"<span style='color:{ERR}'>{what} needs a name: give one and Save</span>")
-            return None
-        return self.name.text().strip() if self.save() else None
-
-    def plot_field(self) -> None:
-        self._analyze()
-        if self.info is None:
-            return
-        if not self.info.field:
-            QMessageBox.information(self, "Plot Field", "This expression is a value. Field plots need a field "
-                                                        "(for a value use Add to Report).")
-            return
-        name = self._ensure_saved("A field plot")
-        if name:
-            self.live.setChecked(False)
-            self.win.plot_fields(name)
-
-    def add_to_report(self) -> None:
-        self._analyze()
-        if self.info is None:
-            return
-        if self.info.field:
-            QMessageBox.information(self, "Add to Report", "Reports show values over frequency: reduce the field "
-                                                           "to a value first (Reduce to a value, right).")
-            return
-        name = self._ensure_saved("A report trace")
-        if name:
-            sol, _, port, _ = self.context()
-            self.win.field_report(name, sol, port)
 
     def open_for_plot(self) -> None:
         self.for_plot = True
