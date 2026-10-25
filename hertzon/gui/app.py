@@ -105,6 +105,14 @@ def main(argv: list[str] | None = None) -> int:
             ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("Hertzon.Hertzon")
         except Exception:  # noqa: BLE001
             pass
+    # the formula editor of the Fields Calculator is a web view: Qt WebEngine has to be loaded before the
+    # application object exists, and shares OpenGL contexts with the 3D view
+    from PySide6.QtCore import QCoreApplication, Qt
+    QCoreApplication.setAttribute(Qt.AA_ShareOpenGLContexts)
+    try:
+        import PySide6.QtWebEngineWidgets  # noqa: F401
+    except Exception:  # noqa: BLE001   (without it the calculator has the text line only)
+        pass
     app = QApplication.instance() or QApplication(argv)
     app.setApplicationName("Hertzon")
     app.setOrganizationName("Hertzon")

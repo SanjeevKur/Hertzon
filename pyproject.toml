@@ -39,4 +39,4 @@ hertzon-mcp = "hertzon.mcp.__main__:main"
 include = ["hertzon*"]
 
 [tool.setuptools.package-data]
-"hertzon.gui" = ["*.ico", "*.png", "*.jpg"]
+"hertzon.gui" = ["*.ico", "*.png", "*.jpg", "formula/*.html", "formula/*.js", "formula/*.txt", "formula/fonts/*.woff2"]

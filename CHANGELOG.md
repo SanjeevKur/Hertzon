@@ -7,9 +7,13 @@ the GitHub release notes.
 
 ### Added
 - **Fields Calculator** (Results > Fields > Fields Calculator, or Calculator in the Results ribbon): its own
-  window for expressions of the stored fields, built from building blocks or typed as text with units. An
-  integral or another operation over a geometry hides the window and asks for the face, object or line in the
-  3D view, then comes back with it in the expression. Examples:
+  window with its own ribbon for expressions of the stored fields. The formula is typed into a typeset formula
+  editor as in a desktop office program: a command after a backslash turns into its symbol with Space
+  (`\times` gives ×, `\curl` gives ∇×, `\iint` a surface integral), and fields, symbols, fractions, roots,
+  integrals, large operators, brackets and functions are on the Equation tab. The Linear view shows the same
+  formula as one line of text with units, which is also what is saved. An integral or another operation over
+  a geometry hides the window and asks for the face, object or line in the 3D view, then comes back with it
+  below the sign. Examples:
   `flux(Port1, re(S))`, `int_line(Radial, E)`, `max(Dielectric, |E|)` or
   `int_vol(Dielectric, 0.5*omega*eps0*eps_r*tand*|E|^2)`. Each expression shows its kind (field or value),
   unit and a typeset formula while you type; errors are underlined where they are. Integrals over lines,

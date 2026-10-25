@@ -153,6 +153,75 @@ def test_curved_elements_integrate_the_true_volume():
     assert bulged.volume_samples(np.arange(1)).W.sum() > 1 / 6 * 1.01
 
 
+# ---- formula editor ------------------------------------------------------------------------------
+def _formula_env():
+    G = L.GeoInfo
+    return L.Env(named={"P_in": "flux(Port1, re(S))"},
+                 geometry={"Port1": G(frozenset({2})), "Port2": G(frozenset({2})), "Box": G(frozenset({2, 3}), True),
+                           "Line1": G(frozenset({1})), "Loop": G(frozenset({1}), True), "P1": G(frozenset({0}))})
+
+
+@pytest.mark.parametrize("src", [
+    "flux(Port1, re(S))", "flux(flip(Port2), re(S))", "flux([Port1, Port2], re(S))",
+    "int_vol(Box, 0.5*omega*eps0*eps_r*tand*|E|^2)", "int_line(Line1, E)", "circ(Loop, H)", "max(Box, |E|)",
+    "avg(Port1, mag(E))", "at(P1, E)", "E × H", "re(E·conj(H))", "sqrt(eps_r)/2", "curl(E)",
+    "curl E + j*omega*mu0*mu_r*H", "x(E, Global)", "10mm*f/c0", "1e-3*|E|^2", "P_in*2", "-(x+y)", "(x+y)^2/z",
+    "flux(face(Box, 3), re(S))", "max(cut_xy(2mm), |E|)", "dB(|E|)", "45deg", "int_surf(Box, |Js|^2)"])
+def test_formula_editor_round_trip(src):
+    """Text -> typeset formula -> text gives the same expression (same formula, kind and unit)."""
+    from hertzon.post.calc import latex as TX
+    env = _formula_env()
+    tex = TX.to_latex(src, env)
+    back = TX.to_text(tex, env)
+    assert TX.to_latex(back, env) == tex
+    a, b = L.analyze(src, env), L.analyze(back, env)
+    assert (a.unit, a.field, a.vec, a.cx, a.num) == (b.unit, b.field, b.vec, b.cx, b.num)
+
+
+@pytest.mark.parametrize("tex, src", [
+    (r"E\times H", "E × H"),
+    (r"\iint_{\mathrm{Port1}}S\cdot\mathbf{n}\,\mathrm{d}A", "flux(Port1, S)"),
+    (r"\iint_{Port1}S\,dA", "int_surf(Port1, S)"),
+    (r"\oiint_{-Port1,Port2}S\cdot\mathbf{n}\,\mathrm{d}A", "flux([flip(Port1), Port2], S)"),
+    (r"\int_{Line1}E\cdot\mathrm{d}\mathbf{l}", "int_line(Line1, E)"),
+    (r"\iiint_{Box}\frac{1}{2}\left|E\right|^2\,\mathrm{d}V", "int_vol(Box, 1/2*|E|^(2))"),
+    (r"\max_{Box}\left(\left|E\right|\right)", "max(Box, |E|)"),
+    (r"\left.E\right|_{P1}", "at(P1, E)"),
+    (r"\nabla\times H", "curl H"),
+    (r"EH", "E*H"),
+    (r"P_{in}", "P_in"),
+    (r"\varepsilon_0\varepsilon_r", "eps0*eps_r"),
+    (r"10\,\mathrm{mm}", "10mm"),
+    (r"45^{\circ}", "45deg"),
+    (r"\operatorname{Re}\left\{S\right\}", "re(S)"),
+])
+def test_formula_editor_reads_what_is_typed(tex, src):
+    from hertzon.post.calc import latex as TX
+    assert TX.to_text(tex, _formula_env()) == src
+
+
+@pytest.mark.parametrize("tex, msg", [
+    (r"\iint_{\placeholder{}}\placeholder{}\,\mathrm{d}A", "Choose the face"),
+    (r"\iint_{Port1}\placeholder{}\,\mathrm{d}A", "Fill in"),
+    (r"\iint_{Port1}S", "needs dA"),
+    (r"\frac{E}{\placeholder{}}", "Fill in"),
+])
+def test_formula_editor_says_what_is_missing(tex, msg):
+    from hertzon.post.calc import latex as TX
+    with pytest.raises(TX.LatexError, match=msg):
+        TX.to_text(tex, _formula_env())
+
+
+def test_picked_geometry_goes_below_the_sign():
+    from hertzon.post.calc import latex as TX
+    assert TX.geometry_tex("Port1") == r"\mathrm{Port1}"
+    assert TX.geometry_tex("flip(Port2)") == r"-\mathrm{Port2}"
+    assert TX.geometry_tex("[Port1, flip(face(Box, 2))]") == r"\mathrm{Port1},-\mathrm{face(Box,2)}"
+    env = _formula_env()
+    tex = r"\iint_{" + TX.geometry_tex("[Port1, flip(face(Box, 2))]") + r"}S\cdot\mathbf{n}\,\mathrm{d}A"
+    assert TX.to_text(tex, env) == "flux([Port1, flip(face(Box,2))], S)"
+
+
 # ---- design --------------------------------------------------------------------------------------
 def test_expressions_are_saved_with_the_design():
     from hertzon.model.design import Design, FieldExpression, design_from_dict
@@ -197,6 +266,7 @@ def test_calculator_window_picks_the_geometry_in_the_3d_view():
     win.doc.rebuild()
     win.fields_calculator()
     calc = win.calc_window
+    calc.set_mode("lin")                                 # the text line (the formula editor is a web view)
     calc.edit.setPlainText("0.25*eps0*eps_r*|E|^2")
     calc.pick("int_vol", 3)
     assert not calc.isVisible() and win.doc.selection_mode == "object"

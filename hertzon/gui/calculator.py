@@ -1,29 +1,35 @@
-"""Fields Calculator (Results > Fields > Fields Calculator): its own window next to the modeler.
+r"""Fields Calculator (Results > Fields > Fields Calculator): its own window next to the modeler.
 
-Left the expressions of the design, the functions and a library; in the middle the expression, built from
-building blocks or typed as text (the same function names as the report expressions), shown typeset with its
-kind and unit, errors underlined where they are; right the result on the solution, frequency, excitation and
-phase chosen at the top. An operation over a geometry (integral, maximum, ...) hides the window and asks for
-the face, object or line in the 3D view. Named expressions are saved with the design and appear in Plot Fields
-(fields) and in reports (values)."""
+A ribbon on top (Home: expression, evaluate, use, context; Equation: fields, symbols and structures as in a
+desktop formula editor). Left the expressions of the design, the functions and a library; in the middle the
+formula, typed into the typeset formula editor (Professional view: \times + Space gives ×, \iint + Space a
+surface integral) or as one line of text (Linear view, the same function names as the report expressions);
+right the result on the solution, frequency, excitation and phase chosen in the ribbon. An operation over a
+geometry (integral, maximum, ...) hides the window and asks for the face, object or line in the 3D view; the
+pick goes below the sign. Named expressions are saved with the design (always as text) and appear in Plot
+Fields (fields) and in reports (values)."""
 from __future__ import annotations
 
 import io
 import re
 
-from PySide6.QtCore import QStringListModel, Qt, QTimer, Signal
-from PySide6.QtGui import QColor, QFont, QKeySequence, QPixmap, QShortcut, QTextCharFormat, QTextCursor
+from PySide6.QtCore import QRectF, QSize, QStringListModel, Qt, QTimer, Signal
+from PySide6.QtGui import (QColor, QFont, QIcon, QKeySequence, QPainter, QPixmap, QShortcut, QTextCharFormat,
+                           QTextCursor)
 from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox, QCompleter, QDialog, QDialogButtonBox,
                                QDoubleSpinBox, QFormLayout, QFrame, QGridLayout, QGroupBox, QHBoxLayout, QLabel,
-                               QLineEdit, QListWidget, QMainWindow, QMessageBox, QPlainTextEdit, QPushButton,
-                               QSizePolicy, QSplitter, QTextEdit, QToolBar, QToolButton, QTreeWidget,
-                               QTreeWidgetItem, QVBoxLayout, QWidget)
+                               QLineEdit, QListWidget, QMainWindow, QMenu, QMessageBox, QPlainTextEdit,
+                               QPushButton, QSizePolicy, QSplitter, QStackedWidget, QTextEdit, QToolButton,
+                               QTreeWidget, QTreeWidgetItem, QVBoxLayout, QWidget)
 
 from ..post.calc import lang as L
+from ..post.calc import latex as TX
 from ..post.calc import library as LIB
 from ..post.calc import units as UN
 from . import calc_bridge as CB
 from . import fields as F
+from . import formula_editor as FE
+from .ribbon import Ribbon
 
 PREVIEW = "Fields Calculator"         # name of the live preview overlay in the 3D view
 _IDENT = re.compile(r"^[A-Za-z_][A-Za-z_0-9]*$")
@@ -173,23 +179,92 @@ QPushButton#Primary { background:#2f5bd3; color:white; border:1px solid #2a50bb;
                       padding:5px 14px; font-weight:600; }
 QPushButton#Primary:hover { background:#2a50bb; }
 QLabel#Banner { background:#fff7e0; border:1px solid #e6c766; border-radius:4px; padding:6px; }
+QToolButton[role="sym"] { min-width:26px; max-width:46px; min-height:24px; }
+QToolButton[role="sym"][field="1"] { font-weight:bold; }
+QToolButton[role="sym"]::menu-indicator { width:0px; }
+QLabel#AsText { color:#4b5563; font-family:Consolas,monospace; }
 """
+MATH_FONT = ("Cambria Math", "STIX Two Math", "Latin Modern Math", "DejaVu Serif", "Times New Roman")
 
-# palette: (group, [(label, text inserted, tooltip)])
-PALETTE = [
-    ("FIELDS", [("E", "E", "electric field (V/m)"), ("H", "H", "magnetic field (A/m)"),
-                ("J", "J", "volume current density (A/m²)"), ("Jₛ", "Js", "surface current density n×H (A/m)"),
-                ("S", "S", "complex Poynting vector ½ E×H* (W/m²)"), ("D", "D", "electric flux density"),
-                ("B", "B", "magnetic flux density")]),
-    ("OPERATORS", [("|x|", "|", "magnitude |…|"), ("·", "·", "dot product"), ("×", "×", "cross product"),
-                   ("x²", "^2", "square"), ("√", "sqrt(", "square root"), ("Re", "re(", "real part"),
-                   ("Im", "im(", "imaginary part"), ("x*", "conj(", "complex conjugate")]),
-    ("CALCULUS", [("∇×", "curl(", "curl"), ("∇·", "div(", "divergence"), ("∇", "grad(", "gradient")]),
-    ("CONSTANTS", [("ε₀", "eps0", "vacuum permittivity"), ("μ₀", "mu0", "vacuum permeability"),
-                   ("ω", "omega", "angular frequency 2πf"), ("k₀", "k0", "free-space wavenumber"),
-                   ("εᵣ", "eps_r", "relative permittivity of the material at the point"),
-                   ("tanδ", "tand", "loss tangent of the material"), ("σ", "sigma", "conductivity")]),
+
+def glyph_icon(text: str, px: int = 22) -> QIcon:
+    """A ribbon icon drawn from a formula glyph (∬, √x, a/b) in a math font."""
+    pm = QPixmap(96, 64)
+    pm.setDevicePixelRatio(2.0)
+    pm.fill(Qt.transparent)
+    p = QPainter(pm)
+    p.setRenderHint(QPainter.TextAntialiasing)
+    f = QFont()
+    f.setFamilies(list(MATH_FONT))
+    f.setPixelSize(px)
+    p.setFont(f)
+    p.setPen(QColor("#1f2633"))
+    p.drawText(QRectF(0, 0, 48, 32), Qt.AlignCenter, text)
+    p.end()
+    return QIcon(pm)
+
+
+# Equation tab: (label, LaTeX for the formula editor, text for the Linear view, tooltip). In the LaTeX #@ is the
+# selection (or an empty box) and #? an empty box.
+FIELD_KEYS = [("E", "E", "E", "electric field (V/m)"), ("H", "H", "H", "magnetic field (A/m)"),
+              ("J", "J", "J", "volume current density (A/m²)"),
+              ("Jₛ", "J_s", "Js", "surface current density n×H (A/m), faces only"),
+              ("S", "S", "S", "complex Poynting vector ½ E×H* (W/m²)"), ("D", "D", "D", "electric flux density"),
+              ("B", "B", "B", "magnetic flux density"), ("n", r"\mathbf{n}", "n", "unit normal of the face, faces only")]
+SYMBOL_KEYS = [("·", r"\cdot ", "·", "dot product   (\\cdot)"), ("×", r"\times ", "×", "cross product   (\\times)"),
+               ("ε₀", r"\varepsilon_0", "eps0", "vacuum permittivity   (\\eps0)"),
+               ("μ₀", r"\mu_0", "mu0", "vacuum permeability   (\\mu0)"),
+               ("ω", r"\omega", "omega", "angular frequency 2πf   (\\omega)"),
+               ("k₀", "k_0", "k0", "free-space wave number"), ("π", r"\pi", "pi", "pi   (\\pi)"),
+               ("j", "j", "j", "imaginary unit"),
+               ("εᵣ", r"\varepsilon_r", "eps_r", "relative permittivity of the material   (\\epsr)"),
+               ("μᵣ", r"\mu_r", "mu_r", "relative permeability of the material   (\\mur)"),
+               ("tanδ", r"\tan\delta", "tand", "loss tangent of the material   (\\tand)"),
+               ("σ", r"\sigma", "sigma", "conductivity of the material   (\\sigma)"),
+               ("c₀", "c_0", "c0", "speed of light"), ("Z₀", "Z_0", "Z0", "free-space impedance"),
+               ("f", "f", "f", "frequency of the solution"), ("°", r"^{\circ}", "deg", "degree, after a number")]
+# Structures: (button, glyph, [(label, LaTeX, text, tooltip)])
+STRUCTURES = [
+    ("Fraction", "a⁄b", [("a⁄b   Fraction", r"\frac{#@}{#?}", "/", "stacked fraction"),
+                         ("½   One half", r"\frac{1}{2}", "1/2", "")]),
+    ("Script", "xⁿ", [("xⁿ   Superscript", "#@^{#?}", "^", "power"), ("x²   Square", "#@^2", "^2", ""),
+                      ("x₀   Subscript", "#@_{#?}", "_", "names with an index, e.g. P_in")]),
+    ("Radical", "√x", [("√x   Square root", r"\sqrt{#@}", "sqrt(", "")]),
+    ("Bracket", "|x|", [("|x|   Magnitude", r"\left|#@\right|", "|", "magnitude; of a vector the length of the "
+                                                                     "peak phasor"),
+                        ("(x)   Parentheses", r"\left(#@\right)", "(", "")]),
+    ("Function", "Re", [("Re{ }   Real part", r"\operatorname{Re}\left\{#@\right\}", "re(", "   (\\Re)"),
+                        ("Im{ }   Imaginary part", r"\operatorname{Im}\left\{#@\right\}", "im(", "   (\\Im)"),
+                        ("x*   Complex conjugate", r"\operatorname{conj}\left(#@\right)", "conj(", ""),
+                        ("rms   RMS value", r"\operatorname{rms}\left(#@\right)", "rms(", "peak / √2"),
+                        ("inst   Instantaneous value", r"\operatorname{inst}\left(#@\right)", "inst(",
+                         "at the phase of the context"),
+                        ("∠   Phase angle", r"\operatorname{phase}\left(#@\right)", "phase(", ""),
+                        ("dB   20·log₁₀|x|", r"\operatorname{dB}\left(#@\right)", "dB(", ""),
+                        ("eˣ   Exponential", r"\exp\left(#@\right)", "exp(", ""),
+                        ("sin   Sine", r"\sin\left(#@\right)", "sin(", ""),
+                        ("cos   Cosine", r"\cos\left(#@\right)", "cos(", ""),
+                        ("F̂   Unit vector F/|F|", r"\operatorname{unit}\left(#@\right)", "unit(", "")]),
+    ("Operator", "∇×", [("∇×   Curl", r"\nabla\times #@", "curl(", "   (\\curl)"),
+                        ("∇·   Divergence", r"\nabla\cdot #@", "div(", "   (\\divg)"),
+                        ("∇   Gradient", r"\nabla #@", "grad(", "   (\\grad)")]),
 ]
+# integrals and large operators over a geometry: (label, function, dimension, tooltip, LaTeX, command)
+INTEGRAL_MENU = [
+    ("∫   Line integral", "int_line", 1, "∫ F·dl along a line", r"\int_{\placeholder{}}#@\cdot\mathrm{d}\mathbf{l}", "int"),
+    ("∮   Circulation", "circ", 1, "∮ H·dl around a closed line", r"\oint_{\placeholder{}}#@\cdot\mathrm{d}\mathbf{l}",
+     "oint"),
+    ("∬   Surface integral", "int_surf", 2, "∬ f dA over a face", r"\iint_{\placeholder{}}#@\,\mathrm{d}A", "iint"),
+    ("∬·n   Flux through a face", "flux", 2, "∬ F·n dA, along the normal of the face",
+     r"\iint_{\placeholder{}}#@\cdot\mathbf{n}\,\mathrm{d}A", "flux"),
+    ("∯   Flux out of a closed surface", "flux", 2, "∯ F·n dA, outward",
+     r"\oiint_{\placeholder{}}#@\cdot\mathbf{n}\,\mathrm{d}A", "oiint"),
+    ("∭   Volume integral", "int_vol", 3, "∭ f dV over a volume", r"\iiint_{\placeholder{}}#@\,\mathrm{d}V", "iiint")]
+LARGE_OPS = [("max   Maximum", "max", -1, "maximum over a geometry", r"\max_{\placeholder{}}\left(#@\right)", "max"),
+             ("min   Minimum", "min", -1, "minimum over a geometry", r"\min_{\placeholder{}}\left(#@\right)", "min"),
+             ("avg   Average", "avg", -1, "mean value over a line, face or volume",
+              r"\operatorname{avg}_{\placeholder{}}\left(#@\right)", "avg"),
+             ("f|ₚ   Value at a point", "at", 0, "value at a point", r"\left.#@\right|_{\placeholder{}}", "at")]
 # operations over a geometry: (label, function, dimension of the geometry, tooltip)
 GEOMETRY_OPS = [("∫dl", "int_line", 1, "line integral (vectors: tangential F·dl)"),
                 ("∮dl", "circ", 1, "circulation around a closed line"),
@@ -199,6 +274,25 @@ GEOMETRY_OPS = [("∫dl", "int_line", 1, "line integral (vectors: tangential F·
                 ("max", "max", -1, "maximum over a geometry"), ("avg", "avg", -1, "mean value over a geometry"),
                 ("@pt", "at", 0, "value at a point")]
 WHAT = {0: "a point", 1: "a line", 2: "a face", 3: "a volume", -1: "a geometry"}
+
+
+def shortcuts(env: L.Env) -> dict:
+    """Words the formula editor replaces as they are typed: functions (flux -> flux), names of the model and
+    of saved expressions, and a few symbols. A word that begins another one is left out (it would fire
+    before the longer one can be typed)."""
+    fns = [n for n in list(L.SIGNATURES) + list(env.functions)
+           if len(n) > 2 and "_" not in n and n not in L.COMP_FN and n not in ("max", "min", "avg")]
+    names = [n for n in list(env.geometry or {}) + list(env.named or {}) + list(env.cs_names)
+             if len(n) > 1 and "_" not in n and re.fullmatch(r"[A-Za-z][A-Za-z0-9]*", n)]
+    words = set(fns) | set(names) | set(L.SYMBOLS)
+
+    def free(w):
+        return not any(o != w and o.startswith(w) for o in words)
+    sc = {n: r"\operatorname{" + n + "}" for n in fns if free(n)}
+    sc.update({n: r"\mathrm{" + n + "}" for n in names if free(n) and n not in L.SIGNATURES})
+    sc.update({"omega": r"\omega", "pi": r"\pi", "sigma": r"\sigma", "eps0": r"\varepsilon_0", "mu0": r"\mu_0",
+               "tand": r"\tan\delta"})
+    return sc
 
 
 def _h(text: str) -> QLabel:
@@ -304,7 +398,7 @@ class PickBar(QDialog):
         self.calc.show()
         self.calc.raise_()
         self.calc.activateWindow()
-        self.calc.edit.setFocus()
+        self.calc.focus_editor()
 
 
 class CalculatorWindow(QMainWindow):
@@ -328,70 +422,193 @@ class CalculatorWindow(QMainWindow):
         self._timer.setSingleShot(True)
         self._timer.setInterval(250)
         self._timer.timeout.connect(self._analyze)
-        self._toolbar()
+        self.mode = "lin"                     # "pro": typeset formula editor, "lin": one line of text
+        self.tex_error: str | None = None     # why the formula of the editor is not an expression yet
+        self._from_tex = False
+        self.fe: FE.FormulaEditor | None = None
+        if FE.available():
+            try:
+                self.fe = FE.FormulaEditor()
+            except Exception:  # noqa: BLE001   (no web engine on this system: Linear view only)
+                self.fe = None
+        central = QWidget()
+        cl = QVBoxLayout(central)
+        cl.setContentsMargins(0, 0, 0, 0)
+        cl.setSpacing(0)
+        cl.addWidget(self._ribbon())
         split = QSplitter(Qt.Horizontal)
         split.addWidget(self._side())
         split.addWidget(self._work())
         split.addWidget(self._right())
         split.setStretchFactor(1, 1)
-        split.setSizes([260, 680, 300])
-        self.setCentralWidget(split)
+        split.setSizes([250, 700, 300])
+        cl.addWidget(split, 1)
+        self.setCentralWidget(central)
         self.status = QLabel()
         self.statusBar().addWidget(self.status, 1)
-        keys = QLabel("Enter: evaluate · Ctrl+S: save · Ctrl+N: new")
+        keys = QLabel("\\ and a name, then Space: symbol or structure · Tab: next box · Enter: evaluate · "
+                      "Ctrl+S: save")
         keys.setProperty("role", "muted")
         self.statusBar().addPermanentWidget(keys)
         QShortcut(QKeySequence.Save, self, self.save)
         QShortcut(QKeySequence.New, self, self.new)
         QShortcut(QKeySequence("F5"), self, self.evaluate)
         self.doc.changed.connect(self._doc_changed)
-        self.resize(1240, 720)
+        self.resize(1380, 780)
         st = getattr(win, "settings", None)
         if st is not None and st.value("calc/geometry"):
             self.restoreGeometry(st.value("calc/geometry"))
+        scr = self.screen().availableGeometry() if self.screen() is not None else None
+        if scr is not None and self.width() < 1380:          # room for the whole Equation ribbon
+            self.resize(min(1380, scr.width()), self.height())
+        mode = st.value("calc/mode", "pro") if st is not None else "pro"
         self.refresh()
+        self.set_mode(mode if self.fe is not None else "lin")
         self.new()
 
     # ---- layout ----------------------------------------------------------------------------------
-    def _toolbar(self) -> None:
-        tb = QToolBar("Fields Calculator")
-        tb.setMovable(False)
-        tb.setToolButtonStyle(Qt.ToolButtonTextOnly)
-        self.addToolBar(tb)
-        tb.addAction("New", self.new).setToolTip("A new expression (Ctrl+N)")
-        tb.addAction("Save", self.save).setToolTip("Save the expression in the design (Ctrl+S)")
-        self.a_del = tb.addAction("Delete", self.delete)
-        tb.addSeparator()
-        ev = QPushButton("▶  Evaluate")
-        ev.setObjectName("Primary")
-        ev.clicked.connect(self.evaluate)
-        tb.addWidget(ev)
-        tb.addAction("Plot Field…", self.plot_field).setToolTip("Plot this field in the 3D view")
-        tb.addAction("Add to Report", self.add_to_report).setToolTip("Show this value over frequency in a report")
-        tb.addSeparator()
-        tb.addAction("Pick…", lambda: self.pick(None, -1)).setToolTip(
-            "Hide the calculator, click an object or face in the 3D view, and insert its name")
-        tb.addAction("ƒ Functions…", self.functions_dialog).setToolTip("Your own functions: name(a, b) = ...")
-        spacer = QWidget()
-        spacer.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
-        tb.addWidget(spacer)
+    def _ribbon(self) -> Ribbon:
+        rb = Ribbon()
+        rb.setFixedHeight(122)
+        # ---- Home
+        home = rb.page("Home")
+        g = home.group("Expression")
+        g.large("New", "new", self.new, tip="A new expression (Ctrl+N)")
+        g.small("Save", "save", self.save, tip="Save the expression in the design (Ctrl+S)")
+        self.a_del = g.small("Delete", "delete", self.delete, tip="Delete the saved expression")
+        g = home.group("Evaluate")
+        g.large("Evaluate", "analyze", self.evaluate, tip="Evaluate on the solution of the context (Enter)")
+        g = home.group("Use")
+        g.large("Plot Field", "field", self.plot_field, tip="Plot this field in the 3D view")
+        g.large("Add to Report", "rect_plot", self.add_to_report, tip="Show this value over frequency in a report")
+        g = home.group("Context")
         self.sol = QComboBox()
-        self.sol.setMinimumWidth(190)
+        self.sol.setMinimumWidth(210)
         self.freq = QComboBox()
         self.port = QComboBox()
         self.phase = QDoubleSpinBox()
         self.phase.setRange(-360, 360)
         self.phase.setSuffix("°")
         self.phase.setToolTip("Phase for inst() and for the preview in the 3D view")
-        for lab, w in (("Solution ", self.sol), ("  ", self.freq), ("  Port ", self.port), ("  Phase ", self.phase)):
-            t = QLabel(lab)
-            t.setProperty("role", "muted")
-            tb.addWidget(t)
-            tb.addWidget(w)
+        for lab, w in (("Solution", self.sol), ("Frequency", self.freq)):
+            g.widget(self._labeled(lab, w))
+        pp = QWidget()
+        h = QHBoxLayout(pp)
+        h.setContentsMargins(0, 0, 0, 0)
+        h.addWidget(self._labeled("Port", self.port))
+        h.addWidget(self._labeled("Phase", self.phase))
+        g.widget(pp)
         self.sol.currentTextChanged.connect(self._solution_changed)
         self.freq.currentIndexChanged.connect(lambda *_: self._context_changed())
         self.port.currentIndexChanged.connect(lambda *_: self._context_changed())
         self.phase.valueChanged.connect(lambda *_: self._context_changed())
+        g = home.group("Functions")
+        g.large("Functions", "calculator", self.functions_dialog, tip="Your own functions: name(a, b) = ...")
+        # ---- Equation
+        eq = rb.page("Equation")
+        g = eq.group("Tools")
+        lib = [(f"{desc.split(' (')[0]}", (lambda _=False, k=name: self._load_library(k)))
+               for name, _text, desc in LIB.EXPRESSIONS]
+        b = self._big(g, "Equation", "π", None, "Start from a formula of the library")
+        m = QMenu(b)
+        for lab, fn in lib:
+            m.addAction(lab, fn)
+        b.setMenu(m)
+        b.setPopupMode(QToolButton.InstantPopup)
+        self.b_pro = g.small("Professional", None, lambda: self.set_mode("pro"),
+                             tip="The formula typeset, edited like in a formula editor", checkable=True)
+        self.b_lin = g.small("Linear", None, lambda: self.set_mode("lin"),
+                             tip="The formula as one line of text: flux(Port1, re(S))", checkable=True)
+        g.small("Pick from 3D", None, lambda: self.pick(None, -1),
+                tip="Hide the calculator, click an object or face in the 3D view, and insert its name")
+        if self.fe is None:
+            self.b_pro.setEnabled(False)
+            self.b_pro.setToolTip("The formula editor needs Qt WebEngine (part of PySide6)")
+        g = eq.group("Fields")
+        g.row.addWidget(self._keys(FIELD_KEYS, 4, field=True))
+        g = eq.group("Symbols")
+        g.row.addWidget(self._keys(SYMBOL_KEYS, 8))
+        g = eq.group("Structures")
+        for name, glyph, items in STRUCTURES[:3]:
+            self._struct(g, name, glyph, items)
+        self._geo_menu(g, "Integral", "∬", INTEGRAL_MENU)
+        self._geo_menu(g, "Large\nOperator", "max", LARGE_OPS)
+        for name, glyph, items in STRUCTURES[3:]:
+            self._struct(g, name, glyph, items)
+        self._big(g, "Component", "F_φ", self.component_dialog,
+                  "a component of a vector in a coordinate system (x, ρ, φ, r, θ, …)")
+        rb.setCurrentIndex(1)
+        return rb
+
+    @staticmethod
+    def _labeled(text: str, w: QWidget) -> QWidget:
+        box = QWidget()
+        h = QHBoxLayout(box)
+        h.setContentsMargins(0, 0, 0, 0)
+        h.setSpacing(4)
+        lab = QLabel(text)
+        lab.setProperty("role", "muted")
+        lab.setMinimumWidth(lab.fontMetrics().horizontalAdvance("Frequency") + 4 if text != "Phase" else 0)
+        h.addWidget(lab)
+        h.addWidget(w, 1)
+        return box
+
+    def _big(self, g, text: str, glyph: str, slot, tip: str) -> QToolButton:
+        g.end_column()
+        b = QToolButton()
+        b.setObjectName("RibbonLarge")
+        b.setAutoRaise(True)
+        b.setText(text)
+        b.setIcon(glyph_icon(glyph))
+        b.setIconSize(QSize(48, 32))
+        b.setToolButtonStyle(Qt.ToolButtonTextUnderIcon)
+        b.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
+        b.setToolTip(tip)
+        if slot is not None:
+            b.clicked.connect(lambda _=False: slot())
+        g.row.addWidget(b)
+        g._col = None
+        return b
+
+    def _keys(self, keys, per_row: int, field: bool = False) -> QWidget:
+        w = QWidget()
+        grid = QGridLayout(w)
+        grid.setContentsMargins(2, 2, 2, 2)
+        grid.setSpacing(2)
+        for k, (lab, tex, text, tip) in enumerate(keys):
+            b = QToolButton()
+            b.setText(lab)
+            b.setToolTip(tip)
+            b.setProperty("role", "sym")
+            if field:
+                b.setProperty("field", "1")
+            b.clicked.connect(lambda _=False, t=tex, x=text: self.put(t, x))
+            grid.addWidget(b, k // per_row, k % per_row)
+        return w
+
+    def _struct(self, g, name: str, glyph: str, items) -> None:
+        if len(items) == 1:
+            lab, tex, text, tip = items[0]
+            self._big(g, name, glyph, lambda t=tex, x=text: self.put(t, x), lab.split("   ")[1] + tip)
+            return
+        b = self._big(g, name, glyph, None, name)
+        m = QMenu(b)
+        for lab, tex, text, tip in items:
+            a = m.addAction(lab, lambda t=tex, x=text: self.put(t, x))
+            a.setToolTip(tip)
+        m.setToolTipsVisible(True)
+        b.setMenu(m)
+        b.setPopupMode(QToolButton.InstantPopup)
+
+    def _geo_menu(self, g, name: str, glyph: str, items) -> None:
+        b = self._big(g, name, glyph, None, name.replace("\n", " ") + " over a geometry: pick it in the 3D view")
+        m = QMenu(b)
+        for lab, fn, dim, tip, tex, cmd in items:
+            a = m.addAction(lab, lambda f=fn, d=dim, t=tex: self.geometry_op(f, d, t))
+            a.setToolTip(f"{tip}   (\\{cmd} and Space)")
+        m.setToolTipsVisible(True)
+        b.setMenu(m)
+        b.setPopupMode(QToolButton.InstantPopup)
 
     def _side(self) -> QWidget:
         w = QWidget()
@@ -418,25 +635,6 @@ class CalculatorWindow(QMainWindow):
         leg.setProperty("role", "muted")
         lay.addWidget(leg)
         return w
-
-    def _group(self, title: str, buttons) -> QFrame:
-        fr = QFrame()
-        fr.setObjectName("Group")
-        v = QVBoxLayout(fr)
-        v.setContentsMargins(6, 3, 6, 5)
-        v.setSpacing(2)
-        v.addWidget(QLabel(title))
-        row = QHBoxLayout()
-        row.setSpacing(3)
-        for label, slot, tip in buttons:
-            b = QToolButton()
-            b.setText(label)
-            b.setToolTip(tip)
-            b.setProperty("role", "sym")
-            b.clicked.connect(slot)
-            row.addWidget(b)
-        v.addLayout(row)
-        return fr
 
     def _work(self) -> QWidget:
         w = QWidget()
@@ -467,43 +665,43 @@ class CalculatorWindow(QMainWindow):
         nrow.addWidget(self.unsaved)
         lay.addLayout(nrow)
 
-        pal = QGridLayout()
-        pal.setHorizontalSpacing(8)
-        pal.setVerticalSpacing(8)
-        groups = [self._group(t, [(lab, (lambda _=False, s=ins: self.edit.insert(s)), tip) for lab, ins, tip in items])
-                  for t, items in PALETTE]
-        geo = self._group("OVER GEOMETRY", [(lab, (lambda _=False, f=fn, d=dim: self.pick(f, d)),
-                                             tip + " — pick the geometry in the 3D view")
-                                            for lab, fn, dim, tip in GEOMETRY_OPS])
-        comp = self._group("COMPONENT", [("xyz", self.component_dialog,
-                                          "a component of a vector in a coordinate system (x, ρ, φ, r, θ, …)")])
-        pal.addWidget(groups[0], 0, 0)
-        pal.addWidget(groups[1], 0, 1)
-        pal.addWidget(groups[2], 0, 2)
-        pal.addWidget(geo, 1, 0, 1, 2)
-        pal.addWidget(groups[3], 1, 2, 1, 2)
-        pal.addWidget(comp, 0, 3)
-        pal.setColumnStretch(4, 1)
-        lay.addLayout(pal)
-
+        # Professional: the formula editor; Linear: the typeset preview and the text line
+        self.stack = QStackedWidget()
+        if self.fe is not None:
+            self.fe.setMinimumHeight(220)
+            self.fe.latex_changed.connect(self._tex_changed)
+            self.fe.submitted.connect(self.evaluate)
+            self.fe.pick_requested.connect(self.pick)
+            self.stack.addWidget(self.fe)
+        linear = QWidget()
+        ll = QVBoxLayout(linear)
+        ll.setContentsMargins(0, 0, 0, 0)
+        ll.setSpacing(10)
         self.formula = QLabel()
         self.formula.setObjectName("Formula")
         self.formula.setAlignment(Qt.AlignCenter)
         self.formula.setMinimumHeight(150)
         self.formula.setMaximumHeight(280)
         self.formula.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        lay.addWidget(self.formula, 1)
+        ll.addWidget(self.formula, 1)
         self.edit = ExprEdit()
         self.edit.setFixedHeight(self.edit.fontMetrics().lineSpacing() * 2 + 16)
         self.edit.textChanged.connect(self._text_changed)
         self.edit.cursorPositionChanged.connect(self._signature)
         self.edit.submitted.connect(self.evaluate)
-        lay.addWidget(self.edit)
+        ll.addWidget(self.edit)
+        self.stack.addWidget(linear)
+        lay.addWidget(self.stack, 1)
+        self.astext = QLabel()
+        self.astext.setObjectName("AsText")
+        self.astext.setWordWrap(True)
+        self.astext.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        lay.addWidget(self.astext)
         self.sig = QLabel()
         self.sig.setWordWrap(True)
         self.sig.setTextFormat(Qt.RichText)
         self.sig.setProperty("role", "muted")
-        self.sig.linkActivated.connect(lambda s: self.edit.insert(s))
+        self.sig.linkActivated.connect(self.insert_text)
         lay.addWidget(self.sig)
         self.chips = QLabel()
         self.chips.setWordWrap(True)
@@ -611,6 +809,8 @@ class CalculatorWindow(QMainWindow):
         words = list(L.SYMBOLS) + list(L.SIGNATURES) + list(env.named) + list(env.functions) + \
             list(env.geometry) + [c for c in env.cs_names]
         self.edit.set_words(words)
+        if self.fe is not None:
+            self.fe.set_shortcuts(shortcuts(env))
         self._fill_reduce_geometries()
         self._analyze()
 
@@ -744,19 +944,22 @@ class CalculatorWindow(QMainWindow):
         if kind == "expr":
             self.load(key)
         elif kind == "lib":
-            name, text, desc = next(x for x in LIB.EXPRESSIONS if x[0] == key)
-            self.new()
-            self.name.setText(name if not any(e.name == name for e in self.doc.design.field_exprs) else "")
-            self.desc.setText(desc)
-            self.edit.setPlainText(text)
+            self._load_library(key)
         elif kind in ("func", "libfn"):
             self.functions_dialog(select=key)
+
+    def _load_library(self, key: str) -> None:
+        name, text, desc = next(x for x in LIB.EXPRESSIONS if x[0] == key)
+        self.new()
+        self.name.setText(name if not any(e.name == name for e in self.doc.design.field_exprs) else "")
+        self.desc.setText(desc)
+        self.edit.setPlainText(text)
 
     def _item_double_clicked(self, it: QTreeWidgetItem, _col: int) -> None:
         """A double click on a project expression inserts its name at the cursor."""
         data = it.data(0, Qt.UserRole)
         if data and data[0] == "expr" and data[1] != self.current:
-            self.edit.insert(data[1])
+            self.insert_text(data[1])
 
     def load(self, name: str) -> None:
         e = next((x for x in self.doc.design.field_exprs if x.name == name), None)
@@ -782,7 +985,7 @@ class CalculatorWindow(QMainWindow):
         self._dirty_changed()
         self._used_by()
         self.tree.clearSelection()
-        self.edit.setFocus()
+        self.focus_editor()
 
     def _clear_result(self) -> None:
         self.result.setText("—")
@@ -814,13 +1017,112 @@ class CalculatorWindow(QMainWindow):
 
     # ---- typing ----------------------------------------------------------------------------------
     def _text_changed(self) -> None:
+        if not self._from_tex:
+            self.tex_error = None
+            if self.mode == "pro":
+                self._push_tex()
         self._dirty_changed()
         self._timer.start()
+
+    # ---- the two views: typeset formula (Professional) and text (Linear) ---------------------------
+    def set_mode(self, mode: str) -> None:
+        if mode == "pro" and self.fe is None:
+            mode = "lin"
+        if mode == "pro" and self.mode != "pro" and not self._push_tex():
+            self.status.setText(f"<span style='color:{ERR}'>Fix the error in the text first; then the formula "
+                                "can be shown typeset</span>")
+            mode = "lin"
+        if mode == "lin" and self.mode == "pro" and self.tex_error:
+            self.status.setText(f"<span style='color:{ERR}'>The formula was not complete: {self.tex_error}</span>")
+        self.mode = mode
+        self.stack.setCurrentIndex(0 if mode == "pro" and self.fe is not None else self.stack.count() - 1)
+        self.b_pro.setChecked(mode == "pro")
+        self.b_lin.setChecked(mode == "lin")
+        self.astext.setVisible(mode == "pro")
+        st = getattr(self.win, "settings", None)
+        if st is not None:
+            st.setValue("calc/mode", mode)
+        self._analyze()
+        self.focus_editor()
+
+    def _push_tex(self) -> bool:
+        """The text into the formula editor; False if the text is not an expression (it stays as text)."""
+        if self.fe is None:
+            return False
+        text = self.edit.toPlainText()
+        try:
+            tex = TX.to_latex(text, CB.make_env(self.doc))
+        except L.CalcError:
+            return False
+        self.tex_error = None
+        self.fe.set_latex(tex)
+        return True
+
+    def _tex_changed(self, tex: str) -> None:
+        """An edit in the formula editor: its text, or why it is not an expression yet."""
+        try:
+            text = TX.to_text(tex, CB.make_env(self.doc))
+            err = None
+        except TX.LatexError as e:
+            text, err = "", str(e)
+        self.tex_error = err
+        self._from_tex = True
+        try:
+            if text != self.edit.toPlainText():
+                self.edit.setPlainText(text)
+            else:
+                self._dirty_changed()
+                self._timer.start()
+        finally:
+            self._from_tex = False
+
+    def focus_editor(self) -> None:
+        if self.mode == "pro" and self.fe is not None:
+            self.fe.focus_formula()
+        else:
+            self.edit.setFocus()
+
+    def put(self, tex: str, text: str) -> None:
+        """A key of the Equation tab: LaTeX into the formula editor, text into the text line."""
+        if self.mode == "pro" and self.fe is not None:
+            self.fe.insert(tex)
+        else:
+            self.edit.insert(text)
+
+    def insert_text(self, text: str) -> None:
+        """A name or an expression at the cursor, in either view."""
+        if self.mode == "pro" and self.fe is not None:
+            try:
+                self.fe.insert(TX.to_latex(text, CB.make_env(self.doc)))
+                return
+            except L.CalcError:
+                pass
+        self.edit.insert(text)
+
+    def geometry_op(self, fn: str, dim: int, tex: str) -> None:
+        """An integral or operator over a geometry from the ribbon: around the selection (or the whole field
+        expression), then the geometry is picked in the 3D view."""
+        if self.mode == "pro" and self.fe is not None:
+            self._analyze()
+            i = self.info
+            whole = i is not None and i.field
+            if whole and fn in ("max", "min", "avg") and (i.vec or i.cx):
+                tex = tex.replace("#@", r"\left|#@\right|")
+            self.fe.wrap(tex, whole)
+        self.pick(fn, dim)
 
     def _analyze(self) -> None:
         text = self.edit.toPlainText().strip()
         self.info = None
         self.edit.underline(None, None)
+        self.astext.setText(f"as text:  {text}" if text else "")
+        if self.mode == "pro" and self.tex_error:
+            self.chips.setText("")
+            self.status.setText(f"<span style='color:{ERR}'>⚠ {self.tex_error}</span>")
+            self.astext.setText(f"<span style='color:{ERR}'>⚠ {self.tex_error}</span>")
+            self.field_box.setVisible(False)
+            self.freq_box.setVisible(False)
+            return
         if not text:
             self.formula.clear()
             self.formula.setText("<span style='color:#98a0ae;font-size:15px'>The formula appears here as you "
@@ -837,6 +1139,8 @@ class CalculatorWindow(QMainWindow):
             self.edit.underline(e.pos, e.end)
             self.chips.setText("")
             self.status.setText(f"<span style='color:{ERR}'>⚠ {e}</span>")
+            if self.mode == "pro":
+                self.astext.setText(f"as text:  {text}   <span style='color:{ERR}'>⚠ {e}</span>")
             self.formula.clear()
             self.formula.setText(f"<span style='color:{ERR};font-size:14px'>{e}</span>")
             self.field_box.setVisible(False)
@@ -897,14 +1201,22 @@ class CalculatorWindow(QMainWindow):
     # ---- geometry from the 3D view ---------------------------------------------------------------
     def pick(self, fn: str | None, dim: int) -> None:
         """Hide the calculator and ask for the geometry in the 3D view (PickBar); it comes back afterwards."""
-        self._pick_sel = self.edit.textCursor().selectedText()
+        self._pick_sel = self.edit.textCursor().selectedText() if self.mode == "lin" else ""
         self.hide()
         bar = PickBar(self, fn, dim)
         bar.show()
         self._bar = bar
 
     def insert_geometry(self, fn: str | None, geo: str) -> None:
-        """fn(geo, |) at the cursor; a selected text, or a whole field expression, becomes the integrand."""
+        """fn(geo, |) at the cursor; a selected text, or a whole field expression, becomes the integrand. In the
+        formula editor the operation is there already (geometry_op, or typed): geo goes below its sign."""
+        if self.mode == "pro" and self.fe is not None:
+            g = TX.geometry_tex(geo)
+            if fn is None:
+                self.fe.insert(g)
+            else:
+                self.fe.fill_geometry(g)
+            return
         if fn is None:
             self.edit.insert(geo)
             self._analyze()
@@ -1234,13 +1546,13 @@ class CalculatorWindow(QMainWindow):
                             "Save: the field plot dialog opens with it.")
         self.banner.setVisible(True)
         self.new()
-        self.edit.setFocus()
+        self.focus_editor()
 
     # ---- dialogs ---------------------------------------------------------------------------------
     def component_dialog(self) -> None:
         dlg = ComponentDialog(self)
         if dlg.exec() == QDialog.Accepted:
-            self.edit.insert(dlg.text())
+            self.insert_text(dlg.text())
 
     def functions_dialog(self, select: str | None = None) -> None:
         dlg = FunctionsDialog(self, select)
