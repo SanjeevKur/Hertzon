@@ -86,6 +86,7 @@ class MainWindow(QMainWindow):
         self.anim_plot: str | None = None
         self._hidden_plots: set[str] = set()      # field plots hidden with Hide / Clear Overlays
         self._overlay_info: dict[str, str] = {}   # status bar text per drawn field plot
+        self._plot_geom: dict[str, tuple] = {}    # non-model objects a drawn field plot lies on
 
         # central area: modeler (history tree + 3D view) and report tabs
         self.tabs = QTabWidget()
@@ -874,6 +875,7 @@ class MainWindow(QMainWindow):
         self._update_title()
         self._update_sel_buttons()                 # a sheet may have become a solid (Thicken, Sweep)
         self._sync_overlays()
+        self._follow_helper_plots()
         if what in ("variables", "all", "model", "results"):
             self._follow_variation()
         if what in ("attributes",):
@@ -4168,6 +4170,7 @@ class MainWindow(QMainWindow):
                                          "changed after it was computed. Analyze again.")
             info = info + "   [outdated solution]"
         self.view.set_overlay(name, meshes)
+        self._plot_geom[name] = self._helper_geometry(fp)
         self.field_ranges = getattr(self, "field_ranges", {})
         if meshes and meshes[0][1].get("clim") is not None:
             self.field_ranges[name] = tuple(meshes[0][1]["clim"])
@@ -4175,6 +4178,27 @@ class MainWindow(QMainWindow):
         if loud and "  (" in info:
             self.msgs.add("warning", f"Field plot '{name}': {info.split('  (', 1)[1].rstrip(')')}")
         return True
+
+    def _helper_geometry(self, fp) -> tuple:
+        """The display shapes of the non-model objects a field plot lies on (helper sheets drawn for plots)."""
+        names = dict.fromkeys([*(fp.objects or []), *[r.obj for r in (fp.faces or [])]])
+        return tuple((n, id(self.doc.tess.get(n))) for n in names
+                     if self.des.has_obj(n) and not self.des.obj(n).model)
+
+    def _follow_helper_plots(self) -> None:
+        """A field plot on a non-model object follows the object: moved, resized or reshaped, the plot is
+        drawn again on the new shape (the solution stays valid, the object is not part of the model)."""
+        geo = self._plot_geom
+        for fp in self.des.field_plots:
+            old = geo.get(fp.name)
+            if not old or fp.name not in self.view.overlay_actors:
+                continue
+            new = self._helper_geometry(fp)
+            if new == old or len(new) != len(old) or any(n not in self.doc.tess for n, _ in new):
+                continue
+            if fp.name in self.anim_bar.names:
+                self.anim_bar.close_player()        # its frames show the old shape
+            self._draw_field_plot(fp.name, loud=True)
 
     def edit_sources(self) -> None:
         """Edit Sources: post-processing magnitudes/phases and the incident wave field type."""

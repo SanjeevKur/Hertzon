@@ -326,33 +326,93 @@ def _sheet_cut(work: pv.UnstructuredGrid, cad: pv.PolyData) -> pv.PolyData | Non
     sl = _cut(work, n, c, True)
     if not sl.n_cells:
         return None
-    pad = 1e-6 * size
-    # crop to the sheet's bounding rectangle in its own plane (not clip_box: that merges the points of
-    # neighbouring elements)
-    for ax in vt[:2]:
-        d = (pts - c) @ ax
-        for o, nrm in ((d.min() - pad, -ax), (d.max() + pad, ax)):
-            plane = vtk.vtkPlane()
-            plane.SetOrigin(*(c + o * ax))
-            plane.SetNormal(*nrm)
-            clip = vtk.vtkClipPolyData()
-            clip.SetInputData(sl)
-            clip.SetClipFunction(plane)
-            clip.InsideOutOn()
-            clip.SetLocator(vtk.vtkNonMergingPointLocator())
-            clip.Update()
-            sl = pv.wrap(clip.GetOutput())
-    if not sl.n_cells:
+    sl = _crop_to_sheet(sl.triangulate(), cad, c, vt[:2], size)
+    if sl is None:
         return None
-    # outline other than the bounding box: keep the cut triangles whose centre lies on the sheet
-    flat = cad.extract_surface(algorithm="dataset_surface").triangulate()
-    cc = np.asarray(sl.cell_centers().points)
-    _, closest = flat.find_closest_cell(cc, return_closest_point=True)
-    on = np.linalg.norm(cc - closest, axis=1) <= 1e-4 * size
-    if not on.all():
-        sl = sl.extract_cells(np.where(on)[0]).extract_surface(algorithm="dataset_surface", pass_pointid=False)
     sl.field_data["fromgrid"] = np.array([1])
     return sl if sl.n_cells else None
+
+
+def _clip_half(V, W, cnt, a, b):
+    """Clip convex polygons (vertices V (n, K, 2), weights W (n, K, 3), cnt corners each) to a . x <= b."""
+    n, K = V.shape[:2]
+    r = np.arange(n)
+    oV, oW = np.zeros_like(V), np.zeros_like(W)
+    pos = np.zeros(n, np.int64)
+    d = V @ a - b
+    for i in range(K):
+        live = i < cnt
+        j = np.where(i + 1 < cnt, i + 1, 0)
+        di, dj = d[:, i], d[r, j]
+        ins = live & (di <= 0)
+        oV[r[ins], pos[ins]] = V[ins, i]
+        oW[r[ins], pos[ins]] = W[ins, i]
+        pos += ins
+        cross = live & ((di <= 0) != (dj <= 0))
+        if cross.any():
+            t = (di[cross] / (di[cross] - dj[cross]))[:, None]
+            rc, jc = r[cross], j[cross]
+            oV[rc, pos[cross]] = V[rc, i] + t * (V[rc, jc] - V[rc, i])
+            oW[rc, pos[cross]] = W[rc, i] + t * (W[rc, jc] - W[rc, i])
+            pos += cross
+    return oV, oW, pos
+
+
+def _crop_to_sheet(sl: pv.PolyData, cad: pv.PolyData, c, axes, size: float) -> pv.PolyData | None:
+    """Cut triangles cropped exactly to a flat sheet: each triangle is clipped against the sheet's own
+    triangles in the sheet plane, so the plot ends on the sheet's outline (also round ones and holes). The
+    field is interpolated linearly to the new corners; points stay unmerged (per-element values)."""
+    tri = np.asarray(sl.faces).reshape(-1, 4)[:, 1:] if sl.n_cells else np.zeros((0, 3), np.int64)
+    flat = cad.extract_surface(algorithm="dataset_surface").triangulate()
+    ctri = np.asarray(flat.faces).reshape(-1, 4)[:, 1:]
+    if not len(tri) or not len(ctri):
+        return None
+    P = np.asarray(sl.points, float)
+    to2 = lambda X: np.column_stack([(X - c) @ axes[0], (X - c) @ axes[1]])   # noqa: E731
+    p2 = to2(P)[tri]                                                          # (n, 3, 2)
+    q2 = to2(np.asarray(flat.points, float))[ctri]                            # (m, 3, 2)
+    lo, hi = p2.min(axis=1), p2.max(axis=1)
+    tol = 1e-9 * size
+    K = 10                                  # a triangle clipped by a triangle has at most 6 corners
+    pieces, weights = [], []
+    for q in q2:
+        if (q[1, 0] - q[0, 0]) * (q[2, 1] - q[0, 1]) - (q[1, 1] - q[0, 1]) * (q[2, 0] - q[0, 0]) < 0:
+            q = q[::-1]                     # counter-clockwise
+        cand = np.where(np.all(hi >= q.min(axis=0) - tol, axis=1) & np.all(lo <= q.max(axis=0) + tol, axis=1))[0]
+        if not len(cand):
+            continue
+        V = np.zeros((len(cand), K, 2))
+        W = np.zeros((len(cand), K, 3))
+        V[:, :3] = p2[cand]
+        W[:, :3] = np.eye(3)
+        cnt = np.full(len(cand), 3)
+        for k in range(3):
+            e = q[(k + 1) % 3] - q[k]
+            nrm = np.array([e[1], -e[0]]) / max(np.hypot(*e), 1e-300)      # outward for a CCW triangle
+            V, W, cnt = _clip_half(V, W, cnt, nrm, float(nrm @ q[k]) + tol)
+        for k in range(1, K - 1):           # fan triangles (0, k, k+1)
+            ok = cnt > k + 1
+            if not ok.any():
+                break
+            idx = np.array([0, k, k + 1])
+            pieces.append(cand[ok])
+            weights.append(W[ok][:, idx])
+    if not pieces:
+        return None
+    src = np.concatenate(pieces)
+    Wt = np.concatenate(weights)                                              # (t, 3, 3)
+    corners = tri[src]                                                        # (t, 3)
+    pts = np.einsum("tij,tjk->tik", Wt, P[corners]).reshape(-1, 3)
+    out = pv.PolyData(pts, np.hstack([np.full((len(src), 1), 3), np.arange(3 * len(src)).reshape(-1, 3)]).ravel())
+    for name in sl.point_data.keys():
+        v = np.asarray(sl.point_data[name])
+        if not np.issubdtype(v.dtype, np.floating) and not np.issubdtype(v.dtype, np.complexfloating):
+            continue
+        vv = v[corners]                                                       # (t, 3, ...)
+        out.point_data[name] = np.einsum("tij,tj...->ti...", Wt, vv).reshape(-1, *v.shape[1:])
+    for name in sl.cell_data.keys():
+        out.cell_data[name] = np.asarray(sl.cell_data[name])[src]
+    return out
 
 
 def _mesh_of(grid) -> dict | None:
