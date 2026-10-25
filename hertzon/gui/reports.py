@@ -15,7 +15,7 @@ from PySide6.QtWidgets import (QWidget, QHBoxLayout, QVBoxLayout, QComboBox, QLi
                                QTableWidget, QTableWidgetItem, QFileDialog, QSplitter, QFormLayout, QLineEdit,
                                QAbstractItemView, QHeaderView, QMenu, QApplication, QDialog, QDialogButtonBox,
                                QCheckBox, QInputDialog, QColorDialog, QDoubleSpinBox, QPlainTextEdit, QMessageBox,
-                               QListWidgetItem)
+                               QListWidgetItem, QScrollArea, QFrame)
 
 from ..model.design import Report
 from ..solver.results import ResultStore, results_dir
@@ -577,7 +577,15 @@ class ReportWindow(QWidget):
                 hint.setWordWrap(True)
                 hint.setStyleSheet("color:#7a6a00")
                 ll.addWidget(hint)
-        split.addWidget(left)
+        # the trace editor scrolls instead of setting a minimum height: its ~430 px (more with display
+        # scaling) would otherwise become the main window's minimum and push a maximized window off screen
+        scroll = QScrollArea()
+        scroll.setWidget(left)
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        scroll.setMinimumWidth(left.minimumSizeHint().width() + scroll.verticalScrollBar().sizeHint().width())
+        split.addWidget(scroll)
         right = QWidget()
         rl = QVBoxLayout(right)
         if report.kind in ("Data Table", "Monostatic RCS Table", "Antenna Parameters Table"):
@@ -609,6 +617,7 @@ class ReportWindow(QWidget):
             rl.addWidget(self.mtable)
         split.addWidget(right)
         split.setSizes([260, 800])
+        split.setCollapsible(0, False)
         self._fill_qty()
         self.refresh()
 

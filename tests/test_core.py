@@ -509,6 +509,24 @@ def test_projection_keeps_the_model_size():
     assert not cam.GetParallelProjection() and got == [True, False]
 
 
+def test_report_tab_does_not_raise_the_window_minimum_height():
+    """Opening a report tab must not raise the main window's minimum height: the trace editor scrolls, so a
+    maximized window on a 1080p screen with display scaling keeps its status bar on screen."""
+    import os
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    from PySide6.QtWidgets import QApplication, QScrollArea
+    from hertzon.gui.doc import Document
+    from hertzon.gui.reports import ReportWindow
+    from hertzon.model.design import Report
+    app = QApplication.instance() or QApplication([])  # noqa: F841
+    doc = Document(Project.load(EX / "PatchAntenna.hzn"))
+    w = ReportWindow(doc, Report("XY Plot 1", "Rectangular Plot", "Setup1 : LastAdaptive",
+                                 ["dB(S(1,1))", "dB(S(2,1))"]))
+    editor = w.findChild(QScrollArea)
+    assert editor is not None and editor.widget().minimumSizeHint().height() > 300
+    assert w.minimumSizeHint().height() < 200, w.minimumSizeHint()
+
+
 def test_radiation_pattern_of_a_sweep_frequency_and_rectangular(tmp_path):
     """Radiation Pattern of a sweep with fields: the frequency is chosen in the report, and the cut can be
     drawn over the angle (rectangular) with markers."""
