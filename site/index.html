@@ -61,6 +61,7 @@ footer{margin-top:48px;font-size:.85rem;color:var(--muted)}
 workflow: draw the model, assign boundaries and ports, solve with <strong>adaptive meshing</strong>, then look at
 S-parameters, fields and radiation patterns. The finite-element solver underneath is
 <a href="https://github.com/FennisRobert/EMerge">EMerge</a> (2nd-order Nédélec FEM).</p>
+<p>By Dominik Mair, built on EMerge, the FEM solver by Robert Fennis.</p>
 <div class="btns">
 <a class="primary" href="https://github.com/c8501024/Hertzon/releases/latest">Download for Windows / Linux</a>
 <a href="https://github.com/c8501024/Hertzon">Source code on GitHub</a>
@@ -79,7 +80,9 @@ S-parameters, fields and radiation patterns. The finite-element solver underneat
 <h2>Why Hertzon</h2>
 <ul>
 <li>Finite-element method (FEM) frequency-domain solver with <strong>adaptive mesh refinement</strong> until S-parameters converge</li>
-<li>Own mesher (hzmesh), curved elements, fast error estimator and faster assembly kernels on top of EMerge</li>
+<li>Built on EMerge: its adaptive refinement (AURA), error estimate and curved elements, plus Hertzon's own local Delaunay mesher (hzmesh) as an alternative</li>
+<li>Fast and interpolating frequency sweeps, parallel sweep points, optimization and parametric sweeps</li>
+<li>Half and quarter models with symmetry planes: the far field includes the mirror images</li>
 <li>Desktop GUI (Qt + VTK) that stays responsive with large models; the solver runs in its own process</li>
 <li>Python scripting and an <strong>MCP server</strong>, so AI assistants can build and run simulations</li>
 <li>Free and open source under the GPL, for Windows and Linux</li>

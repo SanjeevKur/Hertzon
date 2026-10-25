@@ -17,11 +17,29 @@ the GitHub release notes.
   completely inside it (in face, edge or vertex mode: every face, edge or vertex completely inside).
   Ctrl + drag adds to the selection. A group is selected only when all its members are inside. Hidden
   objects are skipped; a click still selects one item.
-- **Mesh refinement "AURA (EMerge)"**, EMerge's own local refinement, with Hertzon's error estimate,
-  convergence criterion and curved elements. A comparison script measures the time to solution against
+- **Mesh refinement "AURA (EMerge)"**, EMerge's own local refinement, with the same error estimate,
+  convergence criterion and curved elements as the other methods. A comparison script measures the time to solution against
   Local (Delaunay) on the benchmark models (`examples/benchmark/mesher`).
+- **Lumped Elements tab**: inserts a chip resistor, inductor or capacitor, or a component measured by a
+  Touchstone file: pick the package in the menu of the button and click the position on the board. The
+  part comes with its pads (Perfect E), and its position is the design variables <name>_x/_y/_z, so it
+  moves as a whole. With two traces selected it is placed in the gap between them. Packages 0201, 0402, 0603, 0805, 1206 and the RF series
+  Coilcraft 0402HP/0402HPH/0402CS/0603HP/0603CS and Murata LQW15AN/LQP03TN/GJM03/GJM15 with their body
+  dimensions. Hertzon adds the pads of the land pattern (made like the traces), the element sheet with its
+  Lumped RLC boundary and integration line, and optionally a 3D body with metal terminations (the
+  mounted inductance from the field solution). The ideal value can carry the typical ESL and ESR of the size.
+- **Lumped RLC: Model** Parallel RLC (as before), Series RLC or Touchstone (.s1p, or .s2p measured in
+  series or as a shunt). The Validation Check reads the Touchstone file; the solver warns when a sweep
+  leaves its frequency range.
+- **Draw Integration Line** (right click a Lumped Port or Lumped RLC in the project tree): start and end
+  point picked with two clicks in the 3D view, with snapping to vertices and edge centers.
+  **Auto Integration Line** places it between the conductors again.
 
 ### Changed
+- **Documentation** brought up to the current state: the README, the website and the feature overview
+  describe AURA as the default refinement, EMerge's curved elements, object groups, box selection,
+  coordinate systems, parametric sweeps, plane waves and symmetry planes; docs/MESHER.md covers all
+  refinement methods. Primary / Secondary boundaries are marked as not passed to the solver yet.
 - **Faster 3D view with many objects**: the model shows several times faster (300 objects: 1.8 s instead
   of 7.7 s), a click to select, an attribute change and the edge pre-highlight no longer slow down with
   the number of objects (300 objects: select 0.3 s instead of 0.8 s, edge hover 2 ms instead of 0.4 s).
@@ -75,22 +93,6 @@ the GitHub release notes.
   the working coordinate system, stored with the operation as *Coordinate system*. Before, the plane always
   lay in the Global CS, and an object far from that plane was deleted instead of split. Older projects keep
   splitting in the Global CS.
-
-### New
-- **Lumped Elements tab**: inserts a chip resistor, inductor or capacitor, or a component measured by a
-  Touchstone file: pick the package in the menu of the button and click the position on the board. The
-  part comes with its pads (Perfect E), and its position is the design variables <name>_x/_y/_z, so it
-  moves as a whole. With two traces selected it is placed in the gap between them. Packages 0201, 0402, 0603, 0805, 1206 and the RF series
-  Coilcraft 0402HP/0402HPH/0402CS/0603HP/0603CS and Murata LQW15AN/LQP03TN/GJM03/GJM15 with their body
-  dimensions. Hertzon adds the pads of the land pattern (made like the traces), the element sheet with its
-  Lumped RLC boundary and integration line, and optionally a 3D body with metal terminations (the
-  mounted inductance from the field solution). The ideal value can carry the typical ESL and ESR of the size.
-- **Lumped RLC: Model** Parallel RLC (as before), Series RLC or Touchstone (.s1p, or .s2p measured in
-  series or as a shunt). The Validation Check reads the Touchstone file; the solver warns when a sweep
-  leaves its frequency range.
-- **Draw Integration Line** (right click a Lumped Port or Lumped RLC in the project tree): start and end
-  point picked with two clicks in the 3D view, with snapping to vertices and edge centers.
-  **Auto Integration Line** places it between the conductors again.
 
 ## 0.1.25 (2026-10-23)
 

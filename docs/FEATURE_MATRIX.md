@@ -32,15 +32,16 @@ Legend: **✔** implemented and tested · **◐** implemented with limitations �
 | Unite, Subtract (blank/tool, clone), Intersect, Split | Modeler > Boolean | ✔ | |
 | Move, Rotate, Mirror, Scale, Duplicate along line / around axis / mirror | Edit > Arrange / Duplicate | ✔ | |
 | Object groups (also of solids, sheets and lines together), ungroup, rename | Edit > Group (Ctrl+G) / Ungroup (Ctrl+Shift+G), model tree > Groups | ✔ | A group is selected and transformed as one unit; SMD components are groups; saved in the project |
-| Thicken sheet, Sweep along vector / around axis, Cover lines | Draw / Modeler | ✔ | Sweep along path ✖ |
-| Fillet | Modeler > Fillet | ◐ | Edges of solids; chamfer ✖ |
+| Thicken sheet, Sweep along vector / around axis / along path, Cover lines | Draw / Modeler | ✔ | |
+| Fillet, Chamfer | Modeler > Fillet / Chamfer | ◐ | Edges of solids |
 | Import STEP / IGES / BREP, Export STEP | File / Modeler | ✔ | |
 | History tree with editable commands, suppress | Model tree + Properties | ✔ | Every command parameter accepts expressions |
 | Object attributes: material, solve inside, model, color, transparency, wireframe | Properties > Attribute | ✔ | |
 | Selection modes Object (O), Face (F), Edge (E), Vertex (V), select by name, Ctrl+A | ✔ | ✔ | |
-| Units, grid, measure, fit all / fit selection, views, ortho/perspective | View / Modeler | ✔ | |
+| Box selection (left drag, Ctrl + drag adds) | 3D view | ✔ | Selects what lies completely inside; a group only when all members are inside |
+| Units, grid, measure, fit all / fit selection, views, ortho/perspective | View / Modeler | ✔ | Grid and axis triad stay at the origin of the working CS |
 | Material library (Edit Materials, add/clone) | Tools > Edit Materials | ✔ | εr, μr, σ, tan δ, magnetic tan δ; frequency-dependent materials ✖ |
-| User coordinate systems | — | ✖ | Global CS only |
+| User coordinate systems (Relative CS, Face CS, Object CS) | Modeler > Coordinate System | ✔ | Working CS for drawing, grid and Split |
 
 ## Boundaries
 
@@ -54,8 +55,8 @@ Legend: **✔** implemented and tested · **◐** implemented with limitations �
 | SMD components between two traces (0201 to 1206, vendor series, pads, optional 3D terminations, Touchstone parts) | Lumped Elements tab | `LumpedElement` | ✔ |
 | Radiation (first order) | Radiation | `AbsorbingBoundary` | ✔ (second order ◐) |
 | PML | PML (on region faces) and Auto Open | `pmlbox` | ✔ |
-| Symmetry (Perfect E / Perfect H) | Symmetry | `PEC` / `PMC` | ✔ (impedance multiplier ✖) |
-| Master / Slave (Primary / Secondary) | Primary / Secondary | — | ✖ (can be assigned, solver warns) |
+| Symmetry (Perfect E / Perfect H) | Symmetry | `PEC` / `PMC` | ✔ far field with mirror images at planes parallel to XY, YZ or ZX (impedance multiplier ✖) |
+| Periodic (Primary / Secondary) | Primary / Secondary | — | ✖ (can be assigned, not passed to the solver: it warns and skips them) |
 | Layered Impedance | — | — | ✖ |
 
 ## Excitations
@@ -63,16 +64,16 @@ Legend: **✔** implemented and tested · **◐** implemented with limitations �
 | Function | In Hertzon | Status | Notes |
 |---|---|---|---|
 | Wave Port (modes, Zpi/Zpv/Zvi, renormalize, de-embed) | Wave Port | ✔ | De-embedding uses the solved port propagation constant |
-| Lumped Port (impedance, integration line) | Lumped Port | ✔ | Integration line placed automatically between the touching conductors, or drawn in the 3D view |
+| Lumped Port (impedance, integration line) | Lumped Port | ✔ | Integration line placed automatically between the touching conductors, or drawn in the 3D view; it moves, rotates, mirrors and scales with its sheet |
 | Floquet Port | Floquet Port | ◐ | Needs periodic boundaries, which are not available yet |
-| Incident Plane Wave | Incident Plane Wave | ✖ | Can be assigned, solver warns |
+| Incident Plane Wave | Incident Plane Wave | ✔ | Scattered-field formulation with a radiation boundary, RCS (monostatic and bistatic); one plane wave per design, ignored while ports are present |
 
 ## Mesh operations
 
 | Function | In Hertzon | Status |
 |---|---|---|
 | Length Based (on selection / inside selection) | ✔ |
-| Length Based on edges | ✖ (use On Selection on the adjacent faces) |
+| Length Based on edges | ✔ |
 | Skin Depth Based | ◐ (mapped to a surface length of skin depth × layers) |
 | Initial mesh: Lambda refinement, lambda target, free-space lambda | ✔ (Setup > Options; default target follows the basis order: 0.1 / 0.3333 / 0.6667) |
 | Plot Mesh | ✔ |
@@ -87,6 +88,8 @@ Legend: **✔** implemented and tested · **◐** implemented with limitations �
 | Use Matrix Convergence (ΔMag, ΔPhase) | ✔ |
 | Minimum Number of Passes, Minimum Converged Passes | ✔ |
 | Percent Refinement per pass | ✔ (enforced, adaptive error-driven refinement) |
+| Mesh refinement method | ✔ AURA (EMerge, default), Local (Delaunay, hzmesh), Remesh, Remesh (stable, experimental); see [MESHER.md](MESHER.md) |
+| Curved elements on curved surfaces | ✔ (EMerge, default on) |
 | Maximum Refinement (tets) | ✔ |
 | Basis function order | ✔ Zero Order (6), First Order (20, default), Second Order (complete quadratic, 30); no Mixed Order |
 | Solver: Auto / Direct (PARDISO, MUMPS, UMFPACK, SuperLU) | ✔ |
@@ -110,12 +113,12 @@ Legend: **✔** implemented and tested · **◐** implemented with limitations �
 | Solution Data: Profile, Convergence (table + plot), Matrix Data S/Y/Z (mag/phase, dB, re/im), Mesh Statistics | ✔ |
 | Rectangular plot, Smith chart, Data table, markers | ✔ |
 | Expressions `dB(S(1,1))`, `VSWR`, `GroupDelay`, `Z`, `Y`, `ang_deg`, `re`, `im` | ✔ |
-| Radiation: Infinite Sphere, 2D pattern cuts, 3D polar plot, Gain / Directivity / Realized gain, Eθ/Eφ | ✔ |
+| Radiation: Infinite Sphere, 2D pattern cuts, 3D polar plot, Gain / Directivity / Realized gain, Eθ/Eφ, markers, beamwidth and side lobes | ✔ (half and quarter models with Symmetry boundaries are mirrored) |
 | Field overlays on faces, objects and cut planes: Mag, Complex Mag and Vector of E, H, Jsurf and J (volume current sigma E), phase animation | ✔ |
 | Export Touchstone, CSV, images | ✔ |
 | Export Gerber X2 (copper layers, profile) and Excellon (PTH / NPTH), File > Export > Gerber ([details](GERBER_EXPORT.md)) | ✔ |
 | Optimization: conjugate gradient (projected Polak-Ribiere+), goals on report expressions, error-area or worst-case cost, filter mask, parallel gradient evaluations | ✔ |
-| Parametric sweep | ✖ (next step) |
+| Parametric sweep | ✔ Optimization > Add Parametric; solved variations can be shown again without solving |
 | Filter design toolkit: Tools > Filter Design > Tapped Hairpin (N = 2 to 9 resonators, design frequency, hfsynpy microstrip synthesis, parametrized geometry, setup, sweep and conjugate gradient optimization on the filter mask) | ✔ |
 | Antenna design toolkit: Tools > Antenna Design > Rectangular Patch (frequency and substrate in; transmission line model, inset feed, setup, sweep, far-field sphere and optimization of length and inset on the return loss) | ✔ |
 | Fields calculator | ✖ |

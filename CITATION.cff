@@ -3,7 +3,8 @@ message: "If you use Hertzon in your work, please cite it as below, and also cit
 type: software
 title: "Hertzon: a graphical 3D full-wave electromagnetic simulator built on EMerge"
 authors:
-  - name: "The Hertzon contributors"
+  - family-names: "Mair"
+    given-names: "Dominik"
 version: "0.1.25"
 date-released: "2026-10-23"
 license: GPL-2.0-or-later
