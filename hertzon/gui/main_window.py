@@ -2403,7 +2403,15 @@ class MainWindow(QMainWindow):
         edges = ",".join(str(s.index) for s in self.doc.selection if s.obj == obj)
         r, ok = QInputDialog.getText(self, "Chamfer", "Distance:", text="0.5")
         if ok:
-            self.add_command_to_selection("Chamfer", {"Distance": r, "Edges": edges}, [obj])
+            self._edge_op("Chamfer", {"Distance": r, "Edges": edges}, obj)
+
+    def _edge_op(self, kind: str, values: dict, obj: str) -> None:
+        """Fillet/Chamfer: if the object can not be built with the new operation, it stays unchanged."""
+        self.add_command_to_selection(kind, values, [obj])
+        err = self.doc.errors.get(obj)
+        if err:
+            self.doc.discard_last()
+            QMessageBox.warning(self, kind, f"{kind} could not be applied, '{obj}' is unchanged.\n\n{err}")
 
     def two_object_op(self, kind: str) -> None:
         """Sweep Along Path (profile, then path), Connect (two sheets or lines), Imprint (blank, tool).
@@ -2519,13 +2527,13 @@ class MainWindow(QMainWindow):
 
     def fillet(self) -> None:
         if self.doc.selection_mode != "edge" or not self.doc.selection:
-            QMessageBox.information(self, "Fillet", "Select edges (press E) of one solid first.")
+            QMessageBox.information(self, "Fillet", "Select edges (press E) of one solid or sheet first.")
             return
         obj = self.doc.selection[0].obj
         edges = ",".join(str(s.index) for s in self.doc.selection if s.obj == obj)
         r, ok = QInputDialog.getText(self, "Fillet", "Radius:", text="0.5")
         if ok:
-            self.add_command_to_selection("Fillet", {"Radius": r, "Edges": edges}, [obj])
+            self._edge_op("Fillet", {"Radius": r, "Edges": edges}, obj)
 
     def _duplicate(self, objs: list[str], cmds_for_copy) -> None:
         self.doc.checkpoint()

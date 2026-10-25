@@ -18,6 +18,12 @@ the GitHub release notes.
 - **Solver Benchmark**: the three projects of Tools > Solver Benchmark use hzAURA; the mesher comparison
   projects have an hzAURA variant next to each Local (Delaunay) one.
 
+### Fixed
+- **Fillet on sheets**: a fillet on a sheet (for example the patch of a patch antenna) made the whole object
+  disappear, because the fillet only worked on solids. On a flat sheet it now rounds the corners at both ends
+  of each selected edge. When a fillet or chamfer cannot be applied (for example a radius larger than the
+  adjacent edges allow), the object stays unchanged and a message says why.
+
 ## 0.2.2 (2026-10-25)
 
 ### Changed
