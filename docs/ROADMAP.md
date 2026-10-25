@@ -97,6 +97,19 @@ touch the EMerge core should go upstream to EMerge, so that Hertzon does not dep
 - [ ] **1.5 Modeler and usability (M).** Interactive move/rotate, measure tools, clickable messages,
   report axes, more modeler operations. Done so far: arcs and splines in polylines, report markers,
   object groups, box selection.
+- [ ] **1.6 Topology and free-form optimization (L–XL).** Let the solver find the shape instead of
+  only tuning given dimensions. Topology: a design region (e.g. a metal layer of a filter or an
+  antenna) split into pixels or a density field, filtered and projected towards metal or no metal.
+  Free form: the boundary of an object described by control points or splines that move along the
+  surface normal. Both are driven by adjoint sensitivities from the FEM solution: one extra solve per
+  objective gives the gradient for all design variables, so thousands of variables stay affordable.
+  Without gradients, genetic algorithms and surrogate models (kriging) remain as fallback; the earlier
+  pixelated GA and kriging filter optimization in dmWave (filterbench) is the prior art and a
+  reference for benchmarks. Results are exported as geometry (STEP, Gerber). *Needs adjoint and
+  gradient support in EMerge (system matrix and its derivative with respect to the material per
+  element, to be agreed upstream), parametric geometry with stable face assignment (0.3), the
+  existing optimizer (`hertzon/solver/optimize.py`) and a fixed or morphing mesh so that
+  sensitivities stay continuous between iterations.*
 
 ## Step 2: openEMS as a second solver (EC-FDTD)
 
@@ -250,6 +263,8 @@ Open points:
   What can go upstream should be agreed with the EMerge author early.
 * **Windows packaging.** openEMS, Elmer, GetDP and ngspice are available for Windows; MEEP and Palace
   practically only for Linux. Optical FDTD is therefore planned through openEMS first.
+* **Adjoint sensitivities.** Topology and free-form optimization (1.6) are only practical with
+  gradients from the EMerge core. Without them, they stay limited to a few hundred variables.
 * **Validation.** Every solver needs reference cases. The benchmark suite from 0.5 is part of every
   step, not an appendix at the end.
 * **One application.** Several solvers must not mean several user interfaces. Step 0 decides whether
