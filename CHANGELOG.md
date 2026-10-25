@@ -3,7 +3,7 @@
 All notable changes of each release. The release workflow copies the section of the released version into
 the GitHub release notes.
 
-## Unreleased
+## 0.2.3 (2026-10-25)
 
 ### Changed
 - **Examples on the current features**: all examples use hzAURA refinement and curved elements and are
