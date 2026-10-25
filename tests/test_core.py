@@ -120,6 +120,35 @@ def test_rectangle_sizes_named_by_axis():
     assert np.ptp(P, axis=0) == pytest.approx([5e-3, 0, 2e-3], abs=1e-9)
 
 
+def test_thicken_goes_to_positive_side():
+    """Thicken sheet with a positive thickness grows to the positive side of the sheet's main axis, however
+    the sheet was drawn (a rectangle dragged to -X has the opposite winding); negative thickness and
+    BothSides keep working."""
+    def zrange(kind, thick="1", both="False", **props):
+        pr = Project()
+        d = pr.designs[0]
+        d.add_object(kind, name="S", **props)
+        if kind == "CreatePolyline":
+            d.obj("S").history.append(Command("Cover", {}))
+        d.obj("S").history.append(Command("ThickenSheet", {"Thickness": thick, "BothSides": both}))
+        P = np.asarray(K.tessellate(K.build_design(d, d.evaluator(pr)))["S"].points)
+        return P.min(axis=0) * 1e3, P.max(axis=0) * 1e3
+
+    for xs, ys in (("2", "3"), ("-2", "3"), ("2", "-3"), ("-2", "-3")):
+        lo, hi = zrange("CreateRectangle", Position="0,0,0", Axis="Z", XSize=xs, YSize=ys)
+        assert (lo[2], hi[2]) == pytest.approx((0, 1), abs=1e-9)
+    lo, hi = zrange("CreateRectangle", Position="0,0,0", Axis="X", YSize="-2", ZSize="3")
+    assert (lo[0], hi[0]) == pytest.approx((0, 1), abs=1e-9)
+    lo, hi = zrange("CreateRectangle", Position="0,0,0", Axis="Y", ZSize="-2", XSize="3")
+    assert (lo[1], hi[1]) == pytest.approx((0, 1), abs=1e-9)
+    lo, hi = zrange("CreatePolyline", Points="0,0,0;0,1,0;1,1,0;1,0,0", Closed="True")   # drawn clockwise, covered
+    assert (lo[2], hi[2]) == pytest.approx((0, 1), abs=1e-9)
+    lo, hi = zrange("CreateRectangle", "-1", Position="0,0,0", Axis="Z", XSize="-2", YSize="3")
+    assert (lo[2], hi[2]) == pytest.approx((-1, 0), abs=1e-9)
+    lo, hi = zrange("CreateRectangle", "1", "True", Position="0,0,0", Axis="Z", XSize="-2", YSize="3")
+    assert (lo[2], hi[2]) == pytest.approx((-1, 1), abs=1e-9)
+
+
 def test_antenna_report_expressions():
     """Antenna parameters: dB() of a gain or power is 10 log10, of the axial ratio 20 log10."""
     from hertzon.gui.reports import eval_expr

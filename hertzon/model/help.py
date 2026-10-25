@@ -53,7 +53,8 @@ HELP: dict[str, str] = {
     "Base": "A point on the mirror plane.",
     "Normal": "Normal vector of the mirror plane.",
     "Factor": "Scale factor (1 = unchanged).",
-    "Thickness": "Thickness.",
+    "Thickness": "Thickness. A positive value thickens to the positive side of the sheet's main axis "
+                 "(+Z for a sheet in XY), a negative value to the other side.",
     "BothSides": "Thicken symmetrically to both sides of the sheet.",
     "Tools": "Objects used as tools of the boolean operation (comma separated).",
     "KeepOriginals": "Keep copies of the tool objects after the operation.",
