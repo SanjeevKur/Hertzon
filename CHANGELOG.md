@@ -3,7 +3,7 @@
 All notable changes of each release. The release workflow copies the section of the released version into
 the GitHub release notes.
 
-## Unreleased
+## 0.2.1 (2026-10-25)
 
 ### Added
 - **Update hint**: at start Hertzon asks GitHub in the background for the newest release. When it is newer
@@ -27,8 +27,6 @@ the GitHub release notes.
   width, so starting an animation squeezed the model tree and widened the 3D view to the same size every
   time (and it stayed so after closing the player). The bar now fits the view as it is; long texts in it
   are cut instead.
-
-### Fixed
 - **RCS and far fields of scattering problems with AURA refinement**: the far-field surface (the box
   between scatterer and radiation boundary) lies inside the air, and the direction of its normals was taken
   from a neighbouring element. After an AURA pass part of them pointed inwards, so the monostatic RCS
