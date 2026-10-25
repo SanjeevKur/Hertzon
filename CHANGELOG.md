@@ -3,6 +3,37 @@
 All notable changes of each release. The release workflow copies the section of the released version into
 the GitHub release notes.
 
+## 0.2.1 (2026-10-25)
+
+### Added
+- **Update hint**: at start Hertzon asks GitHub in the background for the newest release. When it is newer
+  than the running version, the Message Manager and the status bar say "Hertzon X is available" with a link
+  to the release page. The start does not wait for it, and without network nothing is shown. Switch it off in
+  Tools > Options > General (or with the environment variable `HERTZON_NO_UPDATE_CHECK=1`).
+- **File > Open Example**: lists the example projects shipped with Hertzon (patch antenna, hairpin filter,
+  waveguide post, RCS models, ...) and opens the chosen one as an untitled copy. The example files stay
+  unchanged; Save asks for a new file name (in the Documents folder) and an analysis asks to save first.
+
+### Changed
+- **Field plots on helper sheets follow the sheet**: a field plot on a non-model object is drawn again on
+  the new shape when the object is moved, resized or otherwise changed. The solution stays valid, as
+  non-model objects are not part of the solve.
+
+### Fixed
+- **Clean edges for field plots on drawn planes**: the plot on a non-model sheet now ends exactly on the
+  sheet's outline, also for round outlines and sheets with holes. Before, whole cut triangles stuck out over
+  the edge or were missing next to it.
+- **Animate no longer resizes the 3D view**: the player bar under the view asked for about 1100 pixels of
+  width, so starting an animation squeezed the model tree and widened the 3D view to the same size every
+  time (and it stayed so after closing the player). The bar now fits the view as it is; long texts in it
+  are cut instead.
+- **RCS and far fields of scattering problems with AURA refinement**: the far-field surface (the box
+  between scatterer and radiation boundary) lies inside the air, and the direction of its normals was taken
+  from a neighbouring element. After an AURA pass part of them pointed inwards, so the monostatic RCS
+  jumped by several dB from pass to pass (NATO sphere: between -6.5 and +3.5 dB from the Mie value, and
+  the scattered power through the box fell below zero). The normals now point away from the box centre.
+  Local (Delaunay) and Remesh were not affected.
+
 ## 0.2.0 (2026-10-25)
 
 ### Added

@@ -134,6 +134,8 @@ solvers, openEMS (FDTD), electrostatics and magnetostatics, circuit co-simulatio
 
 ## Examples
 
+In Hertzon, **File > Open Example** opens any of them as an untitled copy, so the shipped files stay unchanged.
+
 | File | What it shows |
 |---|---|
 | `examples/WaveguidePost.hzn` | WR-90 waveguide with an inductive PEC post, wave ports, interpolating sweep 8-12 GHz |
@@ -193,6 +195,12 @@ The server offers tools to create projects, set variables and design settings, d
 geometry, list faces (index, centre, normal), assign boundaries, ports and mesh operations, define
 setups, sweeps and far-field spheres, validate, run, follow the adaptive passes, read S-parameters,
 gain or RCS, and render a picture of the model.
+
+## Design principles
+
+Hertzon's design principles are in [docs/PRINCIPLES.md](docs/PRINCIPLES.md). The first one: **every export
+is WYSIWYG**. Images, animations, plots, reports and data are saved exactly as Hertzon shows them: same
+size, speed, colours, scales and view.
 
 ## Layout
 
