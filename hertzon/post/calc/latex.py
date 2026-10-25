@@ -472,6 +472,8 @@ def to_text(tex: str, env: L.Env | None = None) -> str:
         if v in ("degree", "circ"):
             degree(atoms)
             return
+        if v == "backslash":
+            fail("Type the name after \\ and press Space, e.g. \\times or \\iint")
         if v == "placeholder":
             raw_text()
             fail("Fill in the empty box")

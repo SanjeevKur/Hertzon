@@ -77,8 +77,19 @@ function autocorrect() {
   return false;
 }
 
+// a backslash that came in as a character (\backslash t i m e s): the command it starts, on Space
+function fixBackslash() {
+  const lx = value(), m = /\\backslash\s*((?:[A-Za-z]\s*)+)$/.exec(lx);
+  if (!m) return false;
+  mf.setValue(lx.slice(0, m.index) + "\\" + m[1].replace(/\s+/g, "") + " ", { silenceNotifications: true });
+  mf.position = mf.lastOffset;
+  onInput();
+  return true;
+}
+
 function onInput() {
-  if (busy || mf.mode === "latex") { changed(); return; }
+  if (mf.mode === "latex") return;        // a command is being typed: wait for Space
+  if (busy) { changed(); return; }
   busy = true;
   try { autocorrect(); } finally { busy = false; }
   changed();
@@ -143,6 +154,13 @@ function start() {
   mf.addEventListener("mode-change", () => setTimeout(onInput, 0));
   mf.addEventListener("keydown", (e) => {
     if (e.key === "Enter" && mf.mode !== "latex") { e.preventDefault(); e.stopPropagation(); if (py) py.submit(); }
+    // where \\ needs AltGr (Ctrl+Alt) the editor takes it as a shortcut or as a plain backslash
+    // character; the command typed after it is made on Space (fixBackslash)
+    else if (e.key === "\\" && e.ctrlKey && e.altKey && mf.mode !== "latex") {
+      e.preventDefault(); e.stopPropagation();
+      mf.insert("\\backslash", { format: "latex" });
+    }
+    else if (e.key === " " && mf.mode !== "latex" && fixBackslash()) { e.preventDefault(); e.stopPropagation(); }
   }, true);
   new QWebChannel(qt.webChannelTransport, (ch) => { py = ch.objects.py; py.ready(); });
 }
