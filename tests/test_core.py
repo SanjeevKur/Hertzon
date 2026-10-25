@@ -1094,12 +1094,16 @@ def test_failed_fillet_leaves_object_unchanged(monkeypatch):
     p.designs[0].add_object("CreateRectangle", name="Patch", Position="0,0,0", Axis="Z", XSize="10", YSize="8")
     doc = Document(p)
     doc.rebuild()
-    win = MainWindow.__new__(MainWindow)  # only the command path, no window
+    class Win:  # only the command path of the main window, no widgets
+        des = property(lambda self: doc.design)
+        add_command_to_selection = MainWindow.add_command_to_selection
+        _edge_op = MainWindow._edge_op
+    win = Win()
     win.doc = doc
-    MainWindow._edge_op(win, "Fillet", {"Radius": "6", "Edges": "0"}, "Patch")
+    win._edge_op("Fillet", {"Radius": "6", "Edges": "0"}, "Patch")
     assert [c.kind for c in doc.design.obj("Patch").history] == ["CreateRectangle"]
     assert "Patch" in doc.tess and not doc.errors and not doc.redo_stack
     assert shown and "unchanged" in shown[0]
-    MainWindow._edge_op(win, "Fillet", {"Radius": "0.5", "Edges": "0"}, "Patch")
+    win._edge_op("Fillet", {"Radius": "0.5", "Edges": "0"}, "Patch")
     assert [c.kind for c in doc.design.obj("Patch").history] == ["CreateRectangle", "Fillet"]
     assert "Patch" in doc.tess and len(shown) == 1

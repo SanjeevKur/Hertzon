@@ -5,6 +5,19 @@ the GitHub release notes.
 
 ## Unreleased
 
+### Changed
+- **Examples on the current features**: all examples use hzAURA refinement and curved elements and are
+  saved in the current file format. New in the examples: field plots on cut planes (waveguide post, coax,
+  dipole, sphere, patch), a half dipole with a Perfect H symmetry plane next to the full one, a microstrip
+  line with a grouped 0603 chip capacitor (Lumped RLC) as a DC block, a dipole sweep with saved fields for
+  animations, 3D gain plots, and reports for impedance, gain cuts, antenna parameters and bistatic and
+  monostatic RCS in dBsm. Files saved by 0.2.2 and earlier still open as before.
+- **Tutorial**: new steps for cut planes, field animations and GIF export, a half model with a symmetry
+  plane (3.6) and a chip capacitor on a microstrip line (7); screenshots and numbers from the current
+  version.
+- **Solver Benchmark**: the three projects of Tools > Solver Benchmark use hzAURA; the mesher comparison
+  projects have an hzAURA variant next to each Local (Delaunay) one.
+
 ### Fixed
 - **Fillet on sheets**: a fillet on a sheet (for example the patch of a patch antenna) made the whole object
   disappear, because the fillet only worked on solids. On a flat sheet it now rounds the corners at both ends

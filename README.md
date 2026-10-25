@@ -108,8 +108,8 @@ solves start immediately. On Linux without a desktop, run under `xvfb-run`.
    with an ideal value, typical ESL/ESR or a Touchstone file of the vendor ([docs/LUMPED_ELEMENTS.md](docs/LUMPED_ELEMENTS.md)).
 4. **Analysis > Add Solution Setup**: solution frequency (single / multi / broadband), maximum
    passes, maximum Delta S, matrix convergence, minimum (converged) passes, percent refinement,
-   maximum refinement, lambda refinement, solver choice, mesh refinement method (AURA of EMerge by
-   default, local Delaunay or re-mesh). **Add Frequency Sweep**: discrete, interpolating or fast,
+   maximum refinement, lambda refinement, solver choice, mesh refinement method (hzAURA, EMerge's AURA
+   with exact curved surfaces, by default; local Delaunay or re-mesh). **Add Frequency Sweep**: discrete, interpolating or fast,
    linear step / count / log / single points.
 5. **Validation Check** (also checks overlapping solids exactly: partial overlaps of different
    materials are errors, except a metal in a dielectric with the design setting *Material override*; one
@@ -117,13 +117,14 @@ solves start immediately. On Linux without a desktop, run under `xvfb-run`.
    **Solution Data** shows the convergence table and plot, matrix data and mesh statistics.
 6. **Results**: rectangular plots, Smith chart, data table, radiation pattern, 3D polar plot;
    **Fields**: magnitude, complex magnitude and vector plots of E, H and surface current on faces,
-   objects or cut planes, with phase animation. Export Touchstone, CSV, images.
+   objects, cut planes or drawn planes, with phase animation and **Export GIF** of the animation as
+   shown. Export Touchstone, CSV, images.
    **Optimization** (conjugate gradient on report goals) and **Parametric** sweeps of design variables.
 
 See [docs/FEATURE_MATRIX.md](docs/FEATURE_MATRIX.md) for an overview of what is implemented and
 what is still missing.
 
-See [docs/MESHER.md](docs/MESHER.md) for how the adaptive mesh refinement works: EMerge's AURA (the
+See [docs/MESHER.md](docs/MESHER.md) for how the adaptive mesh refinement works: hzAURA (EMerge's AURA, the
 default), Hertzon's local Delaunay mesher hzmesh, curved elements and benchmark results.
 
 See [docs/BENCHMARKS.md](docs/BENCHMARKS.md) for solve times on a 32-core workstation: a patch antenna
@@ -135,26 +136,30 @@ solvers, openEMS (FDTD), electrostatics and magnetostatics, circuit co-simulatio
 ## Examples
 
 In Hertzon, **File > Open Example** opens any of them as an untitled copy, so the shipped files stay unchanged.
+All of them use the current defaults: **hzAURA** mesh refinement and curved elements. Most open with their
+reports and field plots ready: after **Analyze All** (F5) double-click a report, or right-click a field plot
+> **Animate** and **Export GIF...**.
 
 | File | What it shows |
 |---|---|
-| `examples/WaveguidePost.hzn` | WR-90 waveguide with an inductive PEC post, wave ports, interpolating sweep 8-12 GHz |
-| `examples/Microstrip.hzn` | 50 Ω microstrip on FR4, lumped ports, thin-conductor trace, **Auto Open - Filter**, sweep 1-6 GHz |
-| `examples/PatchAntenna.hzn` | 2.45 GHz inset-fed patch on FR4, **Auto Open** (radiation boundary), far field, gain pattern |
-| `examples/HairpinFilter.hzn` | Third-order hairpin band-pass filter at 2.45 GHz on RO4350B, copper losses, sweep 2-2.9 GHz and an optimization |
+| `examples/WaveguidePost.hzn` | WR-90 waveguide with an inductive PEC post, wave ports, interpolating sweep 8-12 GHz, Mag E on a cut plane halfway up the guide ([tutorial](docs/TUTORIAL.md#1-waveguide-with-wave-ports)) |
+| `examples/Microstrip.hzn` | 50 Ω microstrip on FR4, lumped ports, thin-conductor trace, **Auto Open - Filter**, sweep 1-6 GHz; second design with a **2.2 pF 0603 DC-block capacitor** (Lumped RLC from the Lumped Elements tab, inserted as a group) ([tutorial](docs/TUTORIAL.md#7-a-chip-capacitor-on-a-microstrip-line)) |
+| `examples/PatchAntenna.hzn` | 2.45 GHz inset-fed patch on FR4, **Auto Open** (radiation boundary), far field, gain pattern and 3D gain, surface current on the patch and Mag E on a cut plane through the feed |
+| `examples/HairpinFilter.hzn` | Third-order hairpin band-pass filter at 2.45 GHz on RO4350B, copper losses, sweep 2-2.9 GHz, an optimization and the surface current on the hairpins |
 | `examples/GPS_L1_RHCP.hzn` | 1.575 GHz GPS L1 ceramic patch (εr 20) with probe feed and stub on a feed board, circular polarization (RHCP) far field |
 | `examples/RotmanLens_24GHz.hzn` | 24 GHz Rotman lens beamformer on RO4350B in three designs: the lens with beam, array and dummy ports, the single array patch, and lens plus patch array with beam far fields |
-| `examples/PlaneWave.hzn` | Incident plane wave on a PEC sphere in a radiation box, and the same plane wave in an empty box |
-| `examples/NATO-Sphere.hzn` | RCS of a PEC sphere (radius 250 mm) at 1 GHz, plane wave, radiation boundary, Max Delta E 0.001, curved second-order elements |
-| `examples/DroneRCS.hzn` | RCS of an imported drone STL model (`Delta_Composites_Demo_3_Layers/`) at 1 GHz, plane wave |
-| `examples/Coax.hzn` | 20 mm, 50 Ω PTFE coax with TEM wave ports, sweep 1-10 GHz ([tutorial](docs/TUTORIAL.md#2-coaxial-cable-with-wave-ports)) |
-| `examples/Dipole.hzn` | Half-wave dipole for 1 GHz with a lumped port, **Auto Open**, far field and gain ([tutorial](docs/TUTORIAL.md#3-half-wave-dipole)) |
-| `examples/GerberTestBoard.hzn` | Two-layer board with copper shapes, cut-outs, a via and holes: the test case of **File > Export > Gerber** ([docs](docs/GERBER_EXPORT.md)) |
-| `examples/SphereRCS.hzn` | RCS of a 100 mm PEC sphere at 1 GHz, plane wave, radiation boundary, checked against the Mie series ([tutorial](docs/TUTORIAL.md#4-radar-cross-section-of-a-sphere)) |
+| `examples/PlaneWave.hzn` | Incident plane wave on a PEC sphere in a radiation box drawn by hand, and the same plane wave in an empty box |
+| `examples/NATO-Sphere.hzn` | RCS of a PEC sphere (radius 250 mm) at 1 GHz, plane wave, **Auto Open** with one wavelength of air, curved second-order elements, Mag E on a drawn plane |
+| `examples/DroneRCS.hzn` | RCS of an imported drone STL model (`Delta_Composites_Demo_3_Layers/`) at 1 GHz, plane wave, 3D RCS pattern |
+| `examples/Coax.hzn` | 20 mm, 50 Ω PTFE coax with TEM wave ports, sweep 1-10 GHz, Vector E across and Mag E along the line on cut planes ([tutorial](docs/TUTORIAL.md#2-coaxial-cable-with-wave-ports)) |
+| `examples/Dipole.hzn` | Half-wave dipole for 1 GHz with a lumped port, **Auto Open**, gain, impedance and antenna parameters; second design: the **half model with a Symmetry boundary** (Perfect H), whose far field includes the mirror image ([tutorial](docs/TUTORIAL.md#3-half-wave-dipole)) |
+| `examples/GerberTestBoard.hzn` | Two-layer board with copper shapes, cut-outs, a via (grouped with its pad) and holes: the test case of **File > Export > Gerber** ([docs](docs/GERBER_EXPORT.md)) |
+| `examples/SphereRCS.hzn` | RCS of a 100 mm PEC sphere at 1 GHz, plane wave, **Auto Open**, bistatic and monostatic RCS reports, checked against the Mie series ([tutorial](docs/TUTORIAL.md#4-radar-cross-section-of-a-sphere)) |
 
 `examples/benchmark/` holds the validation and timing cases (patch antenna, waveguide post against a reference,
 sphere RCS against the Mie series, scaling from small to large models) with their scripts.
-The first four examples are regenerated with `python examples/make_examples.py`.
+`python examples/make_examples.py` builds the first versions of four of them (waveguide, microstrip, patch,
+hairpin) from code; the shipped files were finished in Hertzon.
 
 ## Manufacturing data (Gerber)
 

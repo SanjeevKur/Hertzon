@@ -1,6 +1,6 @@
 # Mesher comparison: time to solution
 
-Hertzon's local Delaunay refinement (hzmesh, `Local (Delaunay)`) against EMerge's AURA (`AURA (EMerge)`)
+Hertzon's local Delaunay refinement (hzmesh, `Local (Delaunay)`) against EMerge's AURA (`hzAURA (EMerge)`)
 on the same models. Both runs of a case use the same error estimate (EMerge's, unchanged),
 the same convergence criterion, the same growth per pass (30 %) and curved elements. Only the refinement
 step between two passes differs.

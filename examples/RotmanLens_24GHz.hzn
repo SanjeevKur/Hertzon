@@ -10,6 +10,7 @@
     "AutoOpenBoundary": "Auto",
     "AutoOpenPadding": "",
     "FilterAirMargin": "12mm",
+    "MaterialOverride": "True",
     "RadiatingStructure": "True",
     "Sources": "{\"Beam1\": {\"mag\": 0.0, \"phase\": 0.0}, \"Beam2\": {\"mag\": 1.0, \"phase\": 0.0}, \"Beam3\": {\"mag\": 0.0, \"phase\": 0.0}, \"Beam4\": {\"mag\": 0.0, \"phase\": 0.0}, \"Beam5\": {\"mag\": 0.0, \"phase\": 0.0}, \"Arr1\": {\"mag\": 0.0, \"phase\": 0.0}, \"Arr2\": {\"mag\": 0.0, \"phase\": 0.0}, \"Arr3\": {\"mag\": 0.0, \"phase\": 0.0}, \"Arr4\": {\"mag\": 0.0, \"phase\": 0.0}, \"Arr5\": {\"mag\": 0.0, \"phase\": 0.0}, \"Arr6\": {\"mag\": 0.0, \"phase\": 0.0}, \"Arr7\": {\"mag\": 0.0, \"phase\": 0.0}, \"Dummy1\": {\"mag\": 0.0, \"phase\": 0.0}, \"Dummy2\": {\"mag\": 0.0, \"phase\": 0.0}, \"Dummy3\": {\"mag\": 0.0, \"phase\": 0.0}, \"Dummy4\": {\"mag\": 0.0, \"phase\": 0.0}, \"Dummy5\": {\"mag\": 0.0, \"phase\": 0.0}, \"Dummy6\": {\"mag\": 0.0, \"phase\": 0.0}}",
     "FieldType": "Total"
@@ -1323,7 +1324,7 @@
       "RefinementRatio": "0.6",
       "GrowthRate": "1.6",
       "EnforceRefinementPercent": "True",
-      "RefinementMethod": "Local (Delaunay)",
+      "RefinementMethod": "hzAURA (EMerge)",
       "SaveFields": "True",
       "Threads": "0",
       "_BasisNames": "v2"
@@ -1382,6 +1383,8 @@
     }
    ],
    "coord_systems": [],
+   "optimetrics": [],
+   "parametrics": [],
    "working_cs": "Global",
    "notes": ""
   },
@@ -1394,6 +1397,7 @@
     "AutoOpenBoundary": "Auto",
     "AutoOpenPadding": "",
     "FilterAirMargin": "12mm",
+    "MaterialOverride": "True",
     "RadiatingStructure": "True"
    },
    "variables": {
@@ -1642,7 +1646,7 @@
       "RefinementRatio": "0.6",
       "GrowthRate": "1.6",
       "EnforceRefinementPercent": "True",
-      "RefinementMethod": "Local (Delaunay)",
+      "RefinementMethod": "hzAURA (EMerge)",
       "SaveFields": "True",
       "Threads": "0",
       "_BasisNames": "v2"
@@ -1697,6 +1701,8 @@
    ],
    "field_plots": [],
    "coord_systems": [],
+   "optimetrics": [],
+   "parametrics": [],
    "working_cs": "Global",
    "notes": ""
   },
@@ -1709,6 +1715,7 @@
     "AutoOpenBoundary": "Auto",
     "AutoOpenPadding": "",
     "FilterAirMargin": "12mm",
+    "MaterialOverride": "True",
     "RadiatingStructure": "True",
     "Sources": "{\"Beam1\": {\"mag\": 0.0, \"phase\": 0.0}, \"Beam2\": {\"mag\": 1.0, \"phase\": 0.0}, \"Beam3\": {\"mag\": 0.0, \"phase\": 0.0}, \"Beam4\": {\"mag\": 0.0, \"phase\": 0.0}, \"Beam5\": {\"mag\": 0.0, \"phase\": 0.0}, \"Dummy1\": {\"mag\": 0.0, \"phase\": 0.0}, \"Dummy2\": {\"mag\": 0.0, \"phase\": 0.0}, \"Dummy3\": {\"mag\": 0.0, \"phase\": 0.0}, \"Dummy4\": {\"mag\": 0.0, \"phase\": 0.0}, \"Dummy5\": {\"mag\": 0.0, \"phase\": 0.0}, \"Dummy6\": {\"mag\": 0.0, \"phase\": -2.0}}",
     "FieldType": "Total"
@@ -3345,7 +3352,7 @@
       "RefinementRatio": "0.6",
       "GrowthRate": "1.6",
       "EnforceRefinementPercent": "True",
-      "RefinementMethod": "Local (Delaunay)",
+      "RefinementMethod": "hzAURA (EMerge)",
       "SaveFields": "True",
       "Threads": "0",
       "_BasisNames": "v2"
@@ -3442,6 +3449,8 @@
     }
    ],
    "coord_systems": [],
+   "optimetrics": [],
+   "parametrics": [],
    "working_cs": "Global",
    "notes": ""
   }
@@ -3449,5 +3458,5 @@
  "variables": {},
  "materials": [],
  "format": "hertzon-project",
- "version": 1
+ "version": 2
 }

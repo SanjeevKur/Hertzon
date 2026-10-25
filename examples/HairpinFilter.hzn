@@ -10,6 +10,7 @@
     "AutoOpenBoundary": "Auto",
     "AutoOpenPadding": "",
     "FilterAirMargin": "12mm",
+    "MaterialOverride": "True",
     "RadiatingStructure": "False"
    },
    "variables": {
@@ -293,7 +294,8 @@
       "Permeability": "1",
       "Roughness": "0um",
       "UseThickness": "True",
-      "Thickness": "t_cu"
+      "Thickness": "t_cu",
+      "TwoSided": "True"
      },
      "faces": [],
      "objects": [
@@ -314,7 +316,8 @@
       "Permeability": "1",
       "Roughness": "0um",
       "UseThickness": "True",
-      "Thickness": "t_cu"
+      "Thickness": "t_cu",
+      "TwoSided": "True"
      },
      "faces": [],
      "objects": [
@@ -405,7 +408,7 @@
       "RefinementRatio": "0.6",
       "GrowthRate": "1.6",
       "EnforceRefinementPercent": "True",
-      "RefinementMethod": "Local (Delaunay)",
+      "RefinementMethod": "hzAURA (EMerge)",
       "SaveFields": "True",
       "Threads": "0",
       "_BasisNames": "v2"
@@ -434,8 +437,37 @@
     }
    ],
    "spheres": [],
-   "reports": [],
-   "field_plots": [],
+   "reports": [
+    {
+     "name": "S Parameters",
+     "kind": "Rectangular",
+     "solution": "Setup1 : Sweep",
+     "traces": [
+      "dB(S(1,1))",
+      "dB(S(2,1))"
+     ],
+     "props": {}
+    }
+   ],
+   "field_plots": [
+    {
+     "name": "Mag_Jsurf_Copper",
+     "quantity": "Mag_Jsurf",
+     "solution": "Setup1 : LastAdaptive",
+     "faces": [],
+     "objects": [
+      "Hairpin1",
+      "Hairpin2",
+      "Hairpin3"
+     ],
+     "plane": "",
+     "props": {
+      "port": "1",
+      "freq": "0",
+      "phase": "0"
+     }
+    }
+   ],
    "coord_systems": [],
    "optimetrics": [
     {
@@ -573,6 +605,7 @@
      }
     }
    ],
+   "parametrics": [],
    "working_cs": "Global",
    "notes": ""
   }
@@ -580,5 +613,5 @@
  "variables": {},
  "materials": [],
  "format": "hertzon-project",
- "version": 1
+ "version": 2
 }
