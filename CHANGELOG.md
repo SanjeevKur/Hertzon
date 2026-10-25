@@ -6,6 +6,12 @@ the GitHub release notes.
 ## Unreleased
 
 ### Added
+- **Animations as GIF**: **Export GIF...** in the animation bar (or Fields > Export Animation as GIF...)
+  saves all frames of the running animation as a looping GIF. Each frame is the view exactly as shown, in
+  its pixel size, and the GIF runs at the speed you see: the bar measures the frames per second actually
+  drawn during playback (shown next to the speed setting, it can be lower than the setting for heavy
+  plots) and the GIF uses that rate. Without a measurement the export first plays the animation for a
+  moment to measure it.
 - **Object groups**: Edit > Group (Ctrl+G) puts the selected objects, also solids, sheets and lines
   together, into one group. A click on a member in the 3D view selects the whole group, so Move, Rotate,
   Mirror, Copy, Hide or Delete act on all of it; the model tree lists the groups under **Groups** (rename,

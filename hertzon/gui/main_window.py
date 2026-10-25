@@ -421,6 +421,7 @@ class MainWindow(QMainWindow):
         for q in F.QUANTITIES:
             pf.addAction(q, lambda _=False, q=q: self.plot_fields(q))
         fm.addAction("Animate Last Field Plot", self.toggle_animation)
+        fm.addAction("Export Animation as GIF...", self.export_animation_gif)
         fm.addAction("Clear Field Overlays", self.clear_overlays)
         om = m.addMenu("Optimization")
         om.addAction("Add Parametric...", self.add_parametric)
@@ -4211,6 +4212,12 @@ class MainWindow(QMainWindow):
             self.tabs.setCurrentIndex(0)
             self.anim_bar.load([p.name for p in fps], frames)
             self.anim_bar.play()
+
+    def export_animation_gif(self) -> None:
+        if not self.anim_bar.frames:
+            QMessageBox.information(self, "Export GIF", "Start an animation first (Animate).")
+            return
+        self.anim_bar.export_gif()
 
     def clear_overlays(self, hide: bool = True) -> None:
         """Remove all field overlays; hide: they stay hidden until a plot or the Field Overlays folder is
