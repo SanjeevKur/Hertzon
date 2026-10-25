@@ -925,7 +925,7 @@ class MainWindow(QMainWindow):
 
     def _cs_changed(self) -> None:
         self.view.refresh_cs()
-        self.view.plotter.render()
+        self.view.request_render()
         self.model_tree.rebuild()
         self._sync_cs_combo()
 
@@ -1181,7 +1181,7 @@ class MainWindow(QMainWindow):
         on = not acts[0].GetVisibility()
         for a in acts:
             a.SetVisibility(on)
-        self.view.plotter.render()
+        self.view.request_render()
 
     def hide_all(self) -> None:
         for o in self.des.objects:
@@ -1195,7 +1195,7 @@ class MainWindow(QMainWindow):
     def _cam_zoom(self, f: float) -> None:
         w, h = self.view.plotter.renderer.GetSize()
         self.view.zoom_at_cursor(f, (w // 2, h // 2))
-        self.view.plotter.render()
+        self.view.request_render()
 
     def _cam_pan(self, dx: int, dy: int) -> None:
         import numpy as _np
@@ -1208,7 +1208,7 @@ class MainWindow(QMainWindow):
         sh = (dx * right + dy * up) * d
         cam.SetFocalPoint(*(fp + sh))
         cam.SetPosition(*(pos + sh))
-        self.view.plotter.render()
+        self.view.request_render()
 
     def _cam_rot(self, az: float, el: float) -> None:
         cam = self._cam()
@@ -1216,7 +1216,7 @@ class MainWindow(QMainWindow):
         cam.Elevation(el)
         cam.OrthogonalizeViewUp()
         self.view.plotter.renderer.ResetCameraClippingRange()
-        self.view.plotter.render()
+        self.view.request_render()
 
     def _on_selection(self) -> None:
         self._update_sel_buttons()
@@ -2875,7 +2875,7 @@ class MainWindow(QMainWindow):
         v.update_grid()
         if v.draw is not None:
             v._update_preview()
-        v.plotter.render()
+        v.request_render()
         if hasattr(self, "plane_combo") and self.plane_combo.currentText() != plane:
             self.plane_combo.blockSignals(True)
             self.plane_combo.setCurrentText(plane)
@@ -4224,7 +4224,7 @@ class MainWindow(QMainWindow):
             self.anim_plot = None
         if gone:
             self.hint.setText("Ready")
-            self.view.plotter.render()
+            self.view.request_render()
 
     def hide_overlay(self, name: str) -> None:
         if name in self.anim_bar.names:
