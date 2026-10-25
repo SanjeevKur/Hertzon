@@ -11,7 +11,8 @@ the GitHub release notes.
   its pixel size, and the GIF runs at the speed you see: the bar measures the frames per second actually
   drawn during playback (shown next to the speed setting, it can be lower than the setting for heavy
   plots) and the GIF uses that rate. Without a measurement the export first plays the animation for a
-  moment to measure it.
+  moment to measure it. All frames share one colour palette, so the colour scale and the field do not
+  change colour from frame to frame.
 - **Object groups**: Edit > Group (Ctrl+G) puts the selected objects, also solids, sheets and lines
   together, into one group. A click on a member in the 3D view selects the whole group, so Move, Rotate,
   Mirror, Copy, Hide or Delete act on all of it; the model tree lists the groups under **Groups** (rename,
