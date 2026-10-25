@@ -3,7 +3,7 @@
 All notable changes of each release. The release workflow copies the section of the released version into
 the GitHub release notes.
 
-## Unreleased
+## 0.2.2 (2026-10-25)
 
 ### Changed
 - **AURA refinement keeps curved surfaces exact (hzAURA)**: EMerge `55ebd4d`. Where a new node on a curved
