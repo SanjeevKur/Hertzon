@@ -122,15 +122,16 @@ def test_rectangle_sizes_named_by_axis():
 
 def test_thicken_goes_to_positive_side():
     """Thicken sheet with a positive thickness grows to the positive side of the sheet's main axis, however
-    the sheet was drawn (a rectangle dragged to -X has the opposite winding); negative thickness and
-    BothSides keep working."""
-    def zrange(kind, thick="1", both="False", **props):
+    the sheet was drawn (a rectangle dragged to -X has the opposite winding); negative thickness, Reverse
+    direction and BothSides go to the other or both sides."""
+    def zrange(kind, thick="1", both="False", rev="False", **props):
         pr = Project()
         d = pr.designs[0]
         d.add_object(kind, name="S", **props)
         if kind == "CreatePolyline":
             d.obj("S").history.append(Command("Cover", {}))
-        d.obj("S").history.append(Command("ThickenSheet", {"Thickness": thick, "BothSides": both}))
+        d.obj("S").history.append(Command("ThickenSheet", {"Thickness": thick, "BothSides": both,
+                                                                   "ReverseDirection": rev}))
         P = np.asarray(K.tessellate(K.build_design(d, d.evaluator(pr)))["S"].points)
         return P.min(axis=0) * 1e3, P.max(axis=0) * 1e3
 
@@ -147,6 +148,40 @@ def test_thicken_goes_to_positive_side():
     assert (lo[2], hi[2]) == pytest.approx((-1, 0), abs=1e-9)
     lo, hi = zrange("CreateRectangle", "1", "True", Position="0,0,0", Axis="Z", XSize="-2", YSize="3")
     assert (lo[2], hi[2]) == pytest.approx((-1, 1), abs=1e-9)
+    lo, hi = zrange("CreateRectangle", rev="True", Position="0,0,0", Axis="Z", XSize="-2", YSize="3")
+    assert (lo[2], hi[2]) == pytest.approx((-1, 0), abs=1e-9)
+
+
+def test_thicken_preview_arrow():
+    """The Thicken sheet dialog draws an arrow on each sheet in the direction the kernel thickens to."""
+    import types
+    import pyvista as pv
+    from hertzon.gui import viewer as Vw
+    View = type("View", (), {k: Vw.ModelerView.__dict__[k]
+                             for k in ("show_thicken_arrows", "clear_thicken_arrows")})
+    v = View()
+    removed = []
+    v.plotter = types.SimpleNamespace(add_mesh=lambda mesh, **kw: mesh,
+                                      renderer=types.SimpleNamespace(RemoveActor=lambda a: None))
+    top = types.SimpleNamespace(AddActor=lambda a: None, RemoveActor=removed.append)
+    v._top_layer = lambda: top
+    v.request_render = lambda: None
+    v.direction_actors = []
+    sheet = pv.Plane(center=(1, 2, 0), direction=(0, 0, -1), i_size=4, j_size=2)   # face normal -Z
+    box = pv.Box()
+    v.actors = {"S": Vw.ObjActors(mesh=sheet, dim=2), "B": Vw.ObjActors(mesh=box, dim=3)}
+
+    def tips():
+        return [np.asarray(m.points)[:, 2].max() - np.asarray(m.points)[:, 2].min() > 0
+                and np.sign(np.asarray(m.points)[:, 2].sum()) for m in v.direction_actors]
+    v.show_thicken_arrows(["S", "B"])
+    assert tips() == [1]
+    v.show_thicken_arrows(["S"], reverse=True)
+    assert tips() == [-1] and len(removed) == 1
+    v.show_thicken_arrows(["S"], both=True)
+    assert sorted(tips()) == [-1, 1]
+    v.clear_thicken_arrows()
+    assert v.direction_actors == [] and len(removed) == 4
 
 
 def test_antenna_report_expressions():

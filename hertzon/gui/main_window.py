@@ -2342,7 +2342,18 @@ class MainWindow(QMainWindow):
         dlg = NamedPropsDialog(kind, kind, props, vals, self.doc.evaluator(), parent=self,
                                info=f"Apply to: {', '.join(objs)}")
         dlg.name_edit.setEnabled(False)
-        if dlg.exec() != QDialog.Accepted:
+        if kind == "ThickenSheet":          # arrows in the 3D view show where the sheets grow
+            def arrows(*_):
+                self.view.show_thicken_arrows(objs, dlg.values.get("ReverseDirection") == "True",
+                                              dlg.values.get("BothSides") == "True")
+            dlg.grid.changed.connect(arrows)
+            arrows()
+        try:
+            accepted = dlg.exec() == QDialog.Accepted
+        finally:
+            if kind == "ThickenSheet":
+                self.view.clear_thicken_arrows()
+        if not accepted:
             return
         self.add_command_to_selection(kind, dlg.values, objs)
 

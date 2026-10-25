@@ -78,7 +78,8 @@ the GitHub release notes.
 - **Thicken sheet direction**: a positive thickness now always thickens to the positive side of the
   sheet's main axis (+Z for a sheet in XY), a negative one to the other side. Before, the direction followed
   the winding of the outline, so a rectangle dragged to -X or -Y, or a polyline drawn clockwise and covered,
-  was thickened to -Z.
+  was thickened to -Z. While the Thicken dialog is open, an arrow on each sheet in the 3D view shows the
+  direction, and the new option **Reverse direction** thickens to the other side.
 - **Far fields with symmetry planes**: the far field (gain, directivity, pattern, RCS) of a half or quarter
   model now includes the mirror images at Symmetry boundaries (Perfect E or Perfect H, planes parallel to XY,
   YZ or ZX). Before, only the simulated part radiated. Fields and radiated power refer to 1 W into the full

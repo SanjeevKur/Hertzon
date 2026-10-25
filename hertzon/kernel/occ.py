@@ -847,13 +847,16 @@ def _face_normal(dimtags) -> np.ndarray:
     return n / (np.linalg.norm(n) + 1e-300)
 
 
-def _thicken_normal(dimtags) -> np.ndarray:
-    """Direction of Thicken sheet: the sheet normal, pointing to the positive side of the sheet's main axis
-    (+Z for a sheet in XY). The face normal itself follows the winding of the outline, i.e. how the sheet
-    was drawn (a rectangle dragged to -X, a polyline drawn clockwise), so its sign is not used."""
-    n = _face_normal(dimtags)
+def thicken_direction(normal, reverse: bool = False) -> np.ndarray:
+    """Direction of Thicken sheet for a sheet normal: pointing to the positive side of the sheet's main axis
+    (+Z for a sheet in XY), opposite with ``reverse``. The face normal itself follows the winding of the
+    outline, i.e. how the sheet was drawn (a rectangle dragged to -X, a polyline drawn clockwise), so its
+    sign is not used. Also used by the direction preview of the GUI."""
+    n = np.asarray(normal, float)
+    n = n / (np.linalg.norm(n) + 1e-300)
     main = int(np.flatnonzero(np.abs(n) > np.abs(n).max() - 1e-9)[0])   # first axis on a tie
-    return -n if n[main] < 0 else n
+    n = -n if n[main] < 0 else n
+    return -n if reverse else n
 
 
 def _apply(cmd: Command, dt: list[tuple[int, int]], ctx: BuildContext, owner: str) -> list[tuple[int, int]]:
@@ -888,7 +891,7 @@ def _apply(cmd: Command, dt: list[tuple[int, int]], ctx: BuildContext, owner: st
             if dim != 2:
                 raise GeometryError("Thicken sheet needs a sheet object")
             t = ev.length(p["Thickness"])
-            n = _thicken_normal(dt)
+            n = thicken_direction(_face_normal(dt), p.get("ReverseDirection") == "True")
             if p.get("BothSides") == "True":
                 o.translate(dt, *(-n * t))
                 t *= 2
