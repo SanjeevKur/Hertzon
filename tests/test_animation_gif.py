@@ -9,7 +9,7 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 
-from hertzon.gui.gif_export import MIN_DELAY_CS, FpsMeter, gif_delays, write_gif
+from hertzon.gui.gif_export import MIN_DELAY_CS, FpsMeter, gif_delays, gif_palette, write_gif
 
 
 def test_delays_keep_the_loop_length():
@@ -53,6 +53,41 @@ def test_gif_frames_size_and_timing(tmp_path):
         assert g.info.get("loop") == 0
     with pytest.raises(ValueError):
         write_gif(str(tmp_path / "b.gif"), [imgs[0], imgs[0][:10]], 5.0)
+
+
+def test_colours_stay_the_same_in_every_frame(tmp_path):
+    """More than 256 colours: one palette for all frames, so a part that does not change (the colour bar)
+    looks the same in every frame, and a small coloured part is not swallowed by a big gradient."""
+    from PIL import Image
+    h, w = 120, 200
+    ramp = np.linspace(0, 1, 100)[:, None]
+    bar = (np.concatenate([ramp, 1 - ramp, 0.5 * ramp], 1) * 255).astype(np.uint8)      # 100 colours
+    imgs = []
+    for i in range(8):
+        im = np.zeros((h, w, 3), np.uint8)
+        x = np.linspace(0, 1, w - 20)
+        im[:100, :w - 20] = (np.stack([x, (x + i / 8) % 1, 1 - x], 1) * 255).astype(np.uint8)[None]
+        im[100:, :w - 20] = (180, 190, 200)
+        im[110:114, 5:9] = (255, 0, 255)                                                # 16 rare pixels
+        im[:100, w - 20:] = bar[:, None]
+        imgs.append(im)
+    assert len(gif_palette(imgs)) == 256
+    path = tmp_path / "c.gif"
+    write_gif(str(path), imgs, 10.0)
+    with Image.open(path) as g:
+        out = []
+        for k in range(g.n_frames):
+            g.seek(k)
+            out.append(np.asarray(g.convert("RGB")).astype(int))
+    assert len(out) == 8
+    for o in out[1:]:
+        assert np.array_equal(o[:, w - 20:], out[0][:, w - 20:])                    # colour bar unchanged
+        assert np.array_equal(o[100:, :w - 20], out[0][100:, :w - 20])
+    for o, im in zip(out, imgs):
+        assert np.abs(o - im).sum(-1).mean() < 12
+        assert np.abs(o[110:114, 5:9] - (255, 0, 255)).sum(-1).max() < 40
+    few = [np.full((4, 4, 3), (10 * k, 0, 0), np.uint8) for k in range(5)]
+    assert len(gif_palette(few)) == 5                                                # exact when it fits
 
 
 def test_export_uses_the_measured_rate_and_the_view_size(tmp_path):
