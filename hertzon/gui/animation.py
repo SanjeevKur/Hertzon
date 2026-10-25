@@ -41,7 +41,7 @@ class AnimationSetupDialog(QDialog):
             sb.setValue(v)
         self.nph = QSpinBox()
         self.nph.setRange(2, 721)
-        self.nph.setValue(19)
+        self.nph.setValue(35)
         f.addRow("Start", self.ph0)
         f.addRow("Stop", self.ph1)
         f.addRow("Steps", self.nph)

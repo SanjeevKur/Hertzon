@@ -76,3 +76,16 @@ def test_grid_cache_rereads_changed_files(plot, tmp_path):
                 E_0_1=2 * _field(nodes[tets].reshape(-1, 3)), H_0_1=_field(nodes[tets].reshape(-1, 3)))
     _, f3 = F.load_grid(st, "LastAdaptive")
     assert float(f3["freq_0"][0]) == 2e9
+
+
+def test_phase_animation_defaults_to_35_steps():
+    import os
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    from PySide6.QtWidgets import QApplication
+    from hertzon.gui.animation import AnimationSetupDialog
+    app = QApplication.instance() or QApplication([])  # noqa: F841
+    fp = types.SimpleNamespace(name="P", props={})
+    dlg = AnimationSetupDialog(None, fp, [1e9], [1])
+    assert dlg.nph.value() == 35
+    frames = dlg.frames(fp)
+    assert len(frames) == 34 and frames[0][1]["phase"] == 0.0     # 0..360: the last step equals the first
