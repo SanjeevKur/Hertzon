@@ -194,6 +194,12 @@ geometry, list faces (index, centre, normal), assign boundaries, ports and mesh 
 setups, sweeps and far-field spheres, validate, run, follow the adaptive passes, read S-parameters,
 gain or RCS, and render a picture of the model.
 
+## Design principles
+
+Hertzon's design principles are in [docs/PRINCIPLES.md](docs/PRINCIPLES.md). The first one: **every export
+is WYSIWYG**. Images, animations, plots, reports and data are saved exactly as Hertzon shows them: same
+size, speed, colours, scales and view.
+
 ## Layout
 
 The Python package keeps its short name `hertzon`, and projects keep the `.hzn` extension.
