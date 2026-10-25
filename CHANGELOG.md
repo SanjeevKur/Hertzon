@@ -36,6 +36,11 @@ the GitHub release notes.
   **Auto Integration Line** places it between the conductors again.
 
 ### Changed
+- **Field plot animations compute much faster**: a phase animation builds the plot (surfaces, cut planes,
+  arrow positions) once and only turns the field for each frame, instead of building the whole plot again.
+  On a patch antenna with 54 000 tetrahedra, 18 frames of Mag_E on the patch take 0.15 s instead of 21 s,
+  on a cut plane 0.2 s instead of 6 s. Frequency and excitation animations no longer read the field file
+  again for every frame, and the mesh faces of a plotted sheet or object are found only once per solution.
 - **Documentation** brought up to the current state: the README, the website and the feature overview
   describe AURA as the default refinement, EMerge's curved elements, object groups, box selection,
   coordinate systems, parametric sweeps, plane waves and symmetry planes; docs/MESHER.md covers all
