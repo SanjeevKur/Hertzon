@@ -335,7 +335,8 @@ to check an RCS setup. The finished project is `examples/SphereRCS.hzn`, and the
 1. **Insert Design**, **Solution Type**: **Modal**, **Auto Open**, **Open boundary: Radiation**.
    With an incident plane wave Hertzon solves for the scattered field, and the incident wave enters
    through the radiation boundary. It is used for plane waves whatever boundary is picked here, and
-   the region gets λ/2 of air around the object, room for the far-field surface.
+   the region gets one wavelength of air around the object, as the radiation boundary is more
+   accurate the farther out it lies. The far field is integrated over a box λ/8 around the object.
 2. **Design Properties**: `R = 100mm`.
 
 ### 4.2 Geometry
