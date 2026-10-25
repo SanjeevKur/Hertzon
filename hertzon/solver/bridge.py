@@ -2005,8 +2005,10 @@ def _refine_aura(m, error, pct: float, step: int):
                 m._aura_brep = BrepSnapshot.empty()
         periodic = [(bc.face1.tags, bc.face2.tags, np.asarray(bc.dv)) for bc in m.mesher._get_periodic_bcs()]
         t0 = time.time()
+        # cavity: hzAURA, new boundary nodes that bisection cannot project are put on the CAD surface and
+        # their neighbourhood is re-meshed (constrained Delaunay cavity), so the refined surface has no dents
         new, rep = refine_mesh_step(m.mesh, np.asarray(error, float), brep=m._aura_brep, growth=pct / 100.0,
-                                    periodic=periodic)
+                                    periodic=periodic, cavity=True)
         n0 = m.mesh.n_tets
         m._install_refined_mesh(new)
         m._local_mesh = None
