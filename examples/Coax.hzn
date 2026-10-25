@@ -9,7 +9,8 @@
     "AutoOpen": "Off",
     "AutoOpenBoundary": "Auto",
     "AutoOpenPadding": "",
-    "FilterAirMargin": "12mm"
+    "FilterAirMargin": "12mm",
+    "MaterialOverride": "True"
    },
    "variables": {
     "a": "0.5mm",
@@ -202,7 +203,7 @@
       "RefinementRatio": "0.6",
       "GrowthRate": "1.6",
       "EnforceRefinementPercent": "True",
-      "RefinementMethod": "Local (Delaunay)",
+      "RefinementMethod": "hzAURA (EMerge)",
       "SaveFields": "True",
       "Threads": "0",
       "_BasisNames": "v2"
@@ -231,8 +232,55 @@
     }
    ],
    "spheres": [],
-   "reports": [],
-   "field_plots": [],
+   "reports": [
+    {
+     "name": "S Parameters",
+     "kind": "Rectangular",
+     "solution": "Setup1 : Sweep",
+     "traces": [
+      "dB(S(1,1))",
+      "dB(S(2,1))"
+     ],
+     "props": {}
+    },
+    {
+     "name": "Phase S21",
+     "kind": "Rectangular",
+     "solution": "Setup1 : Sweep",
+     "traces": [
+      "ang_deg(S(2,1))"
+     ],
+     "props": {}
+    }
+   ],
+   "field_plots": [
+    {
+     "name": "Vector_E_Cross",
+     "quantity": "Vector_E",
+     "solution": "Setup1 : LastAdaptive",
+     "faces": [],
+     "objects": [],
+     "plane": "XY@L/2",
+     "props": {
+      "port": "1",
+      "freq": "0",
+      "phase": "0"
+     }
+    },
+    {
+     "name": "Mag_E_Along",
+     "quantity": "Mag_E",
+     "solution": "Setup1 : LastAdaptive",
+     "faces": [],
+     "objects": [],
+     "plane": "XZ@0",
+     "props": {
+      "port": "1",
+      "freq": "0",
+      "phase": "0"
+     }
+    }
+   ],
    "coord_systems": [],
    "optimetrics": [],
    "parametrics": [],
@@ -243,5 +291,5 @@
  "variables": {},
  "materials": [],
  "format": "hertzon-project",
- "version": 1
+ "version": 2
 }

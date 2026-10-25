@@ -10,6 +10,7 @@
     "AutoOpenBoundary": "Radiation",
     "AutoOpenPadding": "",
     "FilterAirMargin": "12mm",
+    "MaterialOverride": "True",
     "RadiatingStructure": "True"
    },
    "variables": {
@@ -266,7 +267,7 @@
       "RefinementRatio": "0.6",
       "GrowthRate": "2",
       "EnforceRefinementPercent": "True",
-      "RefinementMethod": "Local (Delaunay)",
+      "RefinementMethod": "hzAURA (EMerge)",
       "SaveFields": "False",
       "Threads": "0",
       "HybridRemeshPasses": "4",
@@ -323,5 +324,5 @@
  "variables": {},
  "materials": [],
  "format": "hertzon-project",
- "version": 1
+ "version": 2
 }

@@ -10,6 +10,7 @@
     "AutoOpenBoundary": "Radiation",
     "AutoOpenPadding": "",
     "FilterAirMargin": "12mm",
+    "MaterialOverride": "True",
     "RadiatingStructure": "True"
    },
    "variables": {
@@ -266,7 +267,7 @@
       "RefinementRatio": "0.6",
       "GrowthRate": "2",
       "EnforceRefinementPercent": "True",
-      "RefinementMethod": "Local (Delaunay)",
+      "RefinementMethod": "hzAURA (EMerge)",
       "SaveFields": "True",
       "Threads": "0",
       "HybridRemeshPasses": "4",
@@ -320,10 +321,62 @@
       "dB(S(1,1))"
      ],
      "props": {}
+    },
+    {
+     "name": "Gain E-plane / H-plane",
+     "kind": "Radiation Pattern",
+     "solution": "Setup1 : LastAdaptive",
+     "traces": [
+      "dB(GainTotal)"
+     ],
+     "props": {
+      "cut": "Phi",
+      "cut_value": "90"
+     }
+    },
+    {
+     "name": "3D Gain",
+     "kind": "3D Polar Plot",
+     "solution": "Setup1 : LastAdaptive",
+     "traces": [
+      "dB(GainTotal)"
+     ],
+     "props": {}
     }
    ],
-   "field_plots": [],
+   "field_plots": [
+    {
+     "name": "Mag_Jsurf_Patch",
+     "quantity": "Mag_Jsurf",
+     "solution": "Setup1 : LastAdaptive",
+     "faces": [],
+     "objects": [
+      "Patch"
+     ],
+     "plane": "",
+     "props": {
+      "port": "1",
+      "freq": "0",
+      "phase": "0"
+     }
+    },
+    {
+     "name": "Mag_E_YZ",
+     "quantity": "Mag_E",
+     "solution": "Setup1 : LastAdaptive",
+     "faces": [],
+     "objects": [],
+     "plane": "YZ@0",
+     "props": {
+      "port": "1",
+      "freq": "0",
+      "phase": "0"
+     }
+    }
+   ],
    "coord_systems": [],
+   "optimetrics": [],
+   "parametrics": [],
    "working_cs": "Global",
    "notes": ""
   }
@@ -331,5 +384,5 @@
  "variables": {},
  "materials": [],
  "format": "hertzon-project",
- "version": 1
+ "version": 2
 }

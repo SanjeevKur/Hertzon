@@ -10,6 +10,7 @@
     "AutoOpenBoundary": "Auto",
     "AutoOpenPadding": "",
     "FilterAirMargin": "12mm",
+    "MaterialOverride": "True",
     "RadiatingStructure": "False"
    },
    "variables": {
@@ -86,8 +87,8 @@
        "props": {
         "Position": "0,0,0",
         "Axis": "Y",
-        "Width": "b",
-        "Height": "a"
+        "ZSize": "b",
+        "XSize": "a"
        },
        "suppressed": false
       }
@@ -111,8 +112,8 @@
        "props": {
         "Position": "0,L,0",
         "Axis": "Y",
-        "Width": "b",
-        "Height": "a"
+        "ZSize": "b",
+        "XSize": "a"
        },
        "suppressed": false
       }
@@ -197,15 +198,16 @@
       "MinimumPasses": "2",
       "MinimumConvergedPasses": "2",
       "BasisOrder": "Second Order",
+      "CurvedElements": "True",
       "Solver": "Auto",
       "ErrorInclusion": "50",
       "RefinementRatio": "0.6",
       "GrowthRate": "1.6",
       "EnforceRefinementPercent": "True",
+      "RefinementMethod": "Local (Delaunay)",
       "SaveFields": "False",
       "Threads": "0",
-      "_BasisNames": "v2",
-      "RefinementMethod": "Local (Delaunay, experimental)"
+      "_BasisNames": "v2"
      },
      "sweeps": [
       {
@@ -304,6 +306,8 @@
     }
    ],
    "coord_systems": [],
+   "optimetrics": [],
+   "parametrics": [],
    "working_cs": "Global",
    "notes": ""
   }
@@ -311,5 +315,5 @@
  "variables": {},
  "materials": [],
  "format": "hertzon-project",
- "version": 1
+ "version": 2
 }
