@@ -1,22 +1,23 @@
-"""Fields Calculator panel (Results > Fields Calculator), docked next to the 3D view.
+"""Fields Calculator (Results > Fields > Fields Calculator): its own window next to the modeler.
 
-Expressions are typed as text (the same function names as the report expressions); the panel shows the
-formula typeset, the kind and unit while typing, underlines errors where they are, and evaluates on the
-solution, frequency, excitation and phase chosen at the top. Named expressions are saved with the design and
-appear in Plot Fields (fields) and in reports (values). A click in the 3D view inserts the picked object or
-face at the cursor while "Pick" is on."""
+Left the expressions of the design, the functions and a library; in the middle the expression, built from
+building blocks or typed as text (the same function names as the report expressions), shown typeset with its
+kind and unit, errors underlined where they are; right the result on the solution, frequency, excitation and
+phase chosen at the top. An operation over a geometry (integral, maximum, ...) hides the window and asks for
+the face, object or line in the 3D view. Named expressions are saved with the design and appear in Plot Fields
+(fields) and in reports (values)."""
 from __future__ import annotations
 
 import io
 import re
 
 from PySide6.QtCore import QStringListModel, Qt, QTimer, Signal
-from PySide6.QtGui import QColor, QFont, QPixmap, QTextCharFormat, QTextCursor
+from PySide6.QtGui import QColor, QFont, QKeySequence, QPixmap, QShortcut, QTextCharFormat, QTextCursor
 from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox, QCompleter, QDialog, QDialogButtonBox,
                                QDoubleSpinBox, QFormLayout, QFrame, QGridLayout, QGroupBox, QHBoxLayout, QLabel,
-                               QLineEdit, QListWidget, QMessageBox, QPlainTextEdit, QPushButton, QRadioButton,
-                               QSizePolicy, QTextEdit, QToolButton, QTreeWidget, QTreeWidgetItem, QVBoxLayout,
-                               QWidget, QButtonGroup)
+                               QLineEdit, QListWidget, QMainWindow, QMessageBox, QPlainTextEdit, QPushButton,
+                               QSizePolicy, QSplitter, QTextEdit, QToolBar, QToolButton, QTreeWidget,
+                               QTreeWidgetItem, QVBoxLayout, QWidget)
 
 from ..post.calc import lang as L
 from ..post.calc import library as LIB
@@ -151,126 +152,349 @@ class ExprEdit(QPlainTextEdit):
         pop.hide()
 
 
-def _sep() -> QFrame:
-    f = QFrame()
-    f.setFrameShape(QFrame.HLine)
-    f.setStyleSheet("color:#e5e7eb")
-    return f
+STYLE = """
+QMainWindow#FieldsCalculator { background:#f6f7f9; }
+QWidget#Side, QWidget#Right { background:#fbfbfc; }
+QLabel[role="h"] { color:#5a6476; font-size:11px; font-weight:600; letter-spacing:0.5px; }
+QLabel[role="muted"] { color:#6b7280; }
+QLineEdit#Name { font-size:20px; font-weight:600; border:none; border-bottom:1px solid #c3c8d2;
+                 background:transparent; padding:2px; }
+QLineEdit#Desc { border:none; border-bottom:1px dashed #c3c8d2; background:transparent; color:#4b5563;
+                 padding:2px; }
+QFrame#Group { background:#ffffff; border:1px solid #d6dae1; border-radius:4px; }
+QFrame#Group QLabel { color:#7a8496; font-size:10px; font-weight:600; border:none; }
+QToolButton[role="sym"] { font-family:"Cambria Math","STIX Two Math","Times New Roman",serif; font-size:15px;
+                          min-width:28px; min-height:24px; border:1px solid #e1e4ea; border-radius:3px;
+                          background:#fafbfc; padding:1px 4px; }
+QToolButton[role="sym"]:hover { background:#e8eefc; border-color:#9fb4ee; }
+QLabel#Formula { background:#ffffff; border:1px solid #c3c8d2; border-radius:4px; }
+QLabel#Value { font-size:30px; font-weight:600; }
+QPushButton#Primary { background:#2f5bd3; color:white; border:1px solid #2a50bb; border-radius:4px;
+                      padding:5px 14px; font-weight:600; }
+QPushButton#Primary:hover { background:#2a50bb; }
+QLabel#Banner { background:#fff7e0; border:1px solid #e6c766; border-radius:4px; padding:6px; }
+"""
+
+# palette: (group, [(label, text inserted, tooltip)])
+PALETTE = [
+    ("FIELDS", [("E", "E", "electric field (V/m)"), ("H", "H", "magnetic field (A/m)"),
+                ("J", "J", "volume current density (A/m²)"), ("Jₛ", "Js", "surface current density n×H (A/m)"),
+                ("S", "S", "complex Poynting vector ½ E×H* (W/m²)"), ("D", "D", "electric flux density"),
+                ("B", "B", "magnetic flux density")]),
+    ("OPERATORS", [("|x|", "|", "magnitude |…|"), ("·", "·", "dot product"), ("×", "×", "cross product"),
+                   ("x²", "^2", "square"), ("√", "sqrt(", "square root"), ("Re", "re(", "real part"),
+                   ("Im", "im(", "imaginary part"), ("x*", "conj(", "complex conjugate")]),
+    ("CALCULUS", [("∇×", "curl(", "curl"), ("∇·", "div(", "divergence"), ("∇", "grad(", "gradient")]),
+    ("CONSTANTS", [("ε₀", "eps0", "vacuum permittivity"), ("μ₀", "mu0", "vacuum permeability"),
+                   ("ω", "omega", "angular frequency 2πf"), ("k₀", "k0", "free-space wavenumber"),
+                   ("εᵣ", "eps_r", "relative permittivity of the material at the point"),
+                   ("tanδ", "tand", "loss tangent of the material"), ("σ", "sigma", "conductivity")]),
+]
+# operations over a geometry: (label, function, dimension of the geometry, tooltip)
+GEOMETRY_OPS = [("∫dl", "int_line", 1, "line integral (vectors: tangential F·dl)"),
+                ("∮dl", "circ", 1, "circulation around a closed line"),
+                ("∬dA", "int_surf", 2, "surface integral"),
+                ("∯·n", "flux", 2, "flux of a vector through a face, along its normal"),
+                ("∭dV", "int_vol", 3, "volume integral"),
+                ("max", "max", -1, "maximum over a geometry"), ("avg", "avg", -1, "mean value over a geometry"),
+                ("@pt", "at", 0, "value at a point")]
+WHAT = {0: "a point", 1: "a line", 2: "a face", 3: "a volume", -1: "a geometry"}
 
 
-class CalculatorPanel(QWidget):
-    """The docked Fields Calculator."""
+def _h(text: str) -> QLabel:
+    lab = QLabel(text)
+    lab.setProperty("role", "h")
+    return lab
+
+
+class PickBar(QDialog):
+    """Shown while the calculator is hidden: asks for the geometry of an integral (or any name) to be picked in
+    the 3D view; Use puts it into the expression and brings the calculator back."""
+
+    def __init__(self, calc: "CalculatorWindow", fn: str | None, dim: int):
+        super().__init__(calc.win, Qt.Tool | Qt.WindowStaysOnTopHint)
+        self.calc, self.fn, self.dim = calc, fn, dim
+        self.doc = calc.doc
+        self.setWindowTitle("Fields Calculator: pick")
+        self.setAttribute(Qt.WA_DeleteOnClose)
+        lay = QVBoxLayout(self)
+        op = next((o for o in GEOMETRY_OPS if o[1] == fn), None)
+        title = QLabel(f"<b>{op[0] + '  ' + op[3] if op else 'Insert a name'}</b>")
+        lay.addWidget(title)
+        how = {2: "Click a face in the 3D view (Ctrl+click: several faces).",
+               3: "Click an object in the 3D view (Ctrl+click: several).",
+               1: "Click a line (polyline) in the 3D view.",
+               0: "Choose a point object or type a point below.",
+               -1: "Click an object or a face in the 3D view."}[dim]
+        lay.addWidget(QLabel(f"Select {WHAT[dim]}: {how}"))
+        self.sel = QLabel("Selected: —")
+        self.sel.setStyleSheet("font-family:Consolas,monospace")
+        lay.addWidget(self.sel)
+        row = QHBoxLayout()
+        row.addWidget(QLabel("or choose"))
+        self.names = QComboBox()
+        self.names.setEditable(True)
+        self.names.setMinimumWidth(220)
+        env = CB.make_env(self.doc)
+        dims = {0, 1, 2, 3} if dim < 0 else {dim}
+        items = [n for n, g in env.geometry.items() if set(g.dims) & dims and (fn != "circ" or g.closed)]
+        if dims & {2}:
+            items += ["cut_xy(0)", "cut_yz(0)", "cut_xz(0)"]
+        if dims & {0}:
+            items += ["point(0, 0, 0)"]
+        self.names.addItem("")
+        self.names.addItems(items)
+        self.names.currentTextChanged.connect(self._show)
+        row.addWidget(self.names, 1)
+        lay.addLayout(row)
+        self.flip = QCheckBox("Reverse the normal" if dim == 2 else "Reverse the direction")
+        self.flip.setVisible(dim in (1, 2))
+        lay.addWidget(self.flip)
+        bb = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        bb.button(QDialogButtonBox.Ok).setText("Use")
+        bb.accepted.connect(self._use)
+        bb.rejected.connect(self.reject)
+        lay.addWidget(bb)
+        self.mode0 = self.doc.selection_mode
+        mode = {2: "face", 3: "object", 1: "object", 0: "object", -1: self.mode0}[dim]
+        if mode != self.mode0:
+            calc.win.set_mode(mode)
+        self.doc.selectionChanged.connect(self._show)
+        self.finished.connect(self._back)
+        self._show()
+        g = calc.win.geometry()
+        self.adjustSize()
+        self.move(g.x() + (g.width() - self.width()) // 2, g.y() + 90)
+
+    def geometry_text(self) -> str:
+        typed = self.names.currentText().strip()
+        names = [typed] if typed else []
+        if not names:
+            tess = self.doc.tess
+            for s in self.doc.selection:
+                t = tess.get(s.obj)
+                sheet = t is not None and getattr(t, "dim", 3) == 2
+                n = f"face({s.obj}, {s.index})" if self.doc.selection_mode == "face" and s.index >= 0 \
+                    and not sheet else s.obj
+                if n not in names:
+                    names.append(n)
+        if self.flip.isChecked() and self.dim in (1, 2):
+            names = [f"flip({n})" for n in names]
+        return "" if not names else names[0] if len(names) == 1 else "[" + ", ".join(names) + "]"
+
+    def _show(self, *_):
+        t = self.geometry_text()
+        self.sel.setText(f"Selected: {t or '—'}")
+
+    def _use(self) -> None:
+        geo = self.geometry_text()
+        if not geo:
+            self.sel.setText(f"<span style='color:{ERR}'>Select {WHAT[self.dim]} first</span>")
+            return
+        self.calc.insert_geometry(self.fn, geo)
+        self.accept()
+
+    def _back(self, *_):
+        try:
+            self.doc.selectionChanged.disconnect(self._show)
+        except (RuntimeError, TypeError):
+            pass
+        if self.doc.selection_mode != self.mode0:
+            self.calc.win.set_mode(self.mode0)
+        self.calc.show()
+        self.calc.raise_()
+        self.calc.activateWindow()
+        self.calc.edit.setFocus()
+
+
+class CalculatorWindow(QMainWindow):
+    """The Fields Calculator: its own window next to the modeler. Left the expressions of the project, the
+    functions and the library; in the middle the expression with building blocks, typeset formula and text;
+    right the result."""
 
     def __init__(self, win):
-        super().__init__(win)
+        super().__init__(win, Qt.Window)
         self.win = win
         self.doc = win.doc
+        self.setObjectName("FieldsCalculator")
+        self.setWindowTitle("Fields Calculator")
+        self.setStyleSheet(STYLE)
         self.current: str | None = None        # name of the loaded project expression
         self.saved_text = ""
         self.info: L.Info | None = None
         self.for_plot = False
+        self._last: tuple | None = None       # (text, context) of the shown result
         self._timer = QTimer(self)
         self._timer.setSingleShot(True)
         self._timer.setInterval(250)
         self._timer.timeout.connect(self._analyze)
-        lay = QVBoxLayout(self)
-        lay.setContentsMargins(6, 6, 6, 6)
-        lay.setSpacing(6)
+        self._toolbar()
+        split = QSplitter(Qt.Horizontal)
+        split.addWidget(self._side())
+        split.addWidget(self._work())
+        split.addWidget(self._right())
+        split.setStretchFactor(1, 1)
+        split.setSizes([260, 680, 300])
+        self.setCentralWidget(split)
+        self.status = QLabel()
+        self.statusBar().addWidget(self.status, 1)
+        keys = QLabel("Enter: evaluate · Ctrl+S: save · Ctrl+N: new")
+        keys.setProperty("role", "muted")
+        self.statusBar().addPermanentWidget(keys)
+        QShortcut(QKeySequence.Save, self, self.save)
+        QShortcut(QKeySequence.New, self, self.new)
+        QShortcut(QKeySequence("F5"), self, self.evaluate)
+        self.doc.changed.connect(self._doc_changed)
+        self.resize(1240, 720)
+        st = getattr(win, "settings", None)
+        if st is not None and st.value("calc/geometry"):
+            self.restoreGeometry(st.value("calc/geometry"))
+        self.refresh()
+        self.new()
 
-        # banner when the calculator was opened from Plot Fields
-        self.banner = QLabel()
-        self.banner.setWordWrap(True)
-        self.banner.setStyleSheet("background:#fff7e0;border:1px solid #e6c766;border-radius:4px;padding:6px")
-        self.banner.setVisible(False)
-        lay.addWidget(self.banner)
-
-        # context
-        ctx = QGridLayout()
-        ctx.setHorizontalSpacing(6)
+    # ---- layout ----------------------------------------------------------------------------------
+    def _toolbar(self) -> None:
+        tb = QToolBar("Fields Calculator")
+        tb.setMovable(False)
+        tb.setToolButtonStyle(Qt.ToolButtonTextOnly)
+        self.addToolBar(tb)
+        tb.addAction("New", self.new).setToolTip("A new expression (Ctrl+N)")
+        tb.addAction("Save", self.save).setToolTip("Save the expression in the design (Ctrl+S)")
+        self.a_del = tb.addAction("Delete", self.delete)
+        tb.addSeparator()
+        ev = QPushButton("▶  Evaluate")
+        ev.setObjectName("Primary")
+        ev.clicked.connect(self.evaluate)
+        tb.addWidget(ev)
+        tb.addAction("Plot Field…", self.plot_field).setToolTip("Plot this field in the 3D view")
+        tb.addAction("Add to Report", self.add_to_report).setToolTip("Show this value over frequency in a report")
+        tb.addSeparator()
+        tb.addAction("Pick…", lambda: self.pick(None, -1)).setToolTip(
+            "Hide the calculator, click an object or face in the 3D view, and insert its name")
+        tb.addAction("ƒ Functions…", self.functions_dialog).setToolTip("Your own functions: name(a, b) = ...")
+        spacer = QWidget()
+        spacer.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        tb.addWidget(spacer)
         self.sol = QComboBox()
+        self.sol.setMinimumWidth(190)
         self.freq = QComboBox()
         self.port = QComboBox()
         self.phase = QDoubleSpinBox()
         self.phase.setRange(-360, 360)
-        self.phase.setSuffix(" deg")
+        self.phase.setSuffix("°")
         self.phase.setToolTip("Phase for inst() and for the preview in the 3D view")
-        ctx.addWidget(QLabel("Solution"), 0, 0)
-        ctx.addWidget(self.sol, 0, 1, 1, 3)
-        ctx.addWidget(QLabel("Frequency"), 1, 0)
-        ctx.addWidget(self.freq, 1, 1)
-        ctx.addWidget(QLabel("Port"), 1, 2)
-        ctx.addWidget(self.port, 1, 3)
-        ctx.addWidget(QLabel("Phase"), 2, 0)
-        ctx.addWidget(self.phase, 2, 1)
-        ctx.setColumnStretch(1, 1)
-        lay.addLayout(ctx)
+        for lab, w in (("Solution ", self.sol), ("  ", self.freq), ("  Port ", self.port), ("  Phase ", self.phase)):
+            t = QLabel(lab)
+            t.setProperty("role", "muted")
+            tb.addWidget(t)
+            tb.addWidget(w)
         self.sol.currentTextChanged.connect(self._solution_changed)
         self.freq.currentIndexChanged.connect(lambda *_: self._context_changed())
         self.port.currentIndexChanged.connect(lambda *_: self._context_changed())
         self.phase.valueChanged.connect(lambda *_: self._context_changed())
-        lay.addWidget(_sep())
 
-        # named expressions
+    def _side(self) -> QWidget:
+        w = QWidget()
+        w.setObjectName("Side")
+        w.setMinimumWidth(250)
+        lay = QVBoxLayout(w)
+        lay.setContentsMargins(8, 8, 4, 8)
+        self.search = QLineEdit()
+        self.search.setPlaceholderText("Search expressions")
+        self.search.setClearButtonEnabled(True)
+        self.search.textChanged.connect(self._filter_tree)
+        lay.addWidget(self.search)
         self.tree = QTreeWidget()
-        self.tree.setHeaderLabels(["Expression", "Kind", "Unit"])
-        self.tree.setRootIsDecorated(True)
-        self.tree.setMinimumHeight(110)
+        self.tree.setHeaderHidden(True)
+        self.tree.setColumnCount(2)
+        self.tree.setRootIsDecorated(False)
+        self.tree.setIndentation(8)
+        self.tree.setFrameShape(QFrame.NoFrame)
+        self.tree.setStyleSheet("QTreeWidget{background:transparent} QTreeWidget::item{padding:3px 0}")
         self.tree.itemClicked.connect(self._item_clicked)
-        self.tree.setColumnWidth(0, 150)
-        lay.addWidget(self.tree, 2)
+        self.tree.itemDoubleClicked.connect(self._item_double_clicked)
+        lay.addWidget(self.tree, 1)
+        leg = QLabel("∫ value   ◧ field   ƒ function")
+        leg.setProperty("role", "muted")
+        lay.addWidget(leg)
+        return w
 
-        # name, description, editor
-        form = QFormLayout()
-        form.setContentsMargins(0, 0, 0, 0)
-        nrow = QHBoxLayout()
-        self.name = QLineEdit()
-        self.name.setPlaceholderText("Name to save, e.g. P_diel")
-        self.name.textChanged.connect(self._dirty_changed)
-        self.unsaved = QLabel("")
-        self.unsaved.setMinimumWidth(self.unsaved.fontMetrics().horizontalAdvance("unsaved") + 4)
-        self.unsaved.setStyleSheet(f"color:{MUTED}")
-        nrow.addWidget(self.name, 1)
-        nrow.addWidget(self.unsaved)
-        form.addRow("Name", nrow)
-        self.desc = QLineEdit()
-        self.desc.setPlaceholderText("Description (optional)")
-        self.desc.textChanged.connect(self._dirty_changed)
-        form.addRow("Description", self.desc)
-        lay.addLayout(form)
-
-        bar = QHBoxLayout()
-        bar.setSpacing(3)
-        for label, ins, tip in (("|x|", "|", "magnitude |...|"), ("·", "·", "dot product"),
-                                ("×", "×", "cross product"), ("x²", "^2", "power"), ("Re", "re(", "real part"),
-                                ("∇×", "curl(", "curl"), ("ε₀", "eps0", "vacuum permittivity"),
-                                ("μ₀", "mu0", "vacuum permeability"), ("ω", "omega", "angular frequency")):
+    def _group(self, title: str, buttons) -> QFrame:
+        fr = QFrame()
+        fr.setObjectName("Group")
+        v = QVBoxLayout(fr)
+        v.setContentsMargins(6, 3, 6, 5)
+        v.setSpacing(2)
+        v.addWidget(QLabel(title))
+        row = QHBoxLayout()
+        row.setSpacing(3)
+        for label, slot, tip in buttons:
             b = QToolButton()
             b.setText(label)
             b.setToolTip(tip)
-            b.clicked.connect(lambda _=False, s=ins: self.edit.insert(s))
-            bar.addWidget(b)
-        bar.addStretch(1)
-        lay.addLayout(bar)
-        bar2 = QHBoxLayout()
-        bar2.setSpacing(4)
-        for label, slot, tip in (("∫ Integral…", self.integral_dialog, "Line, face or volume integral"),
-                                 ("xyz Component…", self.component_dialog,
-                                  "A component of a vector in a coordinate system"),
-                                 ("ƒ Functions…", self.functions_dialog, "Your own functions: name(a, b) = ...")):
-            b = QPushButton(label)
-            b.setToolTip(tip)
+            b.setProperty("role", "sym")
             b.clicked.connect(slot)
-            bar2.addWidget(b)
-        self.pick = QToolButton()
-        self.pick.setText("Pick")
-        self.pick.setCheckable(True)
-        self.pick.setToolTip("While on, a click on an object or a face in the 3D view (or the model tree) "
-                             "inserts its name at the cursor; press F for faces")
-        bar2.addWidget(self.pick)
-        bar2.addStretch(1)
-        lay.addLayout(bar2)
+            row.addWidget(b)
+        v.addLayout(row)
+        return fr
 
+    def _work(self) -> QWidget:
+        w = QWidget()
+        lay = QVBoxLayout(w)
+        lay.setContentsMargins(16, 12, 16, 8)
+        lay.setSpacing(10)
+        self.banner = QLabel()
+        self.banner.setObjectName("Banner")
+        self.banner.setWordWrap(True)
+        self.banner.setVisible(False)
+        lay.addWidget(self.banner)
+        nrow = QHBoxLayout()
+        self.name = QLineEdit()
+        self.name.setObjectName("Name")
+        self.name.setPlaceholderText("Name")
+        self.name.setFixedWidth(220)
+        self.name.textChanged.connect(self._dirty_changed)
+        self.desc = QLineEdit()
+        self.desc.setObjectName("Desc")
+        self.desc.setPlaceholderText("Description (optional)")
+        self.desc.textChanged.connect(self._dirty_changed)
+        self.unsaved = QLabel("")
+        self.unsaved.setProperty("role", "muted")
+        self.unsaved.setMinimumWidth(self.unsaved.fontMetrics().horizontalAdvance("unsaved") + 6)
+        nrow.addWidget(self.name)
+        nrow.addSpacing(10)
+        nrow.addWidget(self.desc, 1)
+        nrow.addWidget(self.unsaved)
+        lay.addLayout(nrow)
+
+        pal = QGridLayout()
+        pal.setHorizontalSpacing(8)
+        pal.setVerticalSpacing(8)
+        groups = [self._group(t, [(lab, (lambda _=False, s=ins: self.edit.insert(s)), tip) for lab, ins, tip in items])
+                  for t, items in PALETTE]
+        geo = self._group("OVER GEOMETRY", [(lab, (lambda _=False, f=fn, d=dim: self.pick(f, d)),
+                                             tip + " — pick the geometry in the 3D view")
+                                            for lab, fn, dim, tip in GEOMETRY_OPS])
+        comp = self._group("COMPONENT", [("xyz", self.component_dialog,
+                                          "a component of a vector in a coordinate system (x, ρ, φ, r, θ, …)")])
+        pal.addWidget(groups[0], 0, 0)
+        pal.addWidget(groups[1], 0, 1)
+        pal.addWidget(groups[2], 0, 2)
+        pal.addWidget(geo, 1, 0, 1, 2)
+        pal.addWidget(groups[3], 1, 2, 1, 2)
+        pal.addWidget(comp, 0, 3)
+        pal.setColumnStretch(4, 1)
+        lay.addLayout(pal)
+
+        self.formula = QLabel()
+        self.formula.setObjectName("Formula")
+        self.formula.setAlignment(Qt.AlignCenter)
+        self.formula.setMinimumHeight(150)
+        self.formula.setMaximumHeight(280)
+        self.formula.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        lay.addWidget(self.formula, 1)
         self.edit = ExprEdit()
+        self.edit.setFixedHeight(self.edit.fontMetrics().lineSpacing() * 2 + 16)
         self.edit.textChanged.connect(self._text_changed)
         self.edit.cursorPositionChanged.connect(self._signature)
         self.edit.submitted.connect(self.evaluate)
@@ -278,93 +502,105 @@ class CalculatorPanel(QWidget):
         self.sig = QLabel()
         self.sig.setWordWrap(True)
         self.sig.setTextFormat(Qt.RichText)
-        self.sig.setStyleSheet(f"color:{MUTED}")
+        self.sig.setProperty("role", "muted")
         self.sig.linkActivated.connect(lambda s: self.edit.insert(s))
         lay.addWidget(self.sig)
-
-        # typeset formula and what it is
-        self.formula = QLabel()
-        self.formula.setAlignment(Qt.AlignCenter)
-        self.formula.setMinimumHeight(48)
-        self.formula.setStyleSheet("background:#ffffff;border:1px solid #e5e7eb;border-radius:4px;padding:4px")
-        self.formula.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
-        lay.addWidget(self.formula)
         self.chips = QLabel()
         self.chips.setWordWrap(True)
         self.chips.setTextFormat(Qt.RichText)
         lay.addWidget(self.chips)
+        lay.addStretch(0)
+        return w
 
-        # result
-        box = QGroupBox("Result")
-        bl = QVBoxLayout(box)
+    def _right(self) -> QWidget:
+        w = QWidget()
+        w.setObjectName("Right")
+        w.setMinimumWidth(280)
+        lay = QVBoxLayout(w)
+        lay.setContentsMargins(14, 12, 14, 10)
+        lay.setSpacing(8)
+        lay.addWidget(_h("RESULT"))
         self.result = QLabel("—")
-        rf = self.result.font()
-        rf.setPointSize(rf.pointSize() + 3)
-        rf.setBold(True)
-        self.result.setFont(rf)
+        self.result.setObjectName("Value")
         self.result.setTextInteractionFlags(Qt.TextSelectableByMouse)
         self.result.setWordWrap(True)
-        bl.addWidget(self.result)
+        lay.addWidget(self.result)
         self.result_note = QLabel()
         self.result_note.setWordWrap(True)
-        self.result_note.setStyleSheet(f"color:{MUTED}")
-        bl.addWidget(self.result_note)
-        # a field reduced to a value
-        self.reduce_box = QWidget()
-        rl = QHBoxLayout(self.reduce_box)
-        rl.setContentsMargins(0, 0, 0, 0)
+        self.result_note.setProperty("role", "muted")
+        lay.addWidget(self.result_note)
+
+        # a field: reduce it to a value, show it in 3D
+        self.field_box = QWidget()
+        fl = QVBoxLayout(self.field_box)
+        fl.setContentsMargins(0, 6, 0, 0)
+        fl.addWidget(_h("REDUCE TO A VALUE"))
+        rr = QHBoxLayout()
         self.red_fn = QComboBox()
         self.red_fn.addItems(["Maximum", "Minimum", "Average", "Integral", "Value at point"])
+        self.red_fn.currentIndexChanged.connect(lambda *_: self._fill_reduce_geometries())
         self.red_geo = QComboBox()
         self.red_geo.setEditable(True)
-        self.red_geo.setMinimumWidth(110)
-        rb = QPushButton("Reduce")
-        rb.setToolTip("Evaluate the field reduced to a value over the geometry")
-        rb.clicked.connect(self._reduce)
-        ub = QPushButton("Use as expression")
-        ub.clicked.connect(lambda: self._reduce(use=True))
-        rl.addWidget(self.red_fn)
-        rl.addWidget(QLabel("over"))
-        rl.addWidget(self.red_geo, 1)
-        rl.addWidget(rb)
-        rl.addWidget(ub)
-        self.red_fn.currentIndexChanged.connect(lambda *_: self._fill_reduce_geometries())
-        bl.addWidget(self.reduce_box)
-        prow = QHBoxLayout()
-        self.live = QCheckBox("Show in 3D on")
-        self.live.setToolTip("Field expressions: show the field in the 3D view while you type")
+        rr.addWidget(self.red_fn)
+        rr.addWidget(QLabel("over"))
+        rr.addWidget(self.red_geo, 1)
+        fl.addLayout(rr)
+        rb = QHBoxLayout()
+        b = QPushButton("Evaluate")
+        b.clicked.connect(self._reduce)
+        u = QPushButton("Use as expression")
+        u.clicked.connect(lambda: self._reduce(use=True))
+        rb.addWidget(b)
+        rb.addWidget(u)
+        fl.addLayout(rb)
+        fl.addSpacing(6)
+        fl.addWidget(_h("SHOW IN 3D"))
+        pr = QHBoxLayout()
+        self.live = QCheckBox("Live on")
+        self.live.setToolTip("Show the field in the 3D view while you type")
         self.live.toggled.connect(lambda on: self._preview() if on else self._remove_preview())
         self.target = QComboBox()
         self.target.addItems(["Cut XY", "Cut YZ", "Cut XZ", "3D selection"])
         self.target.currentIndexChanged.connect(lambda *_: self._preview())
-        prow.addWidget(self.live)
-        prow.addWidget(self.target, 1)
-        bl.addLayout(prow)
-        lay.addWidget(box)
+        pr.addWidget(self.live)
+        pr.addWidget(self.target, 1)
+        fl.addLayout(pr)
+        lay.addWidget(self.field_box)
 
-        # actions
-        act = QGridLayout()
-        self.b_eval = QPushButton("Evaluate")
-        self.b_eval.setDefault(True)
-        self.b_eval.clicked.connect(self.evaluate)
-        self.b_save = QPushButton("Save")
-        self.b_save.clicked.connect(self.save)
-        self.b_new = QPushButton("New")
-        self.b_new.clicked.connect(self.new)
-        self.b_del = QPushButton("Delete")
-        self.b_del.clicked.connect(self.delete)
-        self.b_plot = QPushButton("Plot Field…")
-        self.b_plot.clicked.connect(self.plot_field)
-        self.b_report = QPushButton("Add to Report")
-        self.b_report.clicked.connect(self.add_to_report)
-        for i, b in enumerate((self.b_eval, self.b_save, self.b_new, self.b_del, self.b_plot, self.b_report)):
-            act.addWidget(b, i // 3, i % 3)
-        lay.addLayout(act)
+        # a value: over frequency
+        self.freq_box = QWidget()
+        ql = QVBoxLayout(self.freq_box)
+        ql.setContentsMargins(0, 6, 0, 0)
+        hr = QHBoxLayout()
+        hr.addWidget(_h("OVER FREQUENCY"))
+        hr.addStretch(1)
+        self.b_sweep = QPushButton("Compute")
+        self.b_sweep.setToolTip("Evaluate at every frequency with saved fields of the solution")
+        self.b_sweep.clicked.connect(self._over_frequency)
+        hr.addWidget(self.b_sweep)
+        ql.addLayout(hr)
+        from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
+        from matplotlib.figure import Figure
+        self.fig = Figure(figsize=(3, 1.5), dpi=90)
+        self.fig.patch.set_facecolor("#fbfbfc")
+        self.canvas = FigureCanvasQTAgg(self.fig)
+        self.canvas.setMinimumHeight(140)
+        ql.addWidget(self.canvas)
+        self.freq_note = QLabel()
+        self.freq_note.setProperty("role", "muted")
+        ql.addWidget(self.freq_note)
+        lay.addWidget(self.freq_box)
 
-        self.doc.selectionChanged.connect(self._picked)
-        self.doc.changed.connect(self._doc_changed)
-        self.refresh()
-        self.new()
+        lay.addWidget(_h("USED BY"))
+        self.used = QLabel("—")
+        self.used.setWordWrap(True)
+        self.used.setProperty("role", "muted")
+        lay.addWidget(self.used)
+        lay.addStretch(1)
+        cp = QPushButton("Copy value")
+        cp.clicked.connect(lambda: QApplication.clipboard().setText(self.result.text()))
+        lay.addWidget(cp)
+        return w
 
     # ---- context ---------------------------------------------------------------------------------
     def refresh(self) -> None:
@@ -387,6 +623,7 @@ class CalculatorPanel(QWidget):
             if cur and not any(e.name == cur for e in self.doc.design.field_exprs):
                 self.current = None
                 self._dirty_changed()
+            self._used_by()
 
     def _fill_solutions(self) -> None:
         cur = self.sol.currentText()
@@ -425,9 +662,12 @@ class CalculatorPanel(QWidget):
                 self.phase.value())
 
     def _context_changed(self) -> None:
-        if self.result.text() not in ("—", ""):
+        if self.result.text() not in ("—", "", "Field"):
             self.result.setText("—")
             self.result_note.setText("Context changed: Evaluate again")
+        self.fig.clear()
+        self.canvas.draw_idle()
+        self.freq_note.setText("")
         self._preview()
 
     # ---- expressions list ------------------------------------------------------------------------
@@ -436,49 +676,71 @@ class CalculatorPanel(QWidget):
         env = CB.make_env(self.doc)
         des = self.doc.design
 
-        def row(parent, name, text, desc, kind="", unit="", data=None):
-            it = QTreeWidgetItem(parent, [name, kind, unit])
-            it.setToolTip(0, f"{name} = {text}" + (f"\n{desc}" if desc else ""))
-            it.setData(0, Qt.UserRole, data)
-            return it
-        proj = QTreeWidgetItem(self.tree, ["Project", "", ""])
-        for e in des.field_exprs:
-            try:
-                i = L.analyze(e.expr, env)
-                kind, unit = i.kind, UN.label(i.unit)
-            except L.CalcError as ex:
-                kind, unit = "error", str(ex)[:40]
-            row(proj, e.name, e.expr, e.description, kind, unit, ("expr", e.name))
-        fn = QTreeWidgetItem(self.tree, ["Functions", "", ""])
-        for text in des.field_funcs:
-            name = text.split("(", 1)[0].strip()
-            row(fn, text.split("=", 1)[0].strip(), text, "", "function", "", ("func", name))
-        lib = QTreeWidgetItem(self.tree, ["Library", "", ""])
-        for name, text, desc in LIB.EXPRESSIONS:
-            try:
-                i = L.analyze(text, env)
-                kind, unit = i.kind, UN.label(i.unit)
-            except L.CalcError:
-                kind, unit = "", ""
-            row(lib, name, text, desc, kind, unit, ("lib", name))
-        for text, desc in LIB.FUNCTIONS:
-            row(lib, text.split("=", 1)[0].strip(), text, desc, "function", "", ("libfn", text))
-        proj.setExpanded(True)
-        fn.setExpanded(bool(des.field_funcs))
-        lib.setExpanded(not des.field_exprs)
-        for it in (proj, fn, lib):
+        def head(text):
+            it = QTreeWidgetItem(self.tree, [text, ""])
             f = it.font(0)
             f.setBold(True)
+            f.setPointSizeF(f.pointSizeF() * 0.85)
             it.setFont(0, f)
+            it.setForeground(0, QColor("#5a6476"))
+            it.setFlags(Qt.ItemIsEnabled)
+            it.setFirstColumnSpanned(True)
+            return it
+
+        def row(name, text, desc, kind, unit, data):
+            icon = {"Value": "∫", "Vector": "∫", "function": "ƒ"}.get(kind, "◧" if kind else "·")
+            it = QTreeWidgetItem(self.tree, [f"{icon}  {name}", unit])
+            it.setToolTip(0, f"{name} = {text}" + (f"\n{desc}" if desc else ""))
+            it.setData(0, Qt.UserRole, data)
+            it.setForeground(1, QColor("#7a8496"))
+            it.setTextAlignment(1, Qt.AlignRight | Qt.AlignVCenter)
+            if self.current and data == ("expr", self.current):
+                self.tree.setCurrentItem(it)
+            return it
+
+        def kind_of(text):
+            try:
+                i = L.analyze(text, env)
+                return ("Value" if not i.field and not i.vec else "Vector" if not i.field else "field",
+                        UN.label(i.unit))
+            except L.CalcError:
+                return "error", "⚠"
+        head("PROJECT")
+        for e in des.field_exprs:
+            k, u = kind_of(e.expr)
+            row(e.name, e.expr, e.description, k, u, ("expr", e.name))
+        if not des.field_exprs:
+            it = QTreeWidgetItem(self.tree, ["   (none yet)", ""])
+            it.setForeground(0, QColor("#98a0ae"))
+            it.setFlags(Qt.NoItemFlags)
+        if des.field_funcs:
+            head("MY FUNCTIONS")
+            for text in des.field_funcs:
+                name = text.split("(", 1)[0].strip()
+                row(text.split("=", 1)[0].strip(), text, "", "function", "", ("func", name))
+        head("LIBRARY")
+        for name, text, desc in LIB.EXPRESSIONS:
+            k, u = kind_of(text)
+            row(desc.split(" (")[0].split(",")[0], text, desc, k, u, ("lib", name))
+        for text, desc in LIB.FUNCTIONS:
+            row(desc.split(" (")[0].split(",")[0], text, desc, "function", "", ("libfn", text))
+        self.tree.resizeColumnToContents(1)
+        self.tree.header().setStretchLastSection(False)
+        self.tree.header().setSectionResizeMode(0, self.tree.header().ResizeMode.Stretch)
+        self._filter_tree(self.search.text())
+
+    def _filter_tree(self, text: str) -> None:
+        t = text.strip().lower()
+        for i in range(self.tree.topLevelItemCount()):
+            it = self.tree.topLevelItem(i)
+            if it.data(0, Qt.UserRole):
+                it.setHidden(bool(t) and t not in it.text(0).lower() and t not in it.toolTip(0).lower())
 
     def _item_clicked(self, it: QTreeWidgetItem, _col: int) -> None:
         data = it.data(0, Qt.UserRole)
         if not data:
             return
         kind, key = data
-        if self.pick.isChecked() and kind == "expr":
-            self.edit.insert(key)
-            return
         if kind == "expr":
             self.load(key)
         elif kind == "lib":
@@ -490,6 +752,12 @@ class CalculatorPanel(QWidget):
         elif kind in ("func", "libfn"):
             self.functions_dialog(select=key)
 
+    def _item_double_clicked(self, it: QTreeWidgetItem, _col: int) -> None:
+        """A double click on a project expression inserts its name at the cursor."""
+        data = it.data(0, Qt.UserRole)
+        if data and data[0] == "expr" and data[1] != self.current:
+            self.edit.insert(data[1])
+
     def load(self, name: str) -> None:
         e = next((x for x in self.doc.design.field_exprs if x.name == name), None)
         if e is None:
@@ -500,8 +768,8 @@ class CalculatorPanel(QWidget):
         self.edit.setPlainText(e.expr)
         self.saved_text = self._state()
         self._dirty_changed()
-        self.result.setText("—")
-        self.result_note.setText("")
+        self._clear_result()
+        self._used_by()
 
     def new(self) -> None:
         self.current = None
@@ -509,9 +777,19 @@ class CalculatorPanel(QWidget):
         self.desc.clear()
         self.edit.clear()
         self.saved_text = self._state()
-        self.result.setText("—")
-        self.result_note.setText("Type an expression, pick an example from the Library, or use ∫ Integral…")
+        self._clear_result()
+        self.result_note.setText("Type an expression, use the building blocks, or start from the Library.")
         self._dirty_changed()
+        self._used_by()
+        self.tree.clearSelection()
+        self.edit.setFocus()
+
+    def _clear_result(self) -> None:
+        self.result.setText("—")
+        self.result_note.setText("")
+        self.fig.clear()
+        self.canvas.draw_idle()
+        self.freq_note.setText("")
 
     def _state(self) -> str:
         return f"{self.name.text()}\n{self.desc.text()}\n{self.edit.toPlainText()}"
@@ -519,7 +797,20 @@ class CalculatorPanel(QWidget):
     def _dirty_changed(self, *_):
         dirty = self._state() != self.saved_text and bool(self.edit.toPlainText().strip())
         self.unsaved.setText("unsaved" if dirty else ("saved" if self.current else ""))
-        self.b_del.setEnabled(self.current is not None)
+        self.a_del.setEnabled(self.current is not None)
+        self.setWindowTitle(f"Fields Calculator — {self.name.text() or 'new expression'}"
+                            f"{' *' if dirty else ''}  ({self.doc.design.name})")
+
+    def _used_by(self) -> None:
+        if not self.current:
+            self.used.setText("—")
+            return
+        des = self.doc.design
+        uses = CB.dependents(des, self.current)
+        uses += [f"plot {p.name}" for p in des.field_plots if p.quantity == self.current]
+        uses += [f"report {r.name}" for r in des.reports
+                 if any(self.current in CB.field_names_in(des, t) for t in r.traces)]
+        self.used.setText(" · ".join(uses) or "not used yet")
 
     # ---- typing ----------------------------------------------------------------------------------
     def _text_changed(self) -> None:
@@ -532,53 +823,68 @@ class CalculatorPanel(QWidget):
         self.edit.underline(None, None)
         if not text:
             self.formula.clear()
+            self.formula.setText("<span style='color:#98a0ae;font-size:15px'>The formula appears here as you "
+                                 "type or click the building blocks</span>")
             self.chips.setText("")
-            self.reduce_box.setVisible(False)
+            self.status.setText("")
+            self.field_box.setVisible(False)
+            self.freq_box.setVisible(False)
             return
         env = CB.make_env(self.doc)
         try:
             self.info = L.analyze(self.edit.toPlainText(), env)
         except L.CalcError as e:
             self.edit.underline(e.pos, e.end)
-            self.chips.setText(f"<span style='color:{ERR}'>{e}</span>")
+            self.chips.setText("")
+            self.status.setText(f"<span style='color:{ERR}'>⚠ {e}</span>")
             self.formula.clear()
-            self.reduce_box.setVisible(False)
+            self.formula.setText(f"<span style='color:{ERR};font-size:14px'>{e}</span>")
+            self.field_box.setVisible(False)
+            self.freq_box.setVisible(False)
             return
         i = self.info
-        pm = render_tex(i.tex)
+        pm = render_tex(i.tex, px=30)
         if pm is not None:
             self.formula.setPixmap(pm)
         else:
             self.formula.setText(text)
-        chips = [f"<b>{i.kind}</b>", UN.describe(i.unit), "complex" if i.cx else "real"]
-        chips += L.conventions_text(i)
+
+        def chip(t, bg="#e8ecf4", fg="#1d2330"):
+            return f"<span style='background:{bg};color:{fg}'>&nbsp;{t}&nbsp;</span>"
+        chips = [chip(f"<b>{i.kind}</b>", "#dfeee4", "#1b6b3a"), chip(UN.describe(i.unit)),
+                 chip("complex" if i.cx else "real")]
+        chips += [chip(c) for c in L.conventions_text(i)]
         if i.normals:
-            chips.append("direction: " + ", ".join(dict.fromkeys(g.label() for g in i.normals)))
+            chips.append(chip("direction: " + ", ".join(dict.fromkeys(g.label() for g in i.normals))))
         if i.deps:
-            chips.append("uses " + ", ".join(dict.fromkeys(i.deps)))
+            chips.append(chip("uses " + ", ".join(dict.fromkeys(i.deps))))
         if i.surf and i.field:
-            chips.append("faces only")
-        self.chips.setText("  ·  ".join(chips))
-        self.reduce_box.setVisible(i.field)
+            chips.append(chip("faces only"))
+        self.chips.setText("&nbsp;&nbsp;".join(chips))
+        self.status.setText("✓ No errors")
+        self.field_box.setVisible(i.field)
+        self.freq_box.setVisible(not i.field and not i.vec)
         self._fill_reduce_geometries()
         if self.live.isChecked():
             self._preview()
 
     def _signature(self) -> None:
+        self.sig.setText(self._signature_html())
+        self.sig.setVisible(bool(self.sig.text()))
+
+    def _signature_html(self) -> str:
         text, pos = self.edit.toPlainText(), self.edit.textCursor().position()
         c = call_at(text, pos)
         env = CB.make_env(self.doc)
         if not c:
-            self.sig.setText("")
-            return
+            return ""
         fn, k = c
         if fn in L.SIGNATURES:
             params, doc = L.SIGNATURES[fn]
         elif fn in env.functions:
             params, doc = env.functions[fn].params, env.functions[fn].body
         else:
-            self.sig.setText("")
-            return
+            return ""
         ps = [f"<b>{p}</b>" if j == k else p for j, p in enumerate(params)]
         html = f"{fn}({', '.join(ps)}) — {doc}"
         if k == 0 and fn in L.GEOM_FN:
@@ -586,22 +892,41 @@ class CalculatorPanel(QWidget):
             names = [n for n, g in env.geometry.items() if set(g.dims) & dims and (fn != "circ" or g.closed)]
             if names:
                 html += "<br>" + " ".join(f"<a href='{n}'>{n}</a>" for n in names[:24])
-        self.sig.setText(html)
+        return html
 
-    def _picked(self) -> None:
-        """Pick on: the selection in the 3D view (or the model tree) goes into the expression."""
-        if not self.pick.isChecked() or not self.isVisible():
+    # ---- geometry from the 3D view ---------------------------------------------------------------
+    def pick(self, fn: str | None, dim: int) -> None:
+        """Hide the calculator and ask for the geometry in the 3D view (PickBar); it comes back afterwards."""
+        self._pick_sel = self.edit.textCursor().selectedText()
+        self.hide()
+        bar = PickBar(self, fn, dim)
+        bar.show()
+        self._bar = bar
+
+    def insert_geometry(self, fn: str | None, geo: str) -> None:
+        """fn(geo, |) at the cursor; a selected text, or a whole field expression, becomes the integrand."""
+        if fn is None:
+            self.edit.insert(geo)
+            self._analyze()
             return
-        sel = self.doc.selection
-        if not sel:
-            return
-        names = []
-        for s in sel:
-            if self.doc.selection_mode == "face" and s.index >= 0:
-                names.append(f"face({s.obj}, {s.index})")
-            elif s.obj not in names:
-                names.append(s.obj)
-        self.edit.insert(names[0] if len(names) == 1 else "[" + ", ".join(names) + "]")
+        sel = getattr(self, "_pick_sel", "") or ""
+        text = self.edit.toPlainText().strip()
+        self._analyze()
+        if not sel and text and self.info is not None and self.info.field:
+            self.edit.selectAll()
+            sel = text
+        if sel:
+            inner = sel
+            if fn in ("max", "min", "avg") and self.info is not None and (self.info.vec or self.info.cx) \
+                    and not (sel.startswith("|") and sel.endswith("|")):
+                inner = f"|{sel}|"
+            self.edit.insert(f"{fn}({geo}, {inner})")
+        else:
+            self.edit.insert(f"{fn}({geo}, )")
+            c = self.edit.textCursor()
+            c.movePosition(QTextCursor.Left)
+            self.edit.setTextCursor(c)
+        self._analyze()
 
     # ---- evaluation ------------------------------------------------------------------------------
     def evaluate(self) -> None:
@@ -610,8 +935,8 @@ class CalculatorPanel(QWidget):
             return
         if self.info.field:
             self.result.setText("Field")
-            self.result_note.setText("A field has a value at every point: plot it (Plot Field…, or Show in 3D), "
-                                     "or reduce it to a value below.")
+            self.result_note.setText("A value at every point: plot it (Plot Field…, or Show in 3D below), or "
+                                     "reduce it to a value.")
             if self.live.isChecked():
                 self._preview()
             return
@@ -636,9 +961,52 @@ class CalculatorPanel(QWidget):
         finally:
             QApplication.restoreOverrideCursor()
         self.result.setText(r.text())
-        notes = [f"{sol}, {self.freq.currentText()}, port {port}" + (f", phase {phase:g}°" if phase else "")]
+        notes = [f"{sol} · {self.freq.currentText()} · port {port}" + (f" · phase {phase:g}°" if phase else "")]
         notes += L.conventions_text(r.info) + r.notes
-        self.result_note.setText("; ".join(notes))
+        self.result_note.setText("<br>".join(notes))
+
+    def _over_frequency(self) -> None:
+        text = self.edit.toPlainText().strip()
+        sol, _, port, _ = self.context()
+        if not text or self.info is None or " : " not in sol:
+            return
+        if self.freq.count() < 2:
+            # one frequency: use a sweep with saved fields instead
+            for s in CB.field_solutions(self.doc):
+                try:
+                    if len(CB.frequencies(self.doc, s)) > 1:
+                        sol = s
+                        break
+                except Exception:  # noqa: BLE001
+                    continue
+            else:
+                self.freq_note.setText("Needs a sweep with saved fields")
+                return
+        QApplication.setOverrideCursor(Qt.WaitCursor)
+        try:
+            f, v = CB.over_frequency(self.doc, text, sol, port)
+        except Exception as e:  # noqa: BLE001
+            self.result_note.setText(f"<span style='color:{ERR}'>{e}</span>")
+            return
+        finally:
+            QApplication.restoreOverrideCursor()
+        import numpy as np
+        y = np.real(v) if np.allclose(np.imag(v), 0, atol=1e-12 * max(np.abs(v).max(), 1e-30)) else np.abs(v)
+        self.fig.clear()
+        ax = self.fig.add_axes([0.2, 0.2, 0.76, 0.74])
+        k = max(float(np.abs(y).max()), 1e-300)
+        exp3 = int(np.floor(np.log10(k) / 3) * 3) if UN.label(self.info.unit) else 0
+        pre = {-15: "f", -12: "p", -9: "n", -6: "µ", -3: "m", 0: "", 3: "k", 6: "M", 9: "G"}.get(exp3, "")
+        if not pre and exp3:
+            exp3 = 0
+        ax.plot(f / 1e9, y / 10.0 ** exp3, marker="o" if len(f) < 12 else None, color="#2f5bd3", lw=1.6, ms=3)
+        ax.tick_params(labelsize=7)
+        ax.margins(x=0.03, y=0.15)
+        self.freq_note.setText(f"{pre}{UN.label(self.info.unit)} over GHz · {sol}")
+        ax.grid(True, alpha=0.3)
+        for s in ("top", "right"):
+            ax.spines[s].set_visible(False)
+        self.canvas.draw_idle()
 
     def _fill_reduce_geometries(self) -> None:
         cur = self.red_geo.currentText()
@@ -686,7 +1054,7 @@ class CalculatorPanel(QWidget):
             self.evaluate()
             return
         self._evaluate_text(expr)
-        self.result_note.setText(f"{expr}: " + self.result_note.text())
+        self.result_note.setText(f"{expr}<br>" + self.result_note.text())
 
     # ---- 3D preview ------------------------------------------------------------------------------
     def _preview(self) -> None:
@@ -722,10 +1090,12 @@ class CalculatorPanel(QWidget):
         except Exception:  # noqa: BLE001
             pass
 
-    def hideEvent(self, e):
+    def closeEvent(self, e):
         self.live.setChecked(False)
-        self.pick.setChecked(False)
-        super().hideEvent(e)
+        st = getattr(self.win, "settings", None)
+        if st is not None:
+            st.setValue("calc/geometry", self.saveGeometry())
+        super().closeEvent(e)
 
     # ---- lifecycle -------------------------------------------------------------------------------
     def _check_name(self, name: str) -> str | None:
@@ -752,7 +1122,7 @@ class CalculatorPanel(QWidget):
             return False
         if not name:
             self.name.setFocus()
-            self.result_note.setText(f"<span style='color:{ERR}'>Give the expression a name to save it</span>")
+            self.status.setText(f"<span style='color:{ERR}'>Give the expression a name to save it</span>")
             return False
         msg = self._check_name(name)
         if msg:
@@ -793,6 +1163,8 @@ class CalculatorPanel(QWidget):
         self.saved_text = self._state()
         self.refresh()
         self._dirty_changed()
+        self._used_by()
+        self.status.setText(f"Saved {name}")
         self.win.msgs.add("info", f"Fields Calculator: saved {name} = {text}")
         if self.for_plot and self.info is not None and self.info.field:
             self.for_plot = False
@@ -826,7 +1198,7 @@ class CalculatorPanel(QWidget):
             return self.current
         if not self.name.text().strip():
             self.name.setFocus()
-            self.result_note.setText(f"<span style='color:{ERR}'>{what} needs a name: give one and Save</span>")
+            self.status.setText(f"<span style='color:{ERR}'>{what} needs a name: give one and Save</span>")
             return None
         return self.name.text().strip() if self.save() else None
 
@@ -849,7 +1221,7 @@ class CalculatorPanel(QWidget):
             return
         if self.info.field:
             QMessageBox.information(self, "Add to Report", "Reports show values over frequency: reduce the field "
-                                                           "to a value first (Maximum, Integral, ... below).")
+                                                           "to a value first (Reduce to a value, right).")
             return
         name = self._ensure_saved("A report trace")
         if name:
@@ -858,18 +1230,13 @@ class CalculatorPanel(QWidget):
 
     def open_for_plot(self) -> None:
         self.for_plot = True
-        self.banner.setText("<b>New quantity for a field plot.</b> Type or pick the expression, give it a name and "
+        self.banner.setText("<b>New quantity for a field plot.</b> Build the expression, give it a name and "
                             "Save: the field plot dialog opens with it.")
         self.banner.setVisible(True)
         self.new()
         self.edit.setFocus()
 
     # ---- dialogs ---------------------------------------------------------------------------------
-    def integral_dialog(self) -> None:
-        dlg = IntegralDialog(self)
-        dlg.show()
-        self._integral = dlg
-
     def component_dialog(self) -> None:
         dlg = ComponentDialog(self)
         if dlg.exec() == QDialog.Accepted:
@@ -881,123 +1248,6 @@ class CalculatorPanel(QWidget):
         self.refresh()
 
 
-class IntegralDialog(QDialog):
-    """Builds an integral: over a line, face or volume, of a field; the geometry from the list or the 3D
-    selection. Not modal, so objects and faces can be picked in the 3D view meanwhile."""
-
-    def __init__(self, panel: CalculatorPanel):
-        super().__init__(panel)
-        self.panel = panel
-        self.setWindowTitle("Insert Integral")
-        self.setAttribute(Qt.WA_DeleteOnClose)
-        f = QFormLayout(self)
-        self.kind = QButtonGroup(self)
-        kr = QHBoxLayout()
-        for i, t in enumerate(("Line", "Face", "Volume")):
-            rb = QRadioButton(t)
-            self.kind.addButton(rb, i)
-            kr.addWidget(rb)
-        self.kind.button(1).setChecked(True)
-        self.kind.idToggled.connect(lambda *_: self._fill())
-        f.addRow("Integral over", kr)
-        gr = QHBoxLayout()
-        self.geo = QComboBox()
-        self.geo.setEditable(True)
-        self.geo.setMinimumWidth(180)
-        pick = QPushButton("Use 3D selection")
-        pick.setToolTip("Select objects or faces in the 3D view (F: faces), then click here")
-        pick.clicked.connect(self._use_selection)
-        gr.addWidget(self.geo, 1)
-        gr.addWidget(pick)
-        f.addRow("Geometry", gr)
-        self.flip = QCheckBox("Reverse the normal (faces) or the direction (lines)")
-        f.addRow("", self.flip)
-        cur = panel.edit.toPlainText().strip()
-        self.f = QLineEdit(cur if panel.info is not None and panel.info.field else "re(S)")
-        f.addRow("Integrand", self.f)
-        self.mode = QComboBox()
-        f.addRow("Vector as", self.mode)
-        self.preview = QLabel()
-        self.preview.setStyleSheet(f"color:{MUTED}")
-        self.preview.setWordWrap(True)
-        f.addRow("", self.preview)
-        bb = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        bb.button(QDialogButtonBox.Ok).setText("Insert")
-        bb.accepted.connect(self._insert)
-        bb.rejected.connect(self.reject)
-        f.addRow(bb)
-        for w in (self.geo, self.mode):
-            w.currentTextChanged.connect(self._update)
-        self.geo.editTextChanged.connect(self._update)
-        self.f.textChanged.connect(self._update)
-        self.flip.toggled.connect(self._update)
-        self._fill()
-
-    def _dim(self) -> int:
-        return [1, 2, 3][self.kind.checkedId()]
-
-    def _fill(self) -> None:
-        env = CB.make_env(self.panel.doc)
-        d = self._dim()
-        names = [n for n, g in env.geometry.items() if d in g.dims]
-        if d == 2:
-            names += ["cut_xy(0)", "cut_yz(0)", "cut_xz(0)"]
-        cur = self.geo.currentText()
-        self.geo.clear()
-        self.geo.addItems(names)
-        if cur in names:
-            self.geo.setCurrentText(cur)
-        self.mode.clear()
-        self.mode.addItems({1: ["Tangential F·dl", "Magnitude |F|"], 2: ["Flux F·n", "Per component", "Magnitude |F|"],
-                            3: ["Per component", "Magnitude |F|"]}[d])
-        self.flip.setEnabled(d < 3)
-        self._update()
-
-    def _use_selection(self) -> None:
-        doc = self.panel.doc
-        names = []
-        for s in doc.selection:
-            n = f"face({s.obj}, {s.index})" if doc.selection_mode == "face" and s.index >= 0 else s.obj
-            if n not in names:
-                names.append(n)
-        if not names:
-            QMessageBox.information(self, "Insert Integral", "Select objects or faces in the 3D view first.")
-            return
-        self.geo.setCurrentText(names[0] if len(names) == 1 else "[" + ", ".join(names) + "]")
-
-    def text(self) -> str:
-        geo = self.geo.currentText().strip()
-        if self.flip.isChecked() and self._dim() < 3:
-            geo = f"[{', '.join(f'flip({g.strip()})' for g in geo[1:-1].split(','))}]" if geo.startswith("[") \
-                else f"flip({geo})"
-        f = self.f.text().strip() or "E"
-        env = CB.make_env(self.panel.doc)
-        try:
-            vec = L.analyze(f, env).vec
-        except L.CalcError:
-            vec = False
-        d, m = self._dim(), self.mode.currentText()
-        if vec and m.startswith("Magnitude"):
-            f = f"|{f}|"
-        if d == 1:
-            return f"int_line({geo}, {f})"
-        if d == 2:
-            return f"flux({geo}, {f})" if vec and m.startswith("Flux") else f"int_surf({geo}, {f})"
-        return f"int_vol({geo}, {f})"
-
-    def _update(self, *_):
-        t = self.text()
-        try:
-            i = L.analyze(t, CB.make_env(self.panel.doc))
-            self.preview.setText(f"{t}   →   {i.kind}, {UN.describe(i.unit)}")
-        except L.CalcError as e:
-            self.preview.setText(f"{t}   →   <span style='color:{ERR}'>{e}</span>")
-
-    def _insert(self) -> None:
-        self.panel.edit.insert(self.text())
-        self.accept()
-
-
 class ComponentDialog(QDialog):
     """A component of a vector field in a coordinate system of the model."""
 
@@ -1005,7 +1255,7 @@ class ComponentDialog(QDialog):
              "Cylindrical": [("ρ (rho)", "rho"), ("φ (phi)", "phi"), ("z", "z")],
              "Spherical": [("r", "r"), ("θ (theta)", "theta"), ("φ (phi)", "phi")]}
 
-    def __init__(self, panel: CalculatorPanel):
+    def __init__(self, panel: CalculatorWindow):
         super().__init__(panel)
         self.panel = panel
         self.setWindowTitle("Insert Component")
@@ -1062,7 +1312,7 @@ class FunctionsDialog(QDialog):
     """Your own functions name(a, b) = expression: expanded where they are used; the parameters may also
     be geometries."""
 
-    def __init__(self, panel: CalculatorPanel, select: str | None = None):
+    def __init__(self, panel: CalculatorWindow, select: str | None = None):
         super().__init__(panel)
         self.panel = panel
         self.doc = panel.doc

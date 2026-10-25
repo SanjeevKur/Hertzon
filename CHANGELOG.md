@@ -6,8 +6,10 @@ the GitHub release notes.
 ## Unreleased
 
 ### Added
-- **Fields Calculator** (Results > Fields > Fields Calculator, or Calculator in the Results ribbon): a docked
-  panel for expressions of the stored fields, typed as text with units, for example
+- **Fields Calculator** (Results > Fields > Fields Calculator, or Calculator in the Results ribbon): its own
+  window for expressions of the stored fields, built from building blocks or typed as text with units. An
+  integral or another operation over a geometry hides the window and asks for the face, object or line in the
+  3D view, then comes back with it in the expression. Examples:
   `flux(Port1, re(S))`, `int_line(Radial, E)`, `max(Dielectric, |E|)` or
   `int_vol(Dielectric, 0.5*omega*eps0*eps_r*tand*|E|^2)`. Each expression shows its kind (field or value),
   unit and a typeset formula while you type; errors are underlined where they are. Integrals over lines,

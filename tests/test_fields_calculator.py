@@ -182,3 +182,39 @@ def test_report_traces_follow_a_rename():
     CB.rename_everywhere(d, "Pin", "P_in")
     assert d.reports[-1].traces == ["P_in @ Setup1 : Sweep", "2*P_in + dB(S(1,1))"]
     assert CB.field_names_in(d, d.reports[-1].traces[1]) == ["P_in"]
+
+
+def test_calculator_window_picks_the_geometry_in_the_3d_view():
+    """An integral button hides the calculator, the face or object picked in the 3D view goes into the
+    expression around the field typed so far, and the calculator comes back."""
+    from PySide6.QtWidgets import QApplication
+    app = QApplication.instance() or QApplication([])
+    from hertzon.gui.doc import Pick
+    from hertzon.gui.main_window import MainWindow
+    from hertzon.model.design import Project
+    win = MainWindow(Project())
+    win.des.add_object("CreateBox", "Box", Position="0,0,0", XSize="1", YSize="1", ZSize="1")
+    win.doc.rebuild()
+    win.fields_calculator()
+    calc = win.calc_window
+    calc.edit.setPlainText("0.25*eps0*eps_r*|E|^2")
+    calc.pick("int_vol", 3)
+    assert not calc.isVisible() and win.doc.selection_mode == "object"
+    win.doc.select([Pick("Box")])
+    calc._bar._use()
+    app.processEvents()
+    assert calc.isVisible()
+    assert calc.edit.toPlainText() == "int_vol(Box, 0.25*eps0*eps_r*|E|^2)"
+    assert calc.info is not None and not calc.info.field
+    calc.new()
+    calc.edit.setPlainText("re(S)")
+    calc.pick("flux", 2)
+    assert win.doc.selection_mode == "face"
+    win.doc.select([Pick("Box", 2)])
+    calc._bar.flip.setChecked(True)
+    calc._bar._use()
+    assert calc.edit.toPlainText() == "flux(flip(face(Box, 2)), re(S))"
+    assert win.doc.selection_mode == "object"           # the selection mode is restored
+    calc.close()
+    win.doc.dirty = False
+    win.close()

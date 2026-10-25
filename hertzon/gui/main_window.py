@@ -3992,18 +3992,19 @@ class MainWindow(QMainWindow):
         self.report_tabs.clear()
 
     def fields_calculator(self, name: str | None = None, for_plot: bool = False) -> None:
-        """Results > Fields > Fields Calculator: the docked panel for expressions of E, H and J."""
-        from .calculator import CalculatorPanel
-        if getattr(self, "calc_dock", None) is None:
-            self.calc_panel = CalculatorPanel(self)
-            self.calc_dock = self._dock("Fields Calculator", self.calc_panel, Qt.RightDockWidgetArea)
-        self.calc_dock.show()
-        self.calc_dock.raise_()
-        self.calc_panel.refresh()
+        """Results > Fields > Fields Calculator: its own window for expressions of E, H and J."""
+        from .calculator import CalculatorWindow
+        if getattr(self, "calc_window", None) is None:
+            self.calc_window = CalculatorWindow(self)
+        w = self.calc_window
+        w.refresh()
+        w.show()
+        w.raise_()
+        w.activateWindow()
         if for_plot:
-            self.calc_panel.open_for_plot()
+            w.open_for_plot()
         elif name:
-            self.calc_panel.load(name)
+            w.load(name)
 
     def field_report(self, name: str, solution: str = "", port: int = 1) -> None:
         """A rectangular report of a value of the Fields Calculator over frequency."""
