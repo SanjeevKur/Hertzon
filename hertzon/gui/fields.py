@@ -309,6 +309,52 @@ def _cut(work: pv.UnstructuredGrid, normal, origin, per_element: bool) -> pv.Pol
     return pv.wrap(cut.GetOutput())
 
 
+def _sheet_cut(work: pv.UnstructuredGrid, cad: pv.PolyData) -> pv.PolyData | None:
+    """Field on a flat sheet that is not part of the solver mesh (a drawn cut plane): the solver mesh cut by
+    the sheet's plane and cropped to the sheet. Unlike interpolating onto the sheet's own triangles, the
+    triangles then end at the element faces, so jumps at material boundaries and metal sheets stay sharp.
+    None if the sheet is not flat."""
+    pts = np.asarray(cad.points, float)
+    if len(pts) < 3 or not cad.n_cells:
+        return None
+    c = pts.mean(axis=0)
+    _, sv, vt = np.linalg.svd(pts - c, full_matrices=False)
+    size = float(np.ptp(pts, axis=0).max())
+    if size <= 0 or sv[-1] > 1e-6 * size * np.sqrt(len(pts)):
+        return None
+    n = vt[-1]
+    sl = _cut(work, n, c, True)
+    if not sl.n_cells:
+        return None
+    pad = 1e-6 * size
+    # crop to the sheet's bounding rectangle in its own plane (not clip_box: that merges the points of
+    # neighbouring elements)
+    for ax in vt[:2]:
+        d = (pts - c) @ ax
+        for o, nrm in ((d.min() - pad, -ax), (d.max() + pad, ax)):
+            plane = vtk.vtkPlane()
+            plane.SetOrigin(*(c + o * ax))
+            plane.SetNormal(*nrm)
+            clip = vtk.vtkClipPolyData()
+            clip.SetInputData(sl)
+            clip.SetClipFunction(plane)
+            clip.InsideOutOn()
+            clip.SetLocator(vtk.vtkNonMergingPointLocator())
+            clip.Update()
+            sl = pv.wrap(clip.GetOutput())
+    if not sl.n_cells:
+        return None
+    # outline other than the bounding box: keep the cut triangles whose centre lies on the sheet
+    flat = cad.extract_surface(algorithm="dataset_surface").triangulate()
+    cc = np.asarray(sl.cell_centers().points)
+    _, closest = flat.find_closest_cell(cc, return_closest_point=True)
+    on = np.linalg.norm(cc - closest, axis=1) <= 1e-4 * size
+    if not on.all():
+        sl = sl.extract_cells(np.where(on)[0]).extract_surface(algorithm="dataset_surface", pass_pointid=False)
+    sl.field_data["fromgrid"] = np.array([1])
+    return sl if sl.n_cells else None
+
+
 def _mesh_of(grid) -> dict | None:
     for v in _cache.values():
         if v[0] is grid:
@@ -874,7 +920,8 @@ def prepare_overlay(doc, view, quantity: str, solution: str, freq_index: int = 0
                         sel = _restrict_faces(mesh, sel, full, face)
                     surf = _surface(work, mesh, *sel, both=False, toward_owner=pec)
                 elif ob is not None and not ob.model:
-                    return _refined(cad, mesh)      # non-model: interpolate onto a fine surface
+                    # non-model: a plane is cut from the solver mesh, other shapes are interpolated
+                    return _sheet_cut(work, cad) or _refined(cad, mesh)
                 else:
                     # sheets, and the walls of unmeshed solids (PEC): faces with one tet only
                     solid = ob is not None and getattr(ob, "dim", 2) == 3
@@ -885,7 +932,7 @@ def prepare_overlay(doc, view, quantity: str, solution: str, freq_index: int = 0
                     if not solid and surf.area < 0.5 * cad.area:
                         # a sheet the solver mesh does not follow (e.g. drawn after the solve): the few
                         # element faces that happen to lie on it are no plot; interpolate like a non-model sheet
-                        return _refined(cad, mesh)
+                        return _sheet_cut(work, cad) or _refined(cad, mesh)
                 if surf.n_cells:
                     return surf
             except Exception as e:  # noqa: BLE001

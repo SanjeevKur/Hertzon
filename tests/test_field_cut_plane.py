@@ -46,3 +46,19 @@ def test_cut_keeps_the_jump_at_a_material_boundary(plot, plot_type):
     assert on.any()                                         # the cut has points on the boundary
     assert np.allclose(vals[side == 1], HIGH) and np.allclose(vals[side == 0], LOW)
     assert set(np.round(vals[on])) == {LOW, HIGH}           # both sides are drawn there
+
+
+def test_drawn_plane_is_cut_from_the_solver_mesh(plot):
+    """A drawn plane (a sheet outside the solver mesh) shows the jump too, cropped to the sheet."""
+    grid, fields = F.load_grid(*F.store_for(None, ""))
+    work = grid.copy(deep=False)
+    work.point_data["cmag"] = np.linalg.norm(np.abs(fields["E_0_1"]), axis=1)
+    sheet = pv.Rectangle([[0.1e-3, 0.4e-3, 0.2e-3], [0.9e-3, 0.4e-3, 0.2e-3], [0.9e-3, 0.4e-3, 0.8e-3]])
+    s = F._sheet_cut(work, sheet.triangulate())
+    assert np.allclose(s.bounds, (0.1e-3, 0.9e-3, 0.4e-3, 0.4e-3, 0.2e-3, 0.8e-3), atol=1e-9)
+    side = np.round(s.cell_data_to_point_data().point_data["_obj"])
+    vals = np.asarray(s.point_data["cmag"])
+    assert np.allclose(vals[side == 1], HIGH) and np.allclose(vals[side == 0], LOW)
+    on = np.isclose(np.asarray(s.points)[:, 2], 0.5e-3)
+    assert on.any() and set(np.round(vals[on])) == {LOW, HIGH}
+    assert F._sheet_cut(work, pv.Sphere(radius=0.2e-3, center=(0.5e-3,) * 3)) is None   # not flat
