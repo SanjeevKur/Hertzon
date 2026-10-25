@@ -3,6 +3,23 @@
 All notable changes of each release. The release workflow copies the section of the released version into
 the GitHub release notes.
 
+## 0.2.2 (2026-10-25)
+
+### Changed
+- **AURA refinement keeps curved surfaces exact (hzAURA)**: EMerge `55ebd4d`. Where a new node on a curved
+  face or edge cannot be moved onto the CAD geometry by bisection, it is put there anyway and the elements
+  around it are re-meshed as a constrained Delaunay cavity, instead of leaving the node closer to the chord
+  (a dent). Faces that are neither spheres, cylinders nor planes are followed by a bicubic interpolation of
+  their CAD parametrisation: on a lofted free-form body new surface nodes stay within 0.14 mm of the face
+  (was 1.4 mm). AURA's refinement time is unchanged. The setting is now called **hzAURA (EMerge)**; projects
+  and scripts with "AURA (EMerge)" keep working and keep their solutions.
+- **More accurate RCS of scattering problems**: with an incident plane wave, Auto Open now leaves one
+  wavelength of air around the objects (was half a wavelength), and the far field is integrated with Gauss
+  points over a box λ/8 around the scatterers instead of over mesh faces halfway to the boundary. For the
+  250 mm PEC sphere at 1 GHz the error of the bistatic RCS against the exact solution drops from 0.6 dB to
+  about 0.4 dB (monostatic from +1.4 dB to +0.2 dB), with fewer tetrahedra (26k instead of 38k). A padding
+  set in the design is used as before.
+
 ## 0.2.1 (2026-10-25)
 
 ### Added

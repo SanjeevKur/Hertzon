@@ -3,7 +3,7 @@
 Every adaptive pass solves the model, rates the error of each tetrahedron with EMerge's error estimate,
 refines the mesh where the error is largest and solves again, until Delta S (or Delta E for incident
 waves) meets the convergence criterion. Since EMerge 3 and Hertzon's move to EMerge `e03a085`, the
-default refinement is **AURA**, EMerge's own local refinement. Hertzon's own local Delaunay mesher
+default refinement is **hzAURA**, EMerge's own local refinement. Hertzon's own local Delaunay mesher
 **hzmesh** and a gmsh re-mesh stay selectable. Curved elements on curved surfaces are EMerge's as well
 (FennisRobert/EMerge#77); Hertzon switches them on with a setup option.
 
@@ -43,7 +43,7 @@ Setup > Advanced > **Mesh refinement** (`RefinementMethod`):
 | Local (Delaunay) | hzmesh refines the current mesh around the worst elements | yes, old nodes never move |
 | Remesh (slow) | gmsh meshes the whole model again with EMerge's size field | no |
 | Remesh (stable, experimental) | gmsh re-meshes, but the size field holds every current node's size and only shrinks it at the worst elements | nearly |
-| **AURA (EMerge)** (default) | EMerge's local refinement: longest-edge bisection of the worst elements, then flips and smoothing | yes, old nodes never move |
+| **hzAURA (EMerge)** (default, formerly "AURA (EMerge)") | EMerge's local refinement: longest-edge bisection of the worst elements, then flips and smoothing | yes, old nodes never move |
 
 AURA is the default for new setups since it reached the convergence criterion faster, or was more
 accurate per tetrahedron, than hzmesh on the benchmark models: a comparison of Local (Delaunay) and AURA
@@ -119,6 +119,14 @@ One adaptive pass (`adapt.refine_model`):
 AURA works differently: EMerge bisects the marked tetrahedra along their longest edge and improves the new
 elements with flips and smoothing, inside EMerge's own mesh, without a gmsh run per pass. Its meshes are
 nested as well.
+
+New nodes on curved faces and edges are moved from the chord onto the CAD geometry. Where the elements
+around the split edge are too thin for that move, Hertzon runs AURA with EMerge's cavity option (hzAURA):
+the node is put on the surface anyway, and the elements around it are cut out and re-meshed as a
+constrained Delaunay cavity, the same idea as a point insertion of hzmesh. Nodes and elements outside the
+cavity stay as they are. Plain bisection would leave such a node closer to the chord, a dent in the
+refined surface. Faces that are not spheres, cylinders or planes are followed by a bicubic interpolation
+of their CAD parametrisation.
 
 ## Robustness
 
@@ -239,7 +247,7 @@ Patch antenna (no curved surfaces, no exact reference): the mesh costs 3.9 s wit
 
 ## Usage and settings
 
-In the GUI: Setup > Advanced > **Mesh refinement** = AURA (EMerge), Local (Delaunay), Remesh (slow) or
+In the GUI: Setup > Advanced > **Mesh refinement** = hzAURA (EMerge), Local (Delaunay), Remesh (slow) or
 Remesh (stable, experimental). *Maximum refinement per pass (%)* sets the growth per pass for every
 method; *Mesh growth rate* grades the size field of Local (Delaunay) and Remesh.
 
