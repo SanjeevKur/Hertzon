@@ -10,6 +10,8 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 
+os.environ.setdefault("HERTZON_NO_UPDATE_CHECK", "1")   # no GitHub request from the main windows the tests open
+
 
 def _pinned() -> str:
     lines = (ROOT / "packaging" / "emerge-commit").read_text(encoding="utf-8").splitlines()
