@@ -5,12 +5,22 @@ the GitHub release notes.
 
 ## Unreleased
 
+### Changed
+- **Benchmarks**: the Solver Benchmark re-run on the 32-core workstation with 0.2.3 and hzAURA, compared with
+  the runs of 19 October (patch antenna 2.5 to 3.7 times faster with the same result, microstrip 1.4 to 1.6
+  times), and the hairpin filter added (docs/BENCHMARKS.md). The raw results of both are in
+  examples/benchmark/scaling/results.
+
 ### Fixed
 - **Report tabs push the window off screen**: opening a report (for example an XY plot) raised the main
   window's minimum height to the full height of the trace editor, so on a 1080p screen with display scaling
   a maximized window reached below the screen and the status bar with the coordinates was cut off; after
   maximizing again the panels could be squeezed. The trace editor on the left of a report now scrolls when
   the window is low.
+- **Analyze a single sweep and continue an adaptive run with hzAURA**: the adaptive mesh refined with hzAURA
+  was not stored with the refinement state, so analyzing only a sweep stopped with "No adaptive solution to
+  reuse", and an interrupted run started again from the initial mesh. The mesh is now stored and rebuilt
+  from it; this also makes the parallel sweep runs of the Solver Benchmark work again.
 
 ## 0.2.3 (2026-10-25)
 
