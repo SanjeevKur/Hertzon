@@ -62,6 +62,12 @@ def _point_triangle_dist(P, A, B, C):
 
 AXIS_OF_PLANE = {"XY": "Z", "YZ": "X", "XZ": "Y", "ZX": "Y"}
 FILE_FILTER = "Hertzon project (*.hzn)"
+EXAMPLES_DIR = Path(__file__).resolve().parents[2] / "examples"   # next to the package in the repo and installs
+
+
+def example_projects(folder: Path = EXAMPLES_DIR) -> list[Path]:
+    """The shipped example projects for File > Open Example, sorted by name."""
+    return sorted(folder.glob("*.hzn"), key=lambda p: p.stem.lower()) if folder.is_dir() else []
 
 
 class MainWindow(QMainWindow):
@@ -80,6 +86,7 @@ class MainWindow(QMainWindow):
         self.anim_plot: str | None = None
         self._hidden_plots: set[str] = set()      # field plots hidden with Hide / Clear Overlays
         self._overlay_info: dict[str, str] = {}   # status bar text per drawn field plot
+        self._plot_geom: dict[str, tuple] = {}    # non-model objects a drawn field plot lies on
 
         # central area: modeler (history tree + 3D view) and report tabs
         self.tabs = QTabWidget()
@@ -243,6 +250,8 @@ class MainWindow(QMainWindow):
         m = mb.addMenu("&File")
         for a in (self.a_new, self.a_open, self.a_save, self.a_saveas):
             m.addAction(a)
+        self.example_menu = m.addMenu("Open Example")
+        self._fill_examples()
         self.recent_menu = m.addMenu("Recent Projects")
         self._fill_recent()
         m.addAction("Save As Archive...", self.save_archive)
@@ -866,6 +875,7 @@ class MainWindow(QMainWindow):
         self._update_title()
         self._update_sel_buttons()                 # a sheet may have become a solid (Thicken, Sweep)
         self._sync_overlays()
+        self._follow_helper_plots()
         if what in ("variables", "all", "model", "results"):
             self._follow_variation()
         if what in ("attributes",):
@@ -1485,7 +1495,8 @@ class MainWindow(QMainWindow):
                 d.units = self.settings.value("modeler/default_units", d.units)
             self.set_project(p)
 
-    def file_open(self, path: str | None = None) -> None:
+    def file_open(self, path: str | None = None, as_copy: bool = False) -> None:
+        """Open a project; as_copy opens it untitled (examples), so saving asks for a new file."""
         if not self.maybe_save():
             return
         if not path:
@@ -1494,7 +1505,7 @@ class MainWindow(QMainWindow):
             return
         auto = Path(path + ".auto")
         load_from = path
-        if auto.exists() and auto.stat().st_mtime > Path(path).stat().st_mtime:
+        if not as_copy and auto.exists() and auto.stat().st_mtime > Path(path).stat().st_mtime:
             r = QMessageBox.question(self, "Autosave",
                                      f"An autosave of {Path(path).name} is newer than the project file "
                                      "(Hertzon was not closed normally).\n\nOpen the autosaved version?",
@@ -1545,7 +1556,7 @@ class MainWindow(QMainWindow):
         try:
             try:
                 proj = Project.load(load_from)
-                proj.path = path
+                proj.path = None if as_copy else path
             except Exception as e:  # noqa: BLE001
                 QMessageBox.critical(self, "Open", f"Cannot open {path}:\n{e}")
                 return
@@ -1560,6 +1571,9 @@ class MainWindow(QMainWindow):
             self.doc.dirty = True
             self._update_title()
             self.msgs.add("warning", f"Recovered from autosave; save to keep it ({path})")
+        if as_copy:
+            self.msgs.add("info", f"Opened example {Path(path).stem} as a copy; save it to a folder of your own")
+            return
         self._add_recent(path)
         self.msgs.add("info", f"Opened {path}")
 
@@ -1759,7 +1773,13 @@ class MainWindow(QMainWindow):
             self.msgs.add("info", f"Script saved: {path}")
 
     def file_save_as(self) -> bool:
-        path, _ = QFileDialog.getSaveFileName(self, "Save Project As", f"{self.doc.project.name}.hzn", "Hertzon project (*.hzn)")
+        start = f"{self.doc.project.name}.hzn"
+        if not self.doc.project.path:      # untitled or an example copy: not into the working (install) folder
+            from PySide6.QtCore import QStandardPaths
+            docs = QStandardPaths.writableLocation(QStandardPaths.DocumentsLocation)
+            if docs:
+                start = str(Path(docs) / start)
+        path, _ = QFileDialog.getSaveFileName(self, "Save Project As", start, "Hertzon project (*.hzn)")
         if not path:
             return False
         if not path.endswith(".hzn"):
@@ -1771,6 +1791,13 @@ class MainWindow(QMainWindow):
         self._update_title()
         self.project_tree.rebuild()
         return True
+
+    def _fill_examples(self) -> None:
+        self.example_menu.clear()
+        for p in example_projects():
+            self.example_menu.addAction(p.stem, lambda _=False, p=p: self.file_open(str(p), as_copy=True))
+        if self.example_menu.isEmpty():
+            self.example_menu.addAction("(no examples installed)").setEnabled(False)
 
     def _fill_recent(self) -> None:
         self.recent_menu.clear()
@@ -4143,6 +4170,7 @@ class MainWindow(QMainWindow):
                                          "changed after it was computed. Analyze again.")
             info = info + "   [outdated solution]"
         self.view.set_overlay(name, meshes)
+        self._plot_geom[name] = self._helper_geometry(fp)
         self.field_ranges = getattr(self, "field_ranges", {})
         if meshes and meshes[0][1].get("clim") is not None:
             self.field_ranges[name] = tuple(meshes[0][1]["clim"])
@@ -4150,6 +4178,27 @@ class MainWindow(QMainWindow):
         if loud and "  (" in info:
             self.msgs.add("warning", f"Field plot '{name}': {info.split('  (', 1)[1].rstrip(')')}")
         return True
+
+    def _helper_geometry(self, fp) -> tuple:
+        """The display shapes of the non-model objects a field plot lies on (helper sheets drawn for plots)."""
+        names = dict.fromkeys([*(fp.objects or []), *[r.obj for r in (fp.faces or [])]])
+        return tuple((n, id(self.doc.tess.get(n))) for n in names
+                     if self.des.has_obj(n) and not self.des.obj(n).model)
+
+    def _follow_helper_plots(self) -> None:
+        """A field plot on a non-model object follows the object: moved, resized or reshaped, the plot is
+        drawn again on the new shape (the solution stays valid, the object is not part of the model)."""
+        geo = self._plot_geom
+        for fp in self.des.field_plots:
+            old = geo.get(fp.name)
+            if not old or fp.name not in self.view.overlay_actors:
+                continue
+            new = self._helper_geometry(fp)
+            if new == old or len(new) != len(old) or any(n not in self.doc.tess for n, _ in new):
+                continue
+            if fp.name in self.anim_bar.names:
+                self.anim_bar.close_player()        # its frames show the old shape
+            self._draw_field_plot(fp.name, loud=True)
 
     def edit_sources(self) -> None:
         """Edit Sources: post-processing magnitudes/phases and the incident wave field type."""

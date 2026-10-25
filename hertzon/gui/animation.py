@@ -8,7 +8,7 @@ import time
 import numpy as np
 from PySide6.QtCore import QEventLoop, Qt, QTimer
 from PySide6.QtWidgets import (QComboBox, QDialog, QDialogButtonBox, QDoubleSpinBox, QFileDialog, QFormLayout,
-                               QHBoxLayout, QLabel, QMessageBox, QProgressDialog, QPushButton, QSlider, QSpinBox,
+                               QHBoxLayout, QLabel, QMessageBox, QProgressDialog, QPushButton, QSizePolicy, QSlider, QSpinBox,
                                QWidget, QApplication, QStackedWidget)
 
 from . import fields as F
@@ -118,15 +118,12 @@ class AnimationBar(QWidget):
         self.b_stop = QPushButton("Stop")
         self.b_close = QPushButton("Close")
         self.slider = QSlider(Qt.Horizontal)
-        self.slider.setMinimumWidth(220)
         self.value = QLabel("")
-        self.value.setMinimumWidth(170)
         self.speed = QSpinBox()
         self.speed.setRange(1, 60)
         self.speed.setValue(8)
         self.speed.setSuffix(" frames/s")
         self.actual = QLabel("")
-        self.actual.setMinimumWidth(110)
         self.actual.setToolTip("Frames per second actually shown, measured during playback; the GIF export "
                                "uses this rate")
         self.b_gif = QPushButton("Export GIF...")
@@ -134,6 +131,14 @@ class AnimationBar(QWidget):
         for w in (self.title, self.b_play, self.b_pause, self.b_stop, self.slider, self.value,
                   QLabel("Speed"), self.speed, self.actual, self.b_gif, self.b_close):
             lay.addWidget(w)
+        for w, mw, st in ((self.title, 30, 1), (self.value, 110, 2), (self.actual, 80, 1), (self.slider, 80, 3)):
+            if w is not self.slider:                 # long texts are cut, never widen the bar
+                w.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
+            w.setMinimumWidth(mw)
+            lay.setStretch(lay.indexOf(w), st)
+        # the bar never sets the width of the 3D view: showing it must not squeeze the model tree or
+        # change the view (the GIF export takes the view as it is on screen)
+        self.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Fixed)
         self.meter = FpsMeter()
         self._shown = 0.0                            # when the measured rate was last written to the label
         self.b_play.clicked.connect(self.play)
