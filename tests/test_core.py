@@ -234,7 +234,11 @@ def test_refinement_method_renamed():
     a.props["RefinementMethod"] = "Local (Delaunay, experimental)"
     b.props["RefinementMethod"] = "Local (Delaunay)"
     assert setup_key(a) == setup_key(b)
-    assert schema.defaults(schema.SETUP)["RefinementMethod"] == "AURA (EMerge)"
+    assert schema.defaults(schema.SETUP)["RefinementMethod"] == "hzAURA (EMerge)"
+    # AURA was renamed to hzAURA: old projects open with the new name and keep their solutions
+    assert schema.upgrade_values({"RefinementMethod": "AURA (EMerge)"})["RefinementMethod"] == "hzAURA (EMerge)"
+    a.props["RefinementMethod"], b.props["RefinementMethod"] = "AURA (EMerge)", "hzAURA (EMerge)"
+    assert setup_key(a) == setup_key(b)
 
 
 def test_far_field_follows_edit_sources(tmp_path):

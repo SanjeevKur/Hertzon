@@ -35,7 +35,7 @@ def test_sphere_rcs_against_mie(tmp_path):
     d = json.loads((EXAMPLES / "SphereRCS.hzn").read_text(encoding="utf-8"))
     design = d["designs"][0]
     setup = design["setups"][0]
-    setup["props"].update(RefinementMethod="AURA (EMerge)", MaximumPasses="3", MinimumPasses="3",
+    setup["props"].update(RefinementMethod="hzAURA (EMerge)", MaximumPasses="3", MinimumPasses="3",
                           MinimumConvergedPasses="3", MaximumDeltaEnergy="1e-9")
     proj = tmp_path / "sphere.hzn"
     proj.write_text(json.dumps(d), encoding="utf-8")

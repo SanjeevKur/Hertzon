@@ -11,7 +11,8 @@ the GitHub release notes.
   around it are re-meshed as a constrained Delaunay cavity, instead of leaving the node closer to the chord
   (a dent). Faces that are neither spheres, cylinders nor planes are followed by a bicubic interpolation of
   their CAD parametrisation: on a lofted free-form body new surface nodes stay within 0.14 mm of the face
-  (was 1.4 mm). AURA's refinement time is unchanged.
+  (was 1.4 mm). AURA's refinement time is unchanged. The setting is now called **hzAURA (EMerge)**; projects
+  and scripts with "AURA (EMerge)" keep working and keep their solutions.
 - **More accurate RCS of scattering problems**: with an incident plane wave, Auto Open now leaves one
   wavelength of air around the objects (was half a wavelength), and the far field is integrated with Gauss
   points over a box λ/8 around the scatterers instead of over mesh faces halfway to the boundary. For the
