@@ -372,6 +372,21 @@
       "freq": "0",
       "phase": "0"
      }
+    },
+    {
+     "name": "Gain3D",
+     "quantity": "RadiationField",
+     "solution": "LastAdaptive",
+     "faces": [],
+     "objects": [],
+     "plane": "",
+     "props": {
+      "sphere": "Infinite Sphere1",
+      "trace": "dB(GainTotal)",
+      "transparency": "0.3",
+      "range": "30",
+      "scale": "0.6"
+     }
     }
    ],
    "coord_systems": [],

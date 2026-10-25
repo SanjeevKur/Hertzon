@@ -16,12 +16,15 @@ Every core count solves the whole setup in a fresh solver process (1 core first)
 
 Results on a 32-core workstation, with the swept bands plotted: [docs/BENCHMARKS.md](../../../docs/BENCHMARKS.md).
 
-Size and time with 4 cores (development container, for orientation):
+Size and time with 4 cores and hzAURA refinement (development container, for orientation):
 
 | Case | Design | Final mesh | Passes | Total (passes, sweep) |
 |---|---|---|---|---|
-| small_microstrip.hzn | Microstrip50 | 18.2k tetrahedra | 6 | 74 s (23 s, 48 s) |
-| medium_hairpin.hzn | Hairpin_N3 | 20.9k tetrahedra | 6 | 269 s (51 s, 214 s) |
-| large_patch.hzn | Patch245 | 43.6k tetrahedra | 9 | 330 s (78 s, 249 s) |
+| small_microstrip.hzn | Microstrip50 | 13.5k tetrahedra | 5 | 32 s (11 s, 18 s) |
+| large_patch.hzn | Patch245 | 19.9k tetrahedra | 6 | 104 s (29 s, 73 s) |
+| medium_hairpin.hzn | Hairpin_N3 | 41.8k tetrahedra | 8 | 222 s (87 s, 132 s) |
+
+The file names come from the earlier refinement, with which the patch needed the largest mesh; with
+hzAURA the hairpin filter does.
 
 All three have a 101-point interpolating sweep.

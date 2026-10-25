@@ -26,9 +26,9 @@ from .results import ResultStore, _safe
 ROOT = Path(__file__).resolve().parents[2]
 CASES_DIR = ROOT / "examples" / "benchmark" / "scaling"
 # built-in cases: (title, file, design, setup)
-CASES = [("Small: microstrip line, 2 ports (about 18k tetrahedra)", "small_microstrip.hzn", "Microstrip50", "Setup1"),
-         ("Medium: hairpin band-pass filter, 3 resonators (about 21k)", "medium_hairpin.hzn", "Hairpin_N3", "Setup1"),
-         ("Large: 2.45 GHz patch antenna with far field (about 44k)", "large_patch.hzn", "Patch245", "Setup1")]
+CASES = [("Microstrip line, 2 ports (about 13k tetrahedra)", "small_microstrip.hzn", "Microstrip50", "Setup1"),
+         ("2.45 GHz patch antenna with far field (about 20k)", "large_patch.hzn", "Patch245", "Setup1"),
+         ("Hairpin band-pass filter, 3 resonators (about 42k)", "medium_hairpin.hzn", "Hairpin_N3", "Setup1")]
 
 
 def default_cores(n: int | None = None) -> list[int]:
