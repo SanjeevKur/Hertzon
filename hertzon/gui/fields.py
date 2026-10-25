@@ -277,6 +277,8 @@ def load_grid(st: ResultStore, sol: str) -> tuple[pv.UnstructuredGrid, dict]:
         cells = np.hstack([np.full((len(conn), 1), conn.shape[1]), conn]).ravel()
         grid = pv.UnstructuredGrid(cells, np.full(len(conn), ctype, np.uint8), pts)
         grid.field_data["npt"] = np.array([npt])
+        if npt and "tet_obj" in m and len(m["tet_obj"]) == len(tets):
+            grid.cell_data["_obj"] = np.asarray(m["tet_obj"], np.int64)    # keeps materials apart on cut planes
         _cache.clear()
         _cache[key] = (grid, m, f)
     return _cache[key][0], f
@@ -288,6 +290,23 @@ def _grid_key(st: ResultStore, sol: str) -> str:
         p = st.folder / name
         return p.stat().st_mtime_ns if p.exists() else 0
     return f"{st.folder}|{sol}|{mtime('mesh.npz')}|{mtime(f'fields_{sol}.npz')}|{mtime(f'solution_{sol}.npz')}"
+
+
+def _cut(work: pv.UnstructuredGrid, normal, origin, per_element: bool) -> pv.PolyData:
+    """Cut plane through the solver mesh. With per-element fields (discontinuous at material boundaries and
+    metal sheets) the points of neighbouring elements are kept apart: a merging cut gives every point on such
+    a boundary the value of just one side, which shows as jagged spots along patches and ground planes."""
+    if not per_element:
+        return work.slice(normal=normal, origin=origin)
+    plane = vtk.vtkPlane()
+    plane.SetOrigin(*origin)
+    plane.SetNormal(*normal)
+    cut = vtk.vtkCutter()
+    cut.SetCutFunction(plane)
+    cut.SetInputData(work)
+    cut.SetLocator(vtk.vtkNonMergingPointLocator())
+    cut.Update()
+    return pv.wrap(cut.GetOutput())
 
 
 def _mesh_of(grid) -> dict | None:
@@ -908,7 +927,7 @@ def prepare_overlay(doc, view, quantity: str, solution: str, freq_index: int = 0
         i = int(np.argmax(np.abs(normal)))
         if val.strip():
             center[i] = float(doc.evaluator().length(val))
-        sl = work.slice(normal=normal, origin=center)
+        sl = _cut(work, normal, center, tet4)
         sl.field_data["fromgrid"] = np.array([1])
         targets.append(sl)
     if not targets:
@@ -930,6 +949,10 @@ def prepare_overlay(doc, view, quantity: str, solution: str, freq_index: int = 0
         if at["PlotType"] != "Flat Shaded" and s.n_points:
             # local smooth plot: the per-element values are averaged at shared nodes (overlay_at)
             key = np.round(np.asarray(s.points) / (1e-9 + 1e-7 * float(np.ptp(s.points, axis=0).max())))
+            if "_obj" in s.cell_data and s.n_cells:
+                # not across material boundaries and metal sheets: the field jumps there
+                obj = np.round(s.cell_data_to_point_data().point_data["_obj"])
+                key = np.column_stack([key, obj])
             _, inv = np.unique(key, axis=0, return_inverse=True)
             inv = inv.ravel()
         sampled.append(s)

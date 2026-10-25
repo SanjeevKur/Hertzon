@@ -80,6 +80,11 @@ the GitHub release notes.
   conductors the line runs across the shorter side of the sheet as before.
 
 ### Fixed
+- **Cut planes no longer show jagged spots at material boundaries and metal sheets**: the field is stored per
+  element and jumps at a substrate surface, a patch or a ground plane, but the cut plane merged the points of
+  both sides and gave each one the value of just one side. Along a patch antenna this drew red sawtooth streaks
+  on the patch and at the ground plane. The cut now keeps the elements apart, and the smooth plot averages
+  only within one material. The peaks at metal edges and corners stay: they are real.
 - **Far fields with symmetry planes**: the far field (gain, directivity, pattern, RCS) of a half or quarter
   model now includes the mirror images at Symmetry boundaries (Perfect E or Perfect H, planes parallel to XY,
   YZ or ZX). Before, only the simulated part radiated. Fields and radiated power refer to 1 W into the full
