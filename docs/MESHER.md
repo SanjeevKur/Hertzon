@@ -1,18 +1,23 @@
-# hzmesh: local Delaunay refinement for adaptive meshing
+# Adaptive mesh refinement
 
-hzmesh is Hertzon's own mesher for the adaptive solution loop. It refines the tetrahedral mesh of a
-model **locally**, as commercial solvers do: every node and every element outside the region the error estimator
-marks stays exactly as it is, and new nodes appear only where the field needs them. EMerge solves on
-the result as usual.
+Every adaptive pass solves the model, rates the error of each tetrahedron with EMerge's error estimate,
+refines the mesh where the error is largest and solves again, until Delta S (or Delta E for incident
+waves) meets the convergence criterion. Since EMerge 3 and Hertzon's move to EMerge `e03a085`, the
+default refinement is **AURA**, EMerge's own local refinement. Hertzon's own local Delaunay mesher
+**hzmesh** and a gmsh re-mesh stay selectable. Curved elements on curved surfaces are EMerge's as well
+(FennisRobert/EMerge#77); Hertzon switches them on with a setup option.
 
-- Core: C++17 with a C interface, `Hertzon/mesher/src/hzmesh.cpp` and `hzmesh.h`, built into
-  `Hertzon/mesher/_bin/` (`libhzmesh.so` for Linux, `hzmesh.dll` for Windows).
-- Python side: `Hertzon/mesher/core.py` (ctypes binding, gmsh in/out), `Hertzon/mesher/adapt.py`
-  (size field, growth control, one adaptive pass) and `Hertzon/mesher/replay.py` (repeat a pass
+hzmesh refines the tetrahedral mesh of a model **locally**: every node and every element outside the
+region the error estimate marks stays exactly as it is, and new nodes appear only where the field needs
+them. EMerge solves on the result as usual.
+
+- Core: C++17 with a C interface, `hertzon/mesher/src/hzmesh.cpp` and `hzmesh.h`, built into
+  `hertzon/mesher/_bin/` (`libhzmesh.so` for Linux, `hzmesh.dll` for Windows).
+- Python side: `hertzon/mesher/core.py` (ctypes binding, gmsh in/out), `hertzon/mesher/adapt.py`
+  (size field, growth control, one adaptive pass) and `hertzon/mesher/replay.py` (repeat a pass
   offline).
-- Integration: `Hertzon/solver/bridge.py` (refinement methods, fallback),
-  `Hertzon/solver/curvilinear.py` (curved elements), `Hertzon/solver/emerge_patches.py` (faster
-  mesh import).
+- Integration: `hertzon/solver/bridge.py` (adaptive passes, refinement methods, fallback),
+  `hertzon/solver/curvilinear.py` (curved geometry for the field plots).
 
 ## Contents
 
@@ -22,7 +27,6 @@ the result as usual.
 - [Robustness](#robustness)
 - [Curved elements](#curved-elements)
 - [Chord rule (off by default)](#chord-rule-off-by-default)
-- [Faster EMerge import](#faster-emerge-import)
 - [Threading and parallelism](#threading-and-parallelism)
 - [Results](#results)
 - [Usage and settings](#usage-and-settings)
@@ -36,13 +40,21 @@ Setup > Advanced > **Mesh refinement** (`RefinementMethod`):
 
 | Method | What it does | Meshes nested? |
 |---|---|---|
-| **Local (Delaunay)** (default) | hzmesh refines the current mesh around the worst elements | yes, old nodes never move |
+| Local (Delaunay) | hzmesh refines the current mesh around the worst elements | yes, old nodes never move |
 | Remesh (slow) | gmsh meshes the whole model again with EMerge's size field | no |
 | Remesh (stable, experimental) | gmsh re-meshes, but the size field holds every current node's size and only shrinks it at the worst elements | nearly |
+| **AURA (EMerge)** (default) | EMerge's local refinement: longest-edge bisection of the worst elements, then flips and smoothing | yes, old nodes never move |
 
-If hzmesh is not available or a pass fails, Hertzon re-meshes that pass with gmsh and writes a
-warning to the log. Older project values (`Local (Delaunay, experimental)`, `Zone (experimental)`,
-`Remesh`) are mapped to the current names on load (`Hertzon/model/schema.py`).
+AURA is the default for new setups since it reached the convergence criterion faster, or was more
+accurate per tetrahedron, than hzmesh on the benchmark models: a comparison of Local (Delaunay) and AURA
+is in [examples/benchmark/mesher](../examples/benchmark/mesher/README.md). Saved setups keep their method.
+All methods use the same error estimate (EMerge's), the same marking and the same convergence criterion;
+only the refinement step between two passes differs. If a refinement method is not available or a pass
+fails, Hertzon re-meshes that pass with gmsh and writes a warning to the log. Older project values
+(`Local (Delaunay, experimental)`, `Zone (experimental)`, `Remesh`) are mapped to the current names on
+load (`hertzon/model/schema.py`).
+
+The rest of this page describes hzmesh, the curved elements and the measurements made with them.
 
 ## Why local Delaunay refinement
 
@@ -54,7 +66,7 @@ the same time:
 1. Outside the error zone the mesh stays **exactly** the same (otherwise noise in Delta S).
 2. Inside the zone the mesh is not only split but meshed **well**, including surfaces.
 
-No off-the-shelf tool did both. What was tried (patch antenna, second order):
+Of the approaches tried for hzmesh, none did both (patch antenna, second order):
 
 | Approach | Nested? | Quality | Outcome |
 |---|---|---|---|
@@ -104,6 +116,10 @@ One adaptive pass (`adapt.refine_model`):
 6. **Back to EMerge**: the mesh is written into the gmsh model (old node tags are kept), then the
    normal EMerge import runs. Ports, materials and far field therefore work unchanged.
 
+AURA works differently: EMerge bisects the marked tetrahedra along their longest edge and improves the new
+elements with flips and smoothing, inside EMerge's own mesh, without a gmsh run per pass. Its meshes are
+nested as well.
+
 ## Robustness
 
 - Shewchuk's exact predicates (`orient3d`, `insphere`, `predicates.c`), compiled with
@@ -117,47 +133,41 @@ One adaptive pass (`adapt.refine_model`):
 - After every pass `hzm_check` verifies the whole topology. On a problem or an exception Hertzon falls
   back to a gmsh re-mesh for that pass and logs a warning.
 - Stress tests on box, sphere, cylinder, coax and patch over many passes
-  (`Hertzon/mesher/src/test/t_stress.py`): always valid, old nodes unmoved, volumes and surfaces
+  (`hertzon/mesher/src/test/t_stress.py`): always valid, old nodes unmoved, volumes and surfaces
   preserved.
-- `HZMESH_DUMP=<folder>` saves the input of every pass; `python -m Hertzon.mesher.replay FILE`
+- `HZMESH_DUMP=<folder>` saves the input of every pass; `python -m hertzon.mesher.replay FILE`
   repeats a failed refinement offline.
 
 ## Curved elements
 
-EMerge treats every tet as affine, with straight edges and flat faces. A round post, rod or
-resonator becomes a polygon. For strongly reflecting curved objects this faceting error dominates
-the S-parameters, and the error estimator cannot see it, because it rates the field on the mesh and
+EMerge used to treat every tet as affine, with straight edges and flat faces. A round post, rod or
+resonator then becomes a polygon. For strongly reflecting curved objects this faceting error dominates
+the S-parameters, and the error estimate cannot see it, because it rates the field on the mesh and
 not the mesh's distance from the geometry.
 
 ![Sphere: CAD, mesh with curved tets, surface current](screenshots/mesher_curved_sphere.png)
 
-Tets on curved surfaces therefore get quadratic edges (isoparametric, 10 nodes,
-`Hertzon/solver/curvilinear.py`):
+Tets on curved surfaces therefore get quadratic edges (isoparametric, 10 nodes). Since
+FennisRobert/EMerge#77 this is part of EMerge (`Settings.mw_curved_elements`), and Hertzon uses EMerge's
+version instead of its own former kernels, with the same results and meshes on the benchmark models (see
+[EMERGE_INTEGRATION.md](EMERGE_INTEGRATION.md)). The method:
 
 - The midpoint of every mesh edge on a curved CAD surface or curve is moved onto the real geometry
-  with `gmsh.model.getClosestPoint` (displacement d_e).
+  (displacement d_e).
 - Mapping: x = y + sum d_e phi_e(y) with phi_e = 4 lambda_i lambda_j on the straight tet y,
   Jacobian D = I + sum d_e (x) grad phi_e.
 - The covariant Piola transform can be written as a straight tet with a pointwise material:
   - curl term: mu^-1 -> D^T mu^-1 D / det D
   - mass term: eps -> det D D^-1 eps D^-T
-- EMerge's basis functions therefore stay unchanged. Only the element matrices of the curved tets
-  are recomputed after EMerge's assembly (numba, parallel, 64-point quadrature of degree 7).
+- The basis functions therefore stay unchanged; only the element matrices of the curved tets differ.
 - Conforming: a face without a curved edge stays exactly flat and keeps its tangential trace. Every
   tet that contains a curved edge is curved itself and uses the same displacement for that edge.
-- Validity: det D >= 0.3 at 79 check points per tet; otherwise the displacement of the affected
-  edges is halved, down to zero if needed, and checked again.
-- An independent reference (finite-difference field of the mapping, anisotropic complex materials,
-  both tet orientations) confirms the element matrices: deviation 1e-10 for small curvature, at most
-  3e-5 at det D of about 0.5.
-- Curved are PEC, metal (finite conductivity), symmetry and material faces, including ellipses,
-  splines, pipes and lofts. For metal only the very small impedance term stays on the flat facet.
-- Straight stay edges on faces with their own surface integrals: ports, absorbers, impedance and
-  RLC boundaries, thin conductors and periodic boundaries.
-- A curved face that touches a port stays completely straight. Otherwise the straight port mode
-  would see a curved line behind it, i.e. an impedance step (coax, circular waveguide).
-- With zero displacement the matrices of all 7 EMerge basis types match bit for bit (relative
-  deviation 5e-16). The post volume is right to 0.09 % instead of 4.7 %.
+- Curved are PEC, metal (finite conductivity), symmetry and material faces. Straight stay faces with
+  their own surface integrals: ports, absorbers, impedance and RLC boundaries, thin conductors and
+  periodic boundaries. A curved face that touches a port stays straight too, otherwise the straight port
+  mode would see a curved line behind it, i.e. an impedance step (coax, circular waveguide).
+- Hertzon uses the same curved map (`hertzon/solver/curvilinear.py`) to draw the mesh and to map the
+  fields of the curved tets in the field plots.
 - Setting: Setup > Options > **Curved elements on curved surfaces** (default on).
 
 ## Chord rule (off by default)
@@ -168,23 +178,6 @@ costs tets, so `sag` is 0 by default. `HZMESH_SAG=0.02` turns it on for experime
 the deviation relative to the end points and stops at edges below 2 % of the target size, so a node
 that had to be inserted next to the surface cannot trigger endless splitting.
 
-## Faster EMerge import
-
-After the mesher, `Mesh3D._pre_update` was the most expensive step: it builds edges, triangles and
-all index tables in Python loops per tet. `Hertzon/solver/emerge_patches.py` replaces these loops
-with numpy sorting and searching:
-
-| Mesh | Original | Hertzon |
-|---|---|---|
-| 35k tets | 1.9 s | 0.3 s |
-| 74k tets | 5.2 s | 1.3 s |
-| 296k tets | 44-60 s | 3.7 s |
-
-- All arrays and dicts are **bit-identical** to the original, including order (tested on 6 meshes).
-- A block is only replaced if the EMerge source matches exactly; with another EMerge version or on
-  an error the original runs.
-- `HERTZON_SLOW_IMPORT=1` turns the speed-up off.
-
 ## Threading and parallelism
 
 hzmesh currently runs **serially** on one core:
@@ -194,7 +187,7 @@ hzmesh currently runs **serially** on one core:
   `-pthread`.
 - Python calls the core once per pass, and the up to 6 growth-control trials run one after another,
   each on its own copy.
-- Only the solver runs in parallel (EMerge, PARDISO, the numba kernels of the curved elements).
+- Only the solver runs in parallel (EMerge, PARDISO).
 
 At 570k tets the core needs 0.15-0.3 s per pass, less than 1 % of the solve time, so parallelising
 has not paid off yet. If it ever does, there are two deterministic options:
@@ -211,7 +204,9 @@ growth-control trials concurrently would be simpler, but only saves milliseconds
 
 Benchmark: WR90 waveguide (10 GHz) with a centred full-height post. The field is exactly
 z-independent there, so there is an accurate 2D reference (isoparametric P2 FEM,
-`Hertzon/mesher/src/test/ref_wgpost.py`, converged to 6 digits). Error = |S11 - S11,ref|. All runs:
+`hertzon/mesher/src/test/ref_wgpost.py`, converged to 6 digits). These runs compare hzmesh with the
+re-mesh methods and were made before AURA was available, with Hertzon's former curved element kernels;
+the AURA comparison is in [examples/benchmark/mesher](../examples/benchmark/mesher/README.md). Error = |S11 - S11,ref|. All runs:
 second order, at most 12 passes, Delta S <= 0.0005 in 2 consecutive passes, 30 % refinement. The
 projects are in `examples/benchmark`.
 
@@ -234,7 +229,8 @@ Dielectric post r = 2 mm, eps_r 9.8, tan delta 1e-4, reference S11 = -0.33672 + 
 - With curved elements the error falls smoothly with mesh size for every method, and the
   convergence criterion stops close to the right value: about 5 to 15 times smaller error at the
   same tet count.
-- The run times with curved elements include the one-time numba compilation of about 40 s.
+- The run times with curved elements include the one-time numba compilation of about 40 s, which
+  EMerge's compiled curved elements no longer need.
 - Local and Remesh are on par with curved elements. Local needs about 0.2 s per pass instead of
   0.6-5 s for gmsh; the solve dominates in both cases.
 
@@ -243,8 +239,9 @@ Patch antenna (no curved surfaces, no exact reference): the mesh costs 3.9 s wit
 
 ## Usage and settings
 
-In the GUI: Setup > Advanced > **Mesh refinement** = Local (Delaunay). *Maximum refinement per
-pass (%)* and *Mesh growth rate* work as for Remesh.
+In the GUI: Setup > Advanced > **Mesh refinement** = AURA (EMerge), Local (Delaunay), Remesh (slow) or
+Remesh (stable, experimental). *Maximum refinement per pass (%)* sets the growth per pass for every
+method; *Mesh growth rate* grades the size field of Local (Delaunay) and Remesh.
 
 Environment variables for experiments:
 
@@ -256,17 +253,15 @@ Environment variables for experiments:
 | `HZMESH_LIB=<path>` | load another hzmesh library |
 | `HZMESH_SAG=<fraction>` | turn on the chord rule |
 | `HERTZON_CURVED=0` / `=1` | force curved elements off or on |
-| `HERTZON_CURVED_CHECK=1` | log straight vs. curved volume |
-| `HERTZON_SLOW_IMPORT=1` | use EMerge's original mesh import |
 
 ## Building
 
 ```
-Hertzon/mesher/src/build.sh     # Linux; with mingw-w64 installed it also builds the Windows DLL
-Hertzon/mesher/src/build.cmd    # Windows with MinGW-w64 (gcc/g++ in PATH, e.g. MSYS2 or w64devkit)
+hertzon/mesher/src/build.sh     # Linux; with mingw-w64 installed it also builds the Windows DLL
+hertzon/mesher/src/build.cmd    # Windows with MinGW-w64 (gcc/g++ in PATH, e.g. MSYS2 or w64devkit)
 ```
 
-The libraries land in `Hertzon/mesher/_bin/`. Always compile with `-ffp-contract=off`, otherwise
+The libraries land in `hertzon/mesher/_bin/`. Always compile with `-ffp-contract=off`, otherwise
 the exact predicates lose their guarantees and Linux and Windows meshes differ.
 
 ## C interface
@@ -295,10 +290,10 @@ the exact predicates lose their guarantees and Linux and Windows meshes differ.
   elements. Use the true geometry (value 0) for round bodies.
 - With many CAD faces, writing the mesh back to gmsh takes longer (one call per face and curve):
   2 s per pass for a faceted sphere with 1600 faces, 0.2 s for smooth models.
-- The error estimator still works on the straight tets. This only affects which tets are marked,
+- The error estimate works on the straight tets. This only affects which tets are marked,
   not the result.
-- A few tets with 3-8 degree dihedral angles can remain. They almost all come from the gmsh start
-  mesh in thin substrates; removing them would mean moving old nodes, so the meshes would no longer
-  be strictly nested.
-- The error estimator and marking come from EMerge. The slow convergence of the patch (S11 still
+- With hzmesh a few tets with 3-8 degree dihedral angles can remain. They almost all come from the gmsh
+  start mesh in thin substrates; removing them would mean moving old nodes, so the meshes would no
+  longer be strictly nested.
+- The error estimate and marking come from EMerge. The slow convergence of the patch (S11 still
   drifts at 20-40k tets) belongs to the problem; Remesh only hides the drift behind its noise.

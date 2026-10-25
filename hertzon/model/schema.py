@@ -98,7 +98,9 @@ GEOMETRY: dict[str, list[Prop]] = {
                P("Center", "point", "0,0,0")],
     "Mirror": [P("Base", "point", "0,0,0"), P("Normal", "vector", "1,0,0")],
     "Scale": [P("Factor", "expr", "1"), P("Center", "point", "0,0,0")],
-    "ThickenSheet": [P("Thickness", "length", "1"), P("BothSides", "bool", "False")],
+    "ThickenSheet": [P("Thickness", "length", "1"), P("BothSides", "bool", "False"),
+                     P("ReverseDirection", "bool", "False", label="Reverse direction",
+                       visible_if=("BothSides", "False"))],
     "SweepAlongVector": [P("Vector", "vector", "0,0,1")],
     "SweepAroundAxis": [P("Axis", "choice", "Z", choices=AXES), P("Angle", "angle", "360deg"),
                         P("Center", "point", "0,0,0")],
@@ -109,7 +111,9 @@ GEOMETRY: dict[str, list[Prop]] = {
     "Split": [P("Plane", "choice", "XY", choices=("XY", "YZ", "XZ", "Custom")),
               P("Base", "point", "0,0,0", visible_if=("Plane", "Custom")),
               P("Normal", "vector", "0,0,1", visible_if=("Plane", "Custom")),
-              P("Keep", "choice", "Positive", choices=("Positive", "Negative"))],
+              P("Keep", "choice", "Positive", choices=("Positive", "Negative")),
+              P("CoordinateSystem", "choice", "Global", label="Coordinate system", choices=("Global",),
+                help="The plane, Base and Normal are given in this coordinate system")],
     "SweepAlongPath": [P("Tools", "objects", "", label="Path"),
                        P("Trihedron", "choice", "DiscreteTrihedron",
                          choices=("DiscreteTrihedron", "CorrectedFrenet", "Fixed", "Frenet"))],
@@ -151,10 +155,28 @@ BOUNDARIES: dict[str, list[Prop]] = {
     ],
     "Impedance": [P("Resistance", "expr", "50", label="Resistance (ohm/sq)"),
                   P("Reactance", "expr", "0", label="Reactance (ohm/sq)")],
-    "Lumped RLC": [P("UseResistance", "bool", "True"), P("Resistance", "expr", "50ohm"),
-                   P("UseInductance", "bool", "False"), P("Inductance", "expr", "1nH"),
-                   P("UseCapacitance", "bool", "False"), P("Capacitance", "expr", "1pF"),
-                   P("IntegrationLine", "points", "", help="Start;End point of the current flow line")],
+    "Lumped RLC": [P("Model", "choice", "Parallel RLC", choices=("Parallel RLC", "Series RLC", "Touchstone"),
+                     help="Parallel RLC: R, L and C in parallel. Series RLC: R, L and C in series (a chip "
+                          "component with its ESR and ESL). Touchstone: the measured impedance of a component "
+                          "from a .s1p/.s2p file"),
+                   P("UseResistance", "bool", "True", visible_if=("Model", "!Touchstone")),
+                   P("Resistance", "expr", "50ohm", visible_if=("Model", "!Touchstone")),
+                   P("UseInductance", "bool", "False", visible_if=("Model", "!Touchstone")),
+                   P("Inductance", "expr", "1nH", visible_if=("Model", "!Touchstone")),
+                   P("UseCapacitance", "bool", "False", visible_if=("Model", "!Touchstone")),
+                   P("Capacitance", "expr", "1pF", visible_if=("Model", "!Touchstone")),
+                   P("TouchstoneFile", "text", "", label="Touchstone file", visible_if=("Model", "Touchstone"),
+                     help="Path of the .s1p/.s2p file (absolute or relative to the project file)"),
+                   P("TouchstoneMount", "choice", "Series", choices=("Series", "Shunt"), label="2-port measured as",
+                     visible_if=("Model", "Touchstone"),
+                     help="How the component sat in the 2-port test fixture: in series between the ports (usual "
+                          "for chip inductors and capacitors) or as a shunt to ground. Ignored for .s1p files"),
+                   P("Component", "text", "", help="Package or part number of a component inserted from the "
+                                                    "Lumped Elements tab (information only)"),
+                   P("IntegrationLine", "points", "", help="Start;End point of the current flow line, from one conductor to the other. Set "
+                     "automatically between the two conductors touching the sheet; right click the boundary to "
+                     "draw it in the 3D view or to place it automatically again. Given in the coordinates of the sheet as created: "
+                     "the line moves, rotates and mirrors with its object")],
     "Radiation": [P("Order", "choice", "First order", choices=("First order", "Second order")),
                   P("FarFieldReference", "bool", "True", label="Include for near/far field calculation")],
     "PML": [P("Thickness", "length", "", help="Empty = lambda/4 at lowest frequency"),
@@ -185,7 +207,10 @@ EXCITATIONS: dict[str, list[Prop]] = {
                   P("Deembed", "bool", "False", tab="Post Processing"),
                   P("DeembedDistance", "length", "0", tab="Post Processing", visible_if=("Deembed", "True"))],
     "Lumped Port": [P("PortNumber", "int", "1"), P("Impedance", "expr", "50ohm", label="Full port impedance"),
-                    P("IntegrationLine", "points", "", help="Start;End of the voltage line. Empty = auto")],
+                    P("IntegrationLine", "points", "", help="Start;End of the voltage line, from one conductor to the other. Set "
+                     "automatically between the two conductors touching the sheet (empty = auto); right click the "
+                     "port to draw it in the 3D view or to place it automatically again. Given in the coordinates of the sheet as "
+                     "created: the line moves, rotates and mirrors with its object")],
     "Floquet Port": [P("PortNumber", "int", "1"), P("NumberOfModes", "int", "2"),
                      P("Permittivity", "expr", "1", label="Medium permittivity")],
     "Incident Plane Wave": [P("VectorInput", "choice", "Cartesian", label="Vector input format",
@@ -274,7 +299,7 @@ SETUP: list[Prop] = [
     P("RefinementRatio", "float", "0.6", label="Element size ratio of refined elements", tab="Advanced"),
     P("GrowthRate", "float", "1.6", label="Mesh growth rate", tab="Advanced"),
     P("EnforceRefinementPercent", "bool", "True", label="Enforce refinement percentage", tab="Advanced"),
-    P("RefinementMethod", "choice", "Local (Delaunay)", label="Mesh refinement", tab="Advanced", choices=("Local (Delaunay)", "Remesh (slow)", "Remesh (stable, experimental)")),
+    P("RefinementMethod", "choice", "AURA (EMerge)", label="Mesh refinement", tab="Advanced", choices=("AURA (EMerge)", "Local (Delaunay)", "Remesh (slow)", "Remesh (stable, experimental)")),
     P("SaveFields", "bool", "True", label="Save fields at solution frequency", tab="Advanced"),
     P("Threads", "int", "0", label="Solver cores (0 = Tools > Options)", tab="Advanced"),
 ]
@@ -395,7 +420,8 @@ RECT_SIZES = {"Z": ("XSize", "YSize"), "X": ("YSize", "ZSize"), "Y": ("ZSize", "
 # "Zone (experimental)" (Mmg zone re-mesh) was dropped and fell back to the slow full re-mesh. It comes
 # first so that the reverse map (solution keys) gives "Local (Delaunay, experimental)" for Local.
 RENAMED_VALUES = {"RefinementMethod": {"Zone (experimental)": "Local (Delaunay)",
-                                       "Local (Delaunay, experimental)": "Local (Delaunay)", "Remesh": "Remesh (slow)"}}
+                                       "Local (Delaunay, experimental)": "Local (Delaunay)", "Remesh": "Remesh (slow)",
+                                       "AURA (EMerge, experimental)": "AURA (EMerge)"}}
 
 
 def upgrade_values(props: dict) -> dict:

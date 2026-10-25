@@ -1,14 +1,18 @@
 """field plot animation: the frames over a swept variable (phase, frequency, excitation) are
-computed once up front, then played back with a speed setting, pause/stop and a frame slider."""
+computed once up front, then played back with a speed setting, pause/stop and a frame slider, and can be
+saved as a GIF that looks and runs like the playback on screen."""
 from __future__ import annotations
 
+import time
+
 import numpy as np
-from PySide6.QtCore import Qt, QTimer
-from PySide6.QtWidgets import (QComboBox, QDialog, QDialogButtonBox, QDoubleSpinBox, QFormLayout, QHBoxLayout,
-                               QLabel, QProgressDialog, QPushButton, QSlider, QSpinBox, QWidget, QApplication,
-                               QStackedWidget)
+from PySide6.QtCore import QEventLoop, Qt, QTimer
+from PySide6.QtWidgets import (QComboBox, QDialog, QDialogButtonBox, QDoubleSpinBox, QFileDialog, QFormLayout,
+                               QHBoxLayout, QLabel, QMessageBox, QProgressDialog, QPushButton, QSlider, QSpinBox,
+                               QWidget, QApplication, QStackedWidget)
 
 from . import fields as F
+from .gif_export import MAX_GIF_FPS, FpsMeter, write_gif
 
 VARIABLES = ("Phase", "Frequency", "Excitation")
 
@@ -37,7 +41,7 @@ class AnimationSetupDialog(QDialog):
             sb.setValue(v)
         self.nph = QSpinBox()
         self.nph.setRange(2, 721)
-        self.nph.setValue(19)
+        self.nph.setValue(35)
         f.addRow("Start", self.ph0)
         f.addRow("Stop", self.ph1)
         f.addRow("Steps", self.nph)
@@ -93,7 +97,11 @@ class AnimationSetupDialog(QDialog):
 
 
 class AnimationBar(QWidget):
-    """Player for precomputed frames: play, pause, stop, frame slider and speed (frames per second)."""
+    """Player for precomputed frames: play, pause, stop, frame slider and speed (frames per second). The
+    frames per second actually shown are measured during playback (drawing can be slower than the setting)
+    and used for the GIF export."""
+
+    MEASURE_TIMEOUT = 20.0                       # s, longest playback to measure the rate for an export
 
     def __init__(self, win):
         super().__init__(win)
@@ -117,20 +125,42 @@ class AnimationBar(QWidget):
         self.speed.setRange(1, 60)
         self.speed.setValue(8)
         self.speed.setSuffix(" frames/s")
+        self.actual = QLabel("")
+        self.actual.setMinimumWidth(110)
+        self.actual.setToolTip("Frames per second actually shown, measured during playback; the GIF export "
+                               "uses this rate")
+        self.b_gif = QPushButton("Export GIF...")
+        self.b_gif.setToolTip("Save the animation as a GIF with the size of the view and the measured speed")
         for w in (self.title, self.b_play, self.b_pause, self.b_stop, self.slider, self.value,
-                  QLabel("Speed"), self.speed, self.b_close):
+                  QLabel("Speed"), self.speed, self.actual, self.b_gif, self.b_close):
             lay.addWidget(w)
+        self.meter = FpsMeter()
+        self._shown = 0.0                            # when the measured rate was last written to the label
         self.b_play.clicked.connect(self.play)
         self.b_pause.clicked.connect(self.pause)
         self.b_stop.clicked.connect(self.stop)
         self.b_close.clicked.connect(self.close_player)
+        self.b_gif.clicked.connect(lambda: self.export_gif())
         self.slider.valueChanged.connect(self.show_frame)
-        self.speed.valueChanged.connect(lambda v: self.timer.isActive() and self.timer.start(int(1000 / v)))
+        self.speed.valueChanged.connect(self._speed_changed)
         self.hide()
+
+    def _speed_changed(self, v: int) -> None:
+        self.meter.reset()                           # the old measurement belongs to the old setting
+        self._show_rate()
+        if self.timer.isActive():
+            self.timer.start(int(1000 / v))
+
+    def _show_rate(self) -> None:
+        f = self.meter.fps()
+        self.actual.setText(f"Actual {f:.1f} frames/s" if f else "Actual -")
 
     def load(self, names: list[str], frames: list[tuple[str, dict]]) -> None:
         self.stop()
         self.names, self.frames = list(names), frames
+        self.meter.reset()
+        self.meter.set_window(len(frames))           # average over one loop: frames can take different times
+        self._show_rate()
         self.title.setText(f"<b>{', '.join(names)}</b>")
         self.slider.blockSignals(True)
         self.slider.setRange(0, len(frames) - 1)
@@ -147,6 +177,12 @@ class AnimationBar(QWidget):
             self.win.view.set_overlay(name, meshes, render=False)
         self.win.view.plotter.render()
         self.value.setText(f"{label}   ({i + 1}/{len(self.frames)})")
+        if self.timer.isActive():                    # only playback counts, not moving the slider by hand
+            t = time.perf_counter()
+            self.meter.tick(t)
+            if t - self._shown > 0.5:
+                self._shown = t
+                self._show_rate()
 
     def _next(self) -> None:
         self.slider.setValue((self.slider.value() + 1) % max(1, len(self.frames)))
@@ -157,9 +193,13 @@ class AnimationBar(QWidget):
 
     def pause(self) -> None:
         self.timer.stop()
+        self.meter.pause()
+        self._show_rate()
 
     def stop(self) -> None:
         self.timer.stop()
+        self.meter.pause()
+        self._show_rate()
         if self.frames:
             self.slider.setValue(0)
 
@@ -168,8 +208,87 @@ class AnimationBar(QWidget):
 
     def close_player(self) -> None:
         self.timer.stop()
+        self.meter.reset()
         self.frames, self.names = [], []
         self.hide()
+
+    def _needed(self) -> int:
+        """Frame intervals measured before the rate counts: one loop, or at least 2 s of playback."""
+        return max(2, min(len(self.frames), 2 * self.speed.value()))
+
+    def measure(self) -> float | None:
+        """The measured frames per second; plays the animation briefly when there is no measurement yet."""
+        if self.meter.count() < self._needed():
+            playing = self.timer.isActive()
+            self.actual.setText("Measuring ...")
+            if not playing:
+                self.play()
+            loop, t0 = QEventLoop(), time.perf_counter()
+            check = QTimer(self)
+            check.timeout.connect(lambda: (self.meter.count() >= self._needed() or not self.timer.isActive()
+                                           or time.perf_counter() - t0 > self.MEASURE_TIMEOUT) and loop.quit())
+            check.start(20)
+            loop.exec()
+            check.stop()
+            if not playing:
+                self.pause()
+        self._show_rate()
+        return self.meter.fps()
+
+    def export_gif(self, path: str | None = None) -> str | None:
+        """Save all frames as a looping GIF: each frame exactly as the view shows it (same pixels, same
+        size) and played at the frames per second measured in the viewer."""
+        if not self.frames:
+            return None
+        if path is None:
+            name = (self.names[0] if self.names else "animation").replace(" ", "_")
+            path, _ = QFileDialog.getSaveFileName(self, "Export GIF", f"{name}.gif", "GIF (*.gif)")
+            if not path:
+                return None
+            if not path.lower().endswith(".gif"):
+                path += ".gif"
+        fps = self.measure()
+        if not fps:
+            QMessageBox.warning(self, "Export GIF", "The playback speed could not be measured.")
+            return None
+        playing, cur = self.timer.isActive(), self.slider.value()
+        self.timer.stop()
+        self.meter.pause()
+        prog = QProgressDialog("Capturing frames ...", "Cancel", 0, len(self.frames), self)
+        prog.setWindowTitle("Export GIF")
+        prog.setWindowModality(Qt.WindowModal)
+        prog.setMinimumDuration(500)
+        images = []
+        try:
+            for i in range(len(self.frames)):
+                if prog.wasCanceled():
+                    return None
+                prog.setValue(i)
+                self.slider.blockSignals(True)
+                self.slider.setValue(i)
+                self.slider.blockSignals(False)
+                self.show_frame(i)
+                images.append(self.win.view.plotter.screenshot(transparent_background=False, return_img=True))
+            prog.setValue(len(self.frames))
+            delays = write_gif(path, images, fps)
+        except Exception as e:  # noqa: BLE001
+            QMessageBox.warning(self, "Export GIF", f"The GIF could not be saved: {e}")
+            return None
+        finally:
+            prog.close()
+            self.slider.setValue(cur)
+            self.show_frame(cur)
+            if playing:
+                self.play()
+        h, w = images[0].shape[:2]
+        note = (f" (a GIF shows at most {MAX_GIF_FPS:.0f} frames/s, saved at {100 * len(delays) / sum(delays):.1f})"
+                if fps > MAX_GIF_FPS else "")
+        msg = (f"Saved {path}: {len(images)} frames, {w} x {h} pixels, {fps:.2f} frames/s measured "
+               f"(setting {self.speed.value()}){note}")
+        msgs = getattr(self.win, "msgs", None)
+        if msgs is not None:
+            msgs.add("info", msg)
+        return path
 
 
 def precompute(win, fps, frames: list[tuple[str, dict]]) -> list[tuple[str, dict]] | None:
@@ -189,7 +308,7 @@ def precompute(win, fps, frames: list[tuple[str, dict]]) -> list[tuple[str, dict
             freqs[fp.name] = []
     out = [(label, {}) for label, _ in frames]
     for j, fp in enumerate(fps):
-        static = None
+        static = prep = None
         fixed = fp.quantity.startswith("ComplexMag") and frames and frames[0][1].get("swept") == "phase"
         for i, (label, o) in enumerate(frames):
             if prog.wasCanceled():
@@ -212,8 +331,15 @@ def precompute(win, fps, frames: list[tuple[str, dict]]) -> list[tuple[str, dict
                     out[i][1][fp.name] = out[0][1][fp.name]
                 continue
             try:
-                meshes, _ = F.make_overlay(win.doc, win.view, fp.quantity, fp.solution, fi, port, ph,
-                                           fp.faces, fp.objects, fp.plane, attrs=fp.props, animating=True)
+                if sw == "phase":
+                    # only the phase changes: the plot is built once, every frame just turns the field
+                    if prep is None:
+                        prep = F.prepare_overlay(win.doc, win.view, fp.quantity, fp.solution, fi, port,
+                                                 fp.faces, fp.objects, fp.plane, attrs=fp.props)
+                    meshes, _ = F.overlay_at(prep, ph, animating=True)
+                else:
+                    meshes, _ = F.make_overlay(win.doc, win.view, fp.quantity, fp.solution, fi, port, ph,
+                                               fp.faces, fp.objects, fp.plane, attrs=fp.props, animating=True)
             except Exception:  # noqa: BLE001
                 if len(fps) == 1:
                     raise

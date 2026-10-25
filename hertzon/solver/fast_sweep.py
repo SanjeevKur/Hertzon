@@ -152,7 +152,7 @@ class ReducedSolver:
         b2 = b.reshape((b.shape[0], 1)) if b.ndim == 1 else b
         if self.ids is not None and not np.array_equal(self.ids, solve_ids):
             self.reset()                    # different unknowns (should not happen within one sweep)
-        from .fast_assembly import submatrix
+        from emerge._emerge.mth.csc_submatrix import csc_submatrix as submatrix
         Asel = submatrix(A, solve_ids).tocsr()
         bsel = np.asarray(b2[solve_ids, :], dtype=np.complex128)
         bn = np.maximum(np.linalg.norm(bsel, axis=0), 1e-300)

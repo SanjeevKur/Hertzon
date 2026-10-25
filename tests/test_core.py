@@ -120,6 +120,100 @@ def test_rectangle_sizes_named_by_axis():
     assert np.ptp(P, axis=0) == pytest.approx([5e-3, 0, 2e-3], abs=1e-9)
 
 
+def test_thicken_goes_to_positive_side():
+    """Thicken sheet with a positive thickness grows to the positive side of the sheet's main axis, however
+    the sheet was drawn (a rectangle dragged to -X has the opposite winding); negative thickness, Reverse
+    direction and BothSides go to the other or both sides."""
+    def zrange(kind, thick="1", both="False", rev="False", **props):
+        pr = Project()
+        d = pr.designs[0]
+        d.add_object(kind, name="S", **props)
+        if kind == "CreatePolyline":
+            d.obj("S").history.append(Command("Cover", {}))
+        d.obj("S").history.append(Command("ThickenSheet", {"Thickness": thick, "BothSides": both,
+                                                                   "ReverseDirection": rev}))
+        P = np.asarray(K.tessellate(K.build_design(d, d.evaluator(pr)))["S"].points)
+        return P.min(axis=0) * 1e3, P.max(axis=0) * 1e3
+
+    for xs, ys in (("2", "3"), ("-2", "3"), ("2", "-3"), ("-2", "-3")):
+        lo, hi = zrange("CreateRectangle", Position="0,0,0", Axis="Z", XSize=xs, YSize=ys)
+        assert (lo[2], hi[2]) == pytest.approx((0, 1), abs=1e-9)
+    lo, hi = zrange("CreateRectangle", Position="0,0,0", Axis="X", YSize="-2", ZSize="3")
+    assert (lo[0], hi[0]) == pytest.approx((0, 1), abs=1e-9)
+    lo, hi = zrange("CreateRectangle", Position="0,0,0", Axis="Y", ZSize="-2", XSize="3")
+    assert (lo[1], hi[1]) == pytest.approx((0, 1), abs=1e-9)
+    lo, hi = zrange("CreatePolyline", Points="0,0,0;0,1,0;1,1,0;1,0,0", Closed="True")   # drawn clockwise, covered
+    assert (lo[2], hi[2]) == pytest.approx((0, 1), abs=1e-9)
+    lo, hi = zrange("CreateRectangle", "-1", Position="0,0,0", Axis="Z", XSize="-2", YSize="3")
+    assert (lo[2], hi[2]) == pytest.approx((-1, 0), abs=1e-9)
+    lo, hi = zrange("CreateRectangle", "1", "True", Position="0,0,0", Axis="Z", XSize="-2", YSize="3")
+    assert (lo[2], hi[2]) == pytest.approx((-1, 1), abs=1e-9)
+    lo, hi = zrange("CreateRectangle", rev="True", Position="0,0,0", Axis="Z", XSize="-2", YSize="3")
+    assert (lo[2], hi[2]) == pytest.approx((-1, 0), abs=1e-9)
+
+
+
+def test_thicken_old_files_keep_direction():
+    """Files of version 1 thickened along the face normal, which follows how the sheet was drawn: loading them
+    sets Reverse direction where that normal pointed to the negative side, so the sheets keep their shape."""
+    from hertzon.model.design import project_from_dict
+    pr = Project()
+    d = pr.designs[0]
+    cases = {"plain": ("CreateRectangle", dict(Position="0,0,0", Axis="Z", XSize="2", YSize="3"), 2, (0, 1)),
+             "negx": ("CreateRectangle", dict(Position="0,0,0", Axis="Z", XSize="-2", YSize="3"), 2, (-1, 0)),
+             "negxy": ("CreateRectangle", dict(Position="0,0,0", Axis="Z", XSize="-2", YSize="-3"), 2, (0, 1)),
+             "yz": ("CreateRectangle", dict(Position="0,0,0", Axis="X", YSize="-2", ZSize="3"), 0, (-1, 0)),
+             "cw": ("CreatePolyline", dict(Points="0,0,0;0,1,0;1,1,0;1,0,0", Closed="True"), 2, (-1, 0)),
+             "ccw": ("CreatePolyline", dict(Points="0,0,0;1,0,0;1,1,0;0,1,0", Closed="True"), 2, (0, 1))}
+    for name, (kind, props, _, _) in cases.items():
+        d.add_object(kind, name=name, **props)
+        if kind == "CreatePolyline":
+            d.obj(name).history.append(Command("Cover", {}))
+        d.obj(name).history.append(Command("ThickenSheet", {"Thickness": "1", "BothSides": "False"}))
+    old = pr.to_dict()
+    old["version"] = 1
+    pr = project_from_dict(old)
+    d = pr.designs[0]
+    tess = K.tessellate(K.build_design(d, d.evaluator(pr)))
+    for name, (_, _, axis, span) in cases.items():
+        P = np.asarray(tess[name].points) * 1e3
+        assert (P[:, axis].min(), P[:, axis].max()) == pytest.approx(span, abs=1e-9), name
+    # files of the current version are left as they are
+    assert project_from_dict(pr.to_dict()).designs[0].obj("negx").history[-1].props["ReverseDirection"] == "True"
+    assert project_from_dict(pr.to_dict()).designs[0].obj("plain").history[-1].props["ReverseDirection"] == "False"
+
+def test_thicken_preview_arrow():
+    """The Thicken sheet dialog draws an arrow on each sheet in the direction the kernel thickens to."""
+    import types
+    import pyvista as pv
+    from hertzon.gui import viewer as Vw
+    View = type("View", (), {k: Vw.ModelerView.__dict__[k]
+                             for k in ("show_thicken_arrows", "clear_thicken_arrows")})
+    v = View()
+    removed = []
+    v.plotter = types.SimpleNamespace(add_mesh=lambda mesh, **kw: mesh,
+                                      renderer=types.SimpleNamespace(RemoveActor=lambda a: None))
+    top = types.SimpleNamespace(AddActor=lambda a: None, RemoveActor=removed.append)
+    v._top_layer = lambda: top
+    v.request_render = lambda: None
+    v.direction_actors = []
+    sheet = pv.Plane(center=(1, 2, 0), direction=(0, 0, -1), i_size=4, j_size=2)   # face normal -Z
+    box = pv.Box()
+    v.actors = {"S": Vw.ObjActors(mesh=sheet, dim=2), "B": Vw.ObjActors(mesh=box, dim=3)}
+
+    def tips():
+        return [np.asarray(m.points)[:, 2].max() - np.asarray(m.points)[:, 2].min() > 0
+                and np.sign(np.asarray(m.points)[:, 2].sum()) for m in v.direction_actors]
+    v.show_thicken_arrows(["S", "B"])
+    assert tips() == [1]
+    v.show_thicken_arrows(["S"], reverse=True)
+    assert tips() == [-1] and len(removed) == 1
+    v.show_thicken_arrows(["S"], both=True)
+    assert sorted(tips()) == [-1, 1]
+    v.clear_thicken_arrows()
+    assert v.direction_actors == [] and len(removed) == 4
+
+
 def test_antenna_report_expressions():
     """Antenna parameters: dB() of a gain or power is 10 log10, of the axial ratio 20 log10."""
     from hertzon.gui.reports import eval_expr
@@ -140,7 +234,7 @@ def test_refinement_method_renamed():
     a.props["RefinementMethod"] = "Local (Delaunay, experimental)"
     b.props["RefinementMethod"] = "Local (Delaunay)"
     assert setup_key(a) == setup_key(b)
-    assert schema.defaults(schema.SETUP)["RefinementMethod"] == "Local (Delaunay)"
+    assert schema.defaults(schema.SETUP)["RefinementMethod"] == "AURA (EMerge)"
 
 
 def test_far_field_follows_edit_sources(tmp_path):
@@ -176,20 +270,6 @@ def test_far_field_follows_edit_sources(tmp_path):
         {**ff, "E_0_9": a[0] * E1 + a[1] * E2, "Prad_0_9": np.array([1.0])}, 9, 0)["rETotal"]) ** 2))
 
 
-def test_parallel_error_kernel_source():
-    """The parallel error estimate is generated from EMerge's kernel: the tet loop must become a prange
-    without exits (else numba runs it serially), everything else unchanged."""
-    from hertzon.solver import fast_error
-    from hertzon.solver.emerge_compat import EMERGE3
-    if EMERGE3:
-        pytest.skip("EMerge 3 has its own compiled error estimate")
-    src = fast_error._source()
-    assert src is not None
-    assert "for itet in prange(N_TETS):" in src and "parallel=True" in src
-    assert "adj_tets = [" not in src and "raise ValueError" not in src
-    compile(src, "error_estimate.py", "exec")
-
-
 def test_edit_sources_apply_keeps_dialog_open():
     import os
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
@@ -208,74 +288,41 @@ def test_edit_sources_apply_keeps_dialog_open():
     assert SRC.defaults(des)
 
 
-def test_fast_assembly_patches_and_sparse_helpers():
-    """The faster assembly replaces EMerge's code by source patterns; they must still match, and the
-    sparse helpers must give scipy's results."""
+def test_fast_assembly_sparse_helpers():
+    """The upper triangle for the complex symmetric PARDISO factorization; EMerge's parallel removal of the
+    PEC rows and columns (FennisRobert/EMerge#78), which Hertzon's sweeps use too, matches scipy."""
     import scipy.sparse as sp
     from hertzon.solver import fast_assembly as FA
-    from hertzon.solver.emerge_compat import EMERGE3
-    from emerge._emerge.physics.microwave.assembly import assembler
-    from emerge._emerge import solver
-    if not EMERGE3:             # EMerge 3 assembles in its compiled library: only the solve is patched
-        n = sum(FA._patched(assembler.Assembler.assemble_freq_matrix, FA._ASSEMBLER_SUBS)[1:])
-        assert n == 5
-    assert FA._patched(solver.SolveRoutine.solve, [(FA.re.compile(r"Asel = A\[:, solve_ids\]\[solve_ids, :\]"),
-                                                    "x")])[1] == 1
+    from emerge._emerge.mth.csc_submatrix import csc_submatrix
     rng = np.random.default_rng(0)
     M = sp.random(300, 300, density=0.05, random_state=1) + 1j * sp.random(300, 300, density=0.05, random_state=2)
     A = (M + M.T + sp.identity(300)).tocsc()
     A.sort_indices()
     ids = np.sort(rng.choice(300, 250, replace=False))
-    S0, S1 = A[:, ids][ids, :], FA.submatrix(A, ids)
+    S0, S1 = A[:, ids][ids, :], csc_submatrix(A, ids)
     S0.sort_indices()
     assert np.array_equal(S0.indptr, S1.indptr) and np.array_equal(S0.indices, S1.indices)
     assert np.array_equal(S0.data, S1.data)
     U = FA.upper_symmetric(A)
     assert U is not None and abs(U - sp.triu(A)).max() == 0
     assert FA.upper_symmetric((A + sp.random(300, 300, density=0.01, random_state=3)).tocsc()) is None
-    assert np.array_equal(FA.free_ids(10, {3, 7, 0}), [1, 2, 4, 5, 6, 8, 9])
 
 
-def test_curved_kernels_match_emerge_element_matrices():
-    """The curved elements use EMerge 2.8.9's numba basis functions (ned2_kernels); with zero edge
-    displacement they must give the element matrices of the installed EMerge (also EMerge 3's compiled
-    assembly: same DoF codes and local edge/face order)."""
+def test_curved_map_for_plots():
+    """The solve uses EMerge's curved elements (FennisRobert/EMerge#77); the plots map the same geometry:
+    without displacement the map is the straight tetrahedron, with one it moves that edge midpoint."""
     from hertzon.solver import curvilinear as CV
-    from hertzon.solver import ned2_kernels as NK
-    from emerge._emerge.elements.dofsets import ElementSpace
-    try:
-        from emr import curlcurl as CC         # EMerge 3
-    except ImportError:
-        from emerge._emerge.physics.microwave.assembly import curlcurl as CC
-    rng = np.random.default_rng(1)
-    nodes = np.array([[0, 1, 0, 0, 1], [0, 0, 1, 0, 1], [0, 0, 0, 1, 1]], float) * 1e-3 + rng.normal(0, 1e-4, (3, 5))
-    tets = np.array([[0, 1], [1, 2], [2, 3], [3, 4]], np.int64)           # two tets sharing face 1-2-3
-    st = np.sort(tets, axis=0)
-    edges = np.unique(np.concatenate([st[[a, b]] for a, b in ((0, 1), (0, 2), (0, 3), (1, 2), (1, 3), (2, 3))],
-                                     axis=1), axis=1)
-    tris = np.unique(np.concatenate([st[list(t)] for t in ((0, 1, 2), (0, 1, 3), (0, 2, 3), (1, 2, 3))], axis=1),
-                     axis=1)
-    ekey = {tuple(e): i for i, e in enumerate(edges.T.tolist())}
-    tkey = {tuple(t): i for i, t in enumerate(tris.T.tolist())}
-    t2e = np.array([[ekey[(st[a, k], st[b, k])] for k in range(2)]
-                    for a, b in ((0, 1), (0, 2), (0, 3), (1, 2), (1, 3), (2, 3))], np.int64)
-    t2t = np.array([[tkey[tuple(st[list(t), k])] for k in range(2)]
-                    for t in ((0, 1, 2), (0, 1, 3), (0, 2, 3), (1, 2, 3))], np.int64)
-    er = np.repeat(np.array([[2.2, 0.1, 0], [0.1, 2.0, 0], [0, 0, 1.7]], complex)[:, :, None], 2, axis=2)
-    ur = np.repeat((np.eye(3, dtype=complex) * (1.3 - 0.1j))[:, :, None], 2, axis=2)
-    _, build = CV.kernels()
-    for sp in ElementSpace:
-        codes = np.array(sp.get_set().set3d.codes, dtype=np.int64)
-        nd = len(codes)
-        t2f = np.arange(2 * nd, dtype=np.int64).reshape(nd, 2)
-        E0, B0 = CC._matrix_builder(nodes, tets, tris, edges, t2f, t2e, t2t, ur, er, np.arange(2, dtype=np.int64),
-                                    codes)[:2]
-        E1, B1 = np.zeros(2 * nd * nd, complex), np.zeros(2 * nd * nd, complex)
-        build(nodes, tets, tris, edges, t2e, t2t, ur, er, np.arange(2, dtype=np.int64), np.arange(2, dtype=np.int64),
-              np.zeros((2, 6, 3)), codes, CV._QP, E1, B1)
-        assert np.abs(E1 - np.asarray(E0)).max() < 1e-9 * np.abs(E0).max(), sp
-        assert np.abs(B1 - np.asarray(B0)).max() < 1e-9 * np.abs(B0).max(), sp
-    assert NK.matinv(ur[:, :, 0])[0, 0] == pytest.approx(1 / (1.3 - 0.1j))
+    from emerge._emerge.settings import Settings
+    assert Settings().mw_curved_elements is False
+    X = np.array([[[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]]], float)
+    lam = np.vstack([np.eye(4), [[0.5, 0.5, 0, 0]]])
+    pos, D = CV.curved_map(X, np.zeros((1, 6, 3)), lam)
+    assert np.allclose(pos[0], lam @ X[0]) and np.allclose(D, np.eye(3))
+    d = np.zeros((1, 6, 3))
+    d[0, 0] = [0, -0.1, 0]                      # edge 0-1 bulges outwards
+    pos, D = CV.curved_map(X, d, lam)
+    assert np.allclose(pos[0, 4], [0.5, -0.1, 0]) and np.allclose(pos[0, :4], X[0])
+    assert np.all(np.linalg.det(D) > 0)
 
 
 def test_emerge_material_library():
@@ -295,22 +342,6 @@ def test_emerge_material_library():
     disp = [m for m in lib.values() if m.dispersion == EMERGE_DISPERSION]
     for m in disp:
         assert emerge_object(m.emsutil_key) is not None
-
-
-def test_thin_conductor_keeps_the_assembled_dof_numbering():
-    """EMerge assembles with get_tet_to_field() (the numbering before the thin conductor split); plots, far
-    fields and the error estimate read tet_to_field, which the patch keeps equal to it."""
-    import inspect
-    from hertzon.solver import emerge_patches as EP
-    from emerge._emerge.elements.nedelec2 import Nedelec2
-    assert "_tet_to_field_orig" in inspect.getsource(Nedelec2.get_tet_to_field)
-    EP.apply_thin_conductor()
-    b = object.__new__(Nedelec2)
-    b._partitioned = True                     # EMerge's own split returns at once
-    b._tet_to_field_orig = np.arange(12).reshape(3, 4)
-    b.tet_to_field = b._tet_to_field_orig + 100
-    Nedelec2.partition_dof(b, [[1]])
-    assert np.array_equal(b.tet_to_field, b._tet_to_field_orig) and b.get_tet_to_field() is b._tet_to_field_orig
 
 
 def test_finite_conductivity_thickness_without_two_sided():
@@ -465,7 +496,8 @@ def test_projection_keeps_the_model_size():
     cam.SetFocalPoint(0, 0, 0)
     cam.SetViewAngle(30)
     got = []
-    v = types.SimpleNamespace(plotter=types.SimpleNamespace(camera=cam, render=lambda: None), on_projection=got.append)
+    v = types.SimpleNamespace(plotter=types.SimpleNamespace(camera=cam, render=lambda: None), on_projection=got.append,
+                              request_render=lambda: None)
     ModelerView.set_orthographic(v, True)
     assert cam.GetParallelProjection() and got == [True]
     assert cam.GetParallelScale() == pytest.approx(100 * math.tan(math.radians(15)))
@@ -734,3 +766,271 @@ def test_maximum_delta_energy_default():
     from hertzon.model import schema
     p = next(p for p in schema.SETUP if p.name == "MaximumDeltaEnergy")
     assert p.default == "0.001"
+
+
+def _split_box(cs=None, **split):
+    """Box 0..4 x 0..2 x 50..52 (mm), split; returns the bounding box of the kept part in mm."""
+    p = Project()
+    d = p.designs[0]
+    d.add_object("CreateBox", Position="0,0,50", XSize="4", YSize="2", ZSize="2")
+    if cs is not None:
+        d.coord_systems.append(cs)
+        split["CoordinateSystem"] = cs.name
+    d.obj("Box1").history.append(Command.new("Split", **split))
+    K.ensure_gmsh("test_split")
+    ctx = K.build_design(d, d.evaluator(p))
+    assert "Box1" not in ctx.errors, ctx.errors.get("Box1")
+    return np.asarray(K._bbox(ctx.built["Box1"])) * 1e3
+
+
+def test_split_in_object_and_face_coordinate_systems():
+    from hertzon.model.design import CoordSys
+    # global plane far from the object (the kept half space must still reach it)
+    assert _split_box(Plane="XY", Keep="Positive") == pytest.approx([0, 0, 50, 4, 2, 52], abs=1e-3)
+    # object CS at the box centre: XY cuts it in half along z
+    ocs = CoordSys("ObjectCS1", "Object", "Global")
+    ocs.props.update(Origin="2,1,51", Object="Box1")
+    assert _split_box(ocs, Plane="XY", Keep="Positive") == pytest.approx([0, 0, 51, 4, 2, 52], abs=1e-3)
+    assert _split_box(ocs, Plane="YZ", Keep="Negative") == pytest.approx([0, 0, 50, 2, 2, 52], abs=1e-3)
+    # face CS on the side face x=4 (local z = global +x), moved in by 1: XY is the plane x=3
+    fcs = CoordSys("FaceCS1", "Face", "Global")
+    fcs.props.update(Mode="Axis/Position", Origin="3,1,51", XAxis="0,1,0", YPoint="0,0,1", Face="Box1:1")
+    assert _split_box(fcs, Plane="XY", Keep="Positive") == pytest.approx([3, 0, 50, 4, 2, 52], abs=1e-3)
+    assert _split_box(fcs, Plane="XY", Keep="Negative") == pytest.approx([0, 0, 50, 3, 2, 52], abs=1e-3)
+    # custom plane: Base and Normal are local to the CS (local x = global y)
+    assert _split_box(fcs, Plane="Custom", Base="0.5,0,0", Normal="1,0,0", Keep="Positive") == \
+        pytest.approx([0, 1.5, 50, 4, 2, 52], abs=1e-3)
+
+
+def test_assign_material_only_for_solids(monkeypatch):
+    """Sheets carry no material (they get boundaries such as Finite Conductivity): Assign Material is greyed
+    out for a sheet selection, a mixed selection assigns the material to the solids only, and the object
+    properties of a sheet have no Material row."""
+    import os
+    import types
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    from PySide6.QtGui import QAction
+    from PySide6.QtWidgets import QApplication, QDialog, QMessageBox, QToolButton
+    from hertzon.gui import main_window as MW
+    from hertzon.gui.doc import Document, Pick
+    app = QApplication.instance() or QApplication([])  # noqa: F841
+    p = Project()
+    d = p.designs[0]
+    d.add_object("CreateBox", "Sub", Position="0,0,0", XSize="10", YSize="10", ZSize="1")
+    d.add_object("CreateRectangle", "Trace", Position="0,0,1", XSize="5", YSize="1", ZSize="0", WhichAxis="Z")
+    doc = Document(p)
+    doc.rebuild()
+    assert MW.material_targets(doc, ["Sub", "Trace"]) == (["Sub"], ["Trace"])
+    from hertzon.gui.doc import object_attributes
+    assert "Material" in [a.name for a in object_attributes(doc, "Sub")]
+    assert "Material" not in [a.name for a in object_attributes(doc, "Trace")]   # properties panel and dialog
+
+    infos, logs = [], []
+    win = types.SimpleNamespace(doc=doc, des=d, a_material=QAction("Assign Material..."),
+                                _mat_buttons=[QToolButton()], msgs=types.SimpleNamespace(add=lambda *a: logs.append(a)))
+    win.selected_objects = lambda need=1: doc.selected_objects()
+    doc.select([Pick("Trace")])
+    MW.MainWindow._update_sel_buttons(win)
+    assert not win.a_material.isEnabled() and not win._mat_buttons[0].isEnabled()
+    assert "Finite Conductivity" in win.a_material.toolTip()
+    monkeypatch.setattr(QMessageBox, "information", lambda *a: infos.append(a))
+    MW.MainWindow.assign_material(win)                  # e.g. through a custom shortcut: nothing changes
+    assert infos and d.obj("Trace").material == "vacuum"
+
+    class Dlg:
+        def __init__(self, *a):
+            pass
+
+        def exec(self):
+            return QDialog.Accepted
+
+        def selected(self):
+            return "copper"
+    monkeypatch.setattr(MW, "MaterialsDialog", Dlg)
+    doc.select([Pick("Sub"), Pick("Trace")])
+    MW.MainWindow._update_sel_buttons(win)
+    assert win.a_material.isEnabled() and win._mat_buttons[0].isEnabled()
+    MW.MainWindow.assign_material(win)
+    assert d.obj("Sub").material == "copper" and d.obj("Trace").material == "vacuum"
+    assert any("Trace" in a[1] for a in logs)
+
+
+def test_box_selection_takes_only_what_lies_completely_inside():
+    """Left drag in the 3D view: objects (or faces) are selected only when all their points are inside the box."""
+    import types
+    from hertzon.gui import viewer as Vw
+    from hertzon.gui.doc import Pick
+    names = ("box_picks", "_box_parts")
+    View = type("View", (), {k: Vw.ModelerView.__dict__[k] for k in names})
+
+    def square(x0, size, faces=False):
+        P = np.array([[x0, 0, 0], [x0 + size, 0, 0], [x0 + size, size, 0], [x0, size, 0]], float)
+        tris = np.array([[0, 1, 2], [0, 2, 3]])
+        return types.SimpleNamespace(points=P, tris=tris, tri_face=np.array([0, 1]) if faces else np.zeros(2, int),
+                                     edges=[P[[0, 1]], P[[1, 2]]], vertices=P, dim=2)
+
+    shown = types.SimpleNamespace(GetVisibility=lambda: True)
+    hidden = types.SimpleNamespace(GetVisibility=lambda: False)
+    v = View()
+    v.doc = types.SimpleNamespace(selection_mode="object",
+                                  tess={"A": square(0, 1), "B": square(5, 1), "C": square(1, 1), "H": square(0, 1)})
+    v.actors = {n: types.SimpleNamespace(surface=hidden if n == "H" else shown, edges=None) for n in v.doc.tess}
+    objs = {n: types.SimpleNamespace(name=n, group="") for n in "ABCH"}
+    v.doc.design = types.SimpleNamespace(has_obj=objs.__contains__, obj=objs.__getitem__,
+                                         live_objects=lambda: list(objs.values()))
+    v._display_coords = lambda X: (np.asarray(X)[:, :2] * 10, np.ones(len(X), bool))   # 10 px per unit, top view
+    assert v.box_picks((-1, -1), (15, 15)) == [Pick("A", -1)]          # C sticks out, B is far away, H is hidden
+    assert v.box_picks((25, 15), (-1, -1)) == [Pick("A", -1), Pick("C", -1)]    # any drag direction
+    assert v.box_picks((2, 2), (8, 8)) == []                            # a box inside the object takes nothing
+    # a group counts only when all its shown members are inside: A and C grouped, the box holds only A
+    objs["A"].group = objs["C"].group = "G1"
+    assert v.box_picks((-1, -1), (15, 15)) == []
+    assert v.box_picks((25, 15), (-1, -1)) == [Pick("A", -1), Pick("C", -1)]
+    objs["H"].group = "G2"
+    objs["B"].group = "G2"                                              # H is hidden: B alone decides
+    assert v.box_picks((45, -1), (65, 15)) == [Pick("B", -1)]
+    v._display_coords = lambda X: (np.asarray(X)[:, :2] * 10, np.zeros(len(X), bool))   # behind the camera
+    assert v.box_picks((-100, -100), (100, 100)) == []
+    v._display_coords = lambda X: (np.asarray(X)[:, :2] * 10, np.ones(len(X), bool))
+    v.doc.tess = {"A": square(0, 1, faces=True)}
+    v.doc.selection_mode = "face"
+    assert v.box_picks((-1, -1), (11, 11)) == [Pick("A", 0), Pick("A", 1)]
+    v.doc.selection_mode = "edge"
+    assert v.box_picks((-1, -1), (11, 1)) == [Pick("A", 0)]          # the bottom edge only
+    v.doc.selection_mode = "vertex"
+    assert v.box_picks((5, -1), (11, 11)) == [Pick("A", 1), Pick("A", 2)]
+
+
+def _edge_view(Vw, actors):
+    """A ModelerView stand-in for screen-space edge picking: identity camera on a 100 x 100 px view,
+    so world x, y in [-1, 1] land on pixels 0 to 100."""
+    import types
+    import vtk
+    names = ("_edge_segments", "_nearest_edge")
+    View = type("View", (), {k: Vw.ModelerView.__dict__[k] for k in names} | {"PICK_PX": 8})
+    v = View()
+    cam = types.SimpleNamespace(GetCompositeProjectionTransformMatrix=lambda *a: vtk.vtkMatrix4x4())
+    v.plotter = types.SimpleNamespace(renderer=types.SimpleNamespace(GetSize=lambda: (100, 100),
+                                                                     GetActiveCamera=lambda: cam))
+    v.actors, v._edge_cache = actors, None
+    return v
+
+
+def test_edge_pick_by_screen_distance():
+    """Edge mode and polylines: the edge nearest to the cursor on screen within PICK_PX pixels, hidden objects
+    and other dimensions skipped, the nearer one in depth on a tie, the picking arrays rebuilt when an object
+    changes."""
+    import types
+    import pyvista as pv
+    from hertzon.gui import viewer as Vw
+
+    def obj(polylines, dim=3, z=0.0, shown=True):
+        pts, lines, off = [], [], 0
+        for P in polylines:
+            P = np.c_[np.asarray(P, float), np.full(len(P), z)]
+            pts.append(P)
+            lines.append(np.r_[len(P), np.arange(off, off + len(P))])
+            off += len(P)
+        em = pv.PolyData(np.vstack(pts), lines=np.concatenate(lines))
+        em.cell_data["edge"] = np.arange(len(polylines)) + 10
+        return types.SimpleNamespace(edge_mesh=em, dim=dim,
+                                     edges=types.SimpleNamespace(GetVisibility=lambda: shown))
+
+    # A: two edges (10 along y = 0, 11 a bent line through x = 0.5); L: a polyline (dim 1) along y = 0.6
+    A = obj([[(-0.8, 0.0), (0.8, 0.0)], [(0.5, -0.8), (0.5, -0.4), (0.6, 0.4)]])
+    L = obj([[(-0.8, 0.6), (0.0, 0.6), (0.8, 0.6)]], dim=1)
+    v = _edge_view(Vw, {"A": A, "L": L})
+    assert v._nearest_edge((20, 52)) == ("A", 10)           # 2 px above y = 0
+    assert v._nearest_edge((76, 30)) == ("A", 11)           # next to the bent line, near its second segment
+    assert v._nearest_edge((40, 81)) == ("L", 10)
+    assert v._nearest_edge((40, 65)) is None                # more than 8 px from everything
+    assert v._nearest_edge((20, 52), dims=(0, 1)) is None   # only polylines
+    assert v._nearest_edge((40, 81), dims=(0, 1)) == ("L", 10)
+    # a coincident edge nearer to the camera wins, a hidden one is never picked
+    v.actors["B"] = obj([[(-0.8, 0.0), (0.8, 0.0)]], z=-0.5)
+    assert v._nearest_edge((20, 52)) == ("B", 10)
+    v.actors["B"] = obj([[(-0.8, 0.0), (0.8, 0.0)]], z=-0.5, shown=False)
+    assert v._nearest_edge((20, 52)) == ("A", 10)
+    # an object rebuilt with new geometry: the cached segments follow
+    v.actors["A"] = obj([[(-0.8, -0.5), (0.8, -0.5)]])
+    assert v._nearest_edge((20, 52)) is None
+    assert v._nearest_edge((20, 26)) == ("A", 10)
+
+
+def test_selection_restyles_only_what_changed():
+    """A click restyles the objects whose selection changed; the colours are the same as after a full restyle."""
+    import types
+    import pyvista as pv
+    import vtk
+    from hertzon.gui import viewer as Vw
+    from hertzon.gui.doc import Pick
+    names = ("_plain_actor", "_drop_actor", "_objects", "_style_obj", "restyle_all", "refresh_selection",
+             "_clear_highlight", "_highlight_color", "_add_highlight_mesh", "request_render")
+    View = type("View", (), {k: Vw.ModelerView.__dict__[k] for k in names})
+    v = View()
+    ren = vtk.vtkRenderer()
+    v.plotter = types.SimpleNamespace(renderer=ren, interactor=types.SimpleNamespace(isVisible=lambda: True,
+                                                                                     update=lambda: None))
+    objs = [types.SimpleNamespace(name=f"O{i}", color="#3060a0", transparency=0.6 if i == 2 else 0.0,
+                                  visible=i != 3, wireframe=False, material="vacuum",
+                                  history=[types.SimpleNamespace(kind="CreateBox")]) for i in range(5)]
+    v.doc = types.SimpleNamespace(selection_mode="object", selection=[], tess={},
+                                  design=types.SimpleNamespace(objects=objs, obj=lambda n: objs[int(n[1:])]),
+                                  project=types.SimpleNamespace(material=lambda m: None))
+    v.actors, v.highlight_actors, v.overlay_actors = {}, [], {}
+    v._styled_sel, v._styled_mode = set(), None
+    for o in objs:
+        m = pv.Box()
+        m.cell_data["face"] = np.arange(m.n_cells)
+        v.actors[o.name] = Vw.ObjActors(surface=v._plain_actor(m, "#999999", pickable=True), mesh=m,
+                                        edges=v._plain_actor(m.extract_all_edges(), "#202020", line_width=1))
+
+    def look():
+        return {n: (a.surface.GetProperty().GetColor(), a.surface.GetVisibility(), a.edges.GetProperty().GetLineWidth())
+                for n, a in v.actors.items()}, ren.GetActors().GetNumberOfItems()
+    styled = []
+    real = v._style_obj
+    v._style_obj = lambda n, o=None: (styled.append(n), real(n, o))
+    v.refresh_selection()
+    for sel in (["O1"], ["O2", "O4"], ["O3"], [], ["O0"]):
+        v.doc.selection = [Pick(n) for n in sel]
+        before = set(v._styled_sel)
+        styled.clear()
+        v.refresh_selection()
+        assert set(styled) == before | set(sel)              # only what was or is selected
+        got = look()
+        v.restyle_all()
+        assert look() == got                                 # same as restyling everything
+    assert v.actors["O0"].surface.GetProperty().GetColor() == Vw._rgb(Vw.HIGHLIGHT)
+    assert v.actors["O1"].surface.GetProperty().GetColor() == Vw._rgb("#3060a0")
+
+
+def test_grid_and_triad_stay_at_the_origin_of_a_far_model():
+    """A model far from the working CS origin: the grid still reaches the origin (with a spacing that keeps the
+    line count bounded), and the triad at the origin stays inside the camera clipping range."""
+    import types
+    import numpy as np
+    from hertzon.gui.viewer import ModelerView, WorkingCSActor
+    from vtkmodules.vtkRenderingCore import vtkCamera
+    box = (0.100, 0.050, 0.0, 0.103, 0.052, 0.0005)          # 3 mm part 100 mm away from the origin
+    v = types.SimpleNamespace(view_bbox=lambda: box, wcs=(np.zeros(3), np.eye(3)), grid_spacing=None,
+                              GRID_MAX_LINES=ModelerView.GRID_MAX_LINES)
+    v._grid_bounds = lambda: ModelerView._grid_bounds(v)
+    lo, hi = np.array(v._grid_bounds()[:3]), np.array(v._grid_bounds()[3:])
+    assert (lo <= 0).all() and (hi >= 0).all() and hi[0] == pytest.approx(0.103)
+    s = ModelerView.auto_spacing(v)
+    assert 0.103 / s <= ModelerView.GRID_MAX_LINES and s == pytest.approx(1e-3)
+    # an offset working CS at the part: the grid is taken in that frame and still holds its origin
+    v.wcs = (np.array([0.1, 0.05, 0.0]), np.eye(3))
+    g = v._grid_bounds()
+    assert g[0] == pytest.approx(0.0) and g[3] == pytest.approx(0.003)
+    # the camera looks at the part only: the clipping range is widened to take in the triad at the origin
+    cam = vtkCamera()
+    cam.SetFocalPoint(0.1015, 0.051, 0.0)
+    cam.SetPosition(0.1015, 0.051 + 0.01, 0.01)
+    cam.SetClippingRange(0.012, 0.016)
+    t = types.SimpleNamespace(origin=np.zeros(3))
+    WorkingCSActor._keep_in_depth(t, cam, 0.001)
+    near, far = cam.GetClippingRange()
+    d = float(np.dot(-np.array(cam.GetPosition()), np.array(cam.GetDirectionOfProjection())))
+    assert d > 0.016 and near <= d - 0.001 and far >= d + 0.001

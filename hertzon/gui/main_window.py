@@ -16,13 +16,14 @@ from PySide6.QtWidgets import (QMainWindow, QDockWidget, QTabWidget, QSplitter, 
                                QTableWidgetItem, QHeaderView)
 
 from .. import __version__
+from ..model import groups as G
 from ..model import schema
 from ..model.design import (Project, Design, Command, Assignment, FaceRef, Setup, Sweep, InfiniteSphere, Report,
                             FieldPlot, design_from_dict)
 from ..model.expr import LENGTH_UNITS
 from ..model.materials import is_conductor, normalize_color
 from ..solver.results import results_dir, ResultStore
-from .doc import Document, Pick, result_dir
+from .doc import Document, Pick, material_targets, result_dir
 from .viewer import ModelerView, PLANE_NORMAL
 from .trees import ProjectTree, ModelTree
 from .panels import PropertiesPanel, MessageManager, ProgressPanel, SolutionDataDialog, rename_object
@@ -202,6 +203,10 @@ class MainWindow(QMainWindow):
         self.a_delete = A("&Delete", self.delete_selection, "Delete")
         self.a_selall = A("Select &All", self.select_all, "Ctrl+A")
         self.a_selname = A("Select by &Name...", self.select_by_name, "Ctrl+Shift+N")
+        self.a_group = A("&Group", self.group_selection, "Ctrl+G",
+                         tip="Group the selected objects: they are selected, moved and transformed as one unit")
+        self.a_ungroup = A("U&ngroup", lambda: self.ungroup_selection(), "Ctrl+Shift+G",
+                           tip="Dissolve the groups of the selected objects so single objects can be edited")
         self.a_props = A("P&roperties...", self.edit_selected_properties)
         self.a_fit = A("Fit &All", self.view.fit_all, "Ctrl+D")
         self.a_fitsel = A("Fit &Selection", self.view.fit_selection, "Ctrl+E")
@@ -220,6 +225,7 @@ class MainWindow(QMainWindow):
         self.a_unite = A("&Unite", lambda: self.boolean("Unite"), "Ctrl+U")
         self.a_subtract = A("&Subtract...", lambda: self.boolean("Subtract"))
         self.a_intersect = A("&Intersect", lambda: self.boolean("Intersect"))
+        self.a_material = A("Assign Material...", self.assign_material)
         self.a_validate = A("&Validation Check...", self.validation_check)
         self.a_analyze = A("Analyze &All", self.analyze_all, "F5")
         self.a_escape = A("Cancel", self._escape, "Escape")
@@ -262,6 +268,9 @@ class MainWindow(QMainWindow):
         m.addSeparator()
         m.addAction(self.a_selall)
         m.addAction(self.a_selname)
+        m.addSeparator()
+        m.addAction(self.a_group)
+        m.addAction(self.a_ungroup)
         fs = m.addMenu("Select Faces")
         fs.addAction("All Object Faces", self.select_object_faces)
         fs.addAction("Face by Position...", self.select_face_by_position)
@@ -348,7 +357,8 @@ class MainWindow(QMainWindow):
         m.addAction("Fillet...", self.fillet)
         m.addAction("Chamfer...", self.chamfer)
         m.addSeparator()
-        m.addAction("Assign Material...", self.assign_material)
+        m.addAction(self.a_material)
+        m.setToolTipsVisible(True)
         m.addSeparator()
         sel = m.addMenu("Selection Mode")
         for a in self.a_mode.values():
@@ -411,6 +421,7 @@ class MainWindow(QMainWindow):
         for q in F.QUANTITIES:
             pf.addAction(q, lambda _=False, q=q: self.plot_fields(q))
         fm.addAction("Animate Last Field Plot", self.toggle_animation)
+        fm.addAction("Export Animation as GIF...", self.export_animation_gif)
         fm.addAction("Clear Field Overlays", self.clear_overlays)
         om = m.addMenu("Optimization")
         om.addAction("Add Parametric...", self.add_parametric)
@@ -545,6 +556,9 @@ class MainWindow(QMainWindow):
         g.widget(self.sel_combo)
         g.small("Select by Name", "byname", self.a_selname)
         g.small("Select All", "selall", self.a_selall)
+        g = pg.group("Group")
+        g.icon_only = True
+        self._sel_buttons = [g.small("Group", "group", self.a_group), g.small("Ungroup", "ungroup", self.a_ungroup)]
         g = pg.group("Show")
         g.icon_only = True
         # layout: Show All / Show Selected / Show Only Selected | Overlays on/off / Hide Selected
@@ -597,7 +611,6 @@ class MainWindow(QMainWindow):
         g.icon_only = True
         g.small("Region", "region", self.create_region)
         g.small("Section", "section", self.section)
-        self._sel_buttons = []
         g = pg.group("Operations")
         g.icon_only = True
         for txt, ic, fn in (("Move", "move", lambda: self.start_op("OpMove")),
@@ -679,7 +692,7 @@ class MainWindow(QMainWindow):
         self.mat_combo.addItem(self.new_material)
         self.mat_combo.currentTextChanged.connect(lambda t: setattr(self, "new_material", t or "vacuum"))
         g.widget(self.mat_combo)
-        g.small("Material", "material", self.assign_material)
+        self._mat_buttons = [g.small("Material", "material", self.assign_material)]
         self._update_sel_buttons()
 
         # ---- Model -------------------------------------------------------------------------
@@ -695,7 +708,7 @@ class MainWindow(QMainWindow):
         g.small("Bondwire", "line", lambda: self.create_by_dialog("CreateBondwire"))
         g.small("Scale", "move", lambda: self.transform("Scale"))
         g = pg.group("Material")
-        g.large("Assign Material", "material", self.assign_material)
+        self._mat_buttons.append(g.large("Assign Material", "material", self.assign_material))
         g.large("Edit Materials", "material", self.edit_materials)
         g = pg.group("Measure")
         g.large("Measure", "measure", lambda: self.start_draw("Measure"), menu=self._measure_items())
@@ -729,6 +742,29 @@ class MainWindow(QMainWindow):
         g.large("Validate", "validate", self.a_validate)
         g.large("Analyze All", "analyze", self.a_analyze)
         self._variation_group(pg)
+
+        # ---- Lumped Elements ---------------------------------------------------------------
+        pg = rb.page("Lumped Elements")
+        g = pg.group("Components")
+
+        def pkg_menu(kind):
+            from ..model.lumped import GENERIC, SERIES
+            items = [(p.name, (lambda p=p.name: self.insert_component(kind, p))) for p in GENERIC]
+            items += [(p.name, (lambda p=p.name: self.insert_component(kind, p))) for p in SERIES
+                      if kind in ("S", p.kind)]
+            return items
+        tip = (" with its pads: click the package, then the position on the board. With two traces selected it "
+               "is placed in the gap between them.")
+        g.large("Resistor", "resistor", lambda: self.insert_component("R"), menu=pkg_menu("R"),
+                tip="Chip resistor" + tip)
+        g.large("Inductor", "inductor", lambda: self.insert_component("L"), menu=pkg_menu("L"),
+                tip="Chip inductor" + tip)
+        g.large("Capacitor", "capacitor", lambda: self.insert_component("C"), menu=pkg_menu("C"),
+                tip="Chip capacitor" + tip)
+        g.large("Touchstone", "chip", lambda: self.insert_component("S"), menu=pkg_menu("S"),
+                tip="Component measured by a Touchstone file (.s1p/.s2p)" + tip)
+        g = pg.group("Boundary")
+        g.large("Lumped RLC", "boundary", bnd("Lumped RLC"), tip="Lumped RLC boundary on the selected sheet")
 
         # ---- Results -----------------------------------------------------------------------
         pg = rb.page("Results")
@@ -827,6 +863,7 @@ class MainWindow(QMainWindow):
 
     def _on_doc_changed(self, what: str) -> None:
         self._update_title()
+        self._update_sel_buttons()                 # a sheet may have become a solid (Thicken, Sweep)
         self._sync_overlays()
         if what in ("variables", "all", "model", "results"):
             self._follow_variation()
@@ -844,6 +881,20 @@ class MainWindow(QMainWindow):
         on = bool(self.doc.selection)
         for b in getattr(self, "_sel_buttons", []):
             b.setEnabled(on)
+        # only solids take a material: sheets get a boundary (Finite Conductivity, Impedance, ...)
+        solids, others = material_targets(self.doc, self.doc.selected_objects())
+        tip = "Assign a material to the selected solids"
+        if others and not solids:
+            tip = "Sheets and lines have no material: assign a boundary (Finite Conductivity, Impedance, ...)"
+        elif others:
+            tip += " (selected sheets and lines are skipped)"
+        a = getattr(self, "a_material", None)
+        if a is not None:
+            a.setEnabled(bool(solids))
+            a.setToolTip(tip)
+        for b in getattr(self, "_mat_buttons", []):
+            b.setEnabled(bool(solids))
+            b.setToolTip(tip)
 
     def _mat_popup(self, orig):
         def show():
@@ -875,7 +926,7 @@ class MainWindow(QMainWindow):
 
     def _cs_changed(self) -> None:
         self.view.refresh_cs()
-        self.view.plotter.render()
+        self.view.request_render()
         self.model_tree.rebuild()
         self._sync_cs_combo()
 
@@ -1082,6 +1133,10 @@ class MainWindow(QMainWindow):
             for sp in self.des.spheres:
                 if sp.props.get("CoordinateSystem") == name:
                     sp.props["CoordinateSystem"] = nm
+            for o in self.des.objects:
+                for c in o.history:
+                    if c.props.get("CoordinateSystem") == name:
+                        c.props["CoordinateSystem"] = nm
             if self.des.working_cs == name:
                 self.des.working_cs = nm
         if not self._check_cs(cs):
@@ -1093,7 +1148,8 @@ class MainWindow(QMainWindow):
     def delete_cs(self, name: str) -> None:
         users = [o.name for o in self.des.objects if o.orientation == name] + \
                 [c.name for c in self.des.coord_systems if c.reference == name] + \
-                [sp.name for sp in self.des.spheres if sp.props.get("CoordinateSystem") == name]
+                [sp.name for sp in self.des.spheres if sp.props.get("CoordinateSystem") == name] + \
+                [o.name for o in self.des.objects if any(c.props.get("CoordinateSystem") == name for c in o.history)]
         if users:
             QMessageBox.warning(self, "Delete Coordinate System",
                                 f"{name} is used by: {', '.join(users[:8])}. Change those first.")
@@ -1126,7 +1182,7 @@ class MainWindow(QMainWindow):
         on = not acts[0].GetVisibility()
         for a in acts:
             a.SetVisibility(on)
-        self.view.plotter.render()
+        self.view.request_render()
 
     def hide_all(self) -> None:
         for o in self.des.objects:
@@ -1140,7 +1196,7 @@ class MainWindow(QMainWindow):
     def _cam_zoom(self, f: float) -> None:
         w, h = self.view.plotter.renderer.GetSize()
         self.view.zoom_at_cursor(f, (w // 2, h // 2))
-        self.view.plotter.render()
+        self.view.request_render()
 
     def _cam_pan(self, dx: int, dy: int) -> None:
         import numpy as _np
@@ -1153,7 +1209,7 @@ class MainWindow(QMainWindow):
         sh = (dx * right + dy * up) * d
         cam.SetFocalPoint(*(fp + sh))
         cam.SetPosition(*(pos + sh))
-        self.view.plotter.render()
+        self.view.request_render()
 
     def _cam_rot(self, az: float, el: float) -> None:
         cam = self._cam()
@@ -1161,7 +1217,7 @@ class MainWindow(QMainWindow):
         cam.Elevation(el)
         cam.OrthogonalizeViewUp()
         self.view.plotter.renderer.ResetCameraClippingRange()
-        self.view.plotter.render()
+        self.view.request_render()
 
     def _on_selection(self) -> None:
         self._update_sel_buttons()
@@ -1187,7 +1243,8 @@ class MainWindow(QMainWindow):
 
     def _tree_objects(self, names: list, add: bool) -> None:
         self.set_mode("object")
-        self.doc.select([Pick(n) for n in names], add)
+        # the tree lists the members of a group: a member picked there is selected on its own
+        self.doc.select([Pick(n) for n in names], add, whole_groups=False)
 
     def set_mode(self, mode: str) -> None:
         self.a_mode[mode].setChecked(True)
@@ -2043,6 +2100,12 @@ class MainWindow(QMainWindow):
 
     def _draw_finished(self, kind: str, pts: list) -> None:
         P = [np.asarray(p, float) for p in pts]
+        if kind == "IntegrationLine":
+            self._line_drawn(P)
+            return
+        if kind == "PlaceComponent":
+            self._component_placed(P[0])
+            return
         if kind.startswith("Op"):
             self._op_finished(kind, P)
             return
@@ -2274,10 +2337,24 @@ class MainWindow(QMainWindow):
         if not objs:
             return
         props = schema.GEOMETRY[kind]
-        dlg = NamedPropsDialog(kind, kind, props, schema.defaults(props), self.doc.evaluator(), parent=self,
+        vals = schema.defaults(props)
+        if "CoordinateSystem" in vals:      # Split: the plane is given in the working coordinate system
+            vals["CoordinateSystem"] = self.des.working_cs
+        dlg = NamedPropsDialog(kind, kind, props, vals, self.doc.evaluator(), parent=self,
                                info=f"Apply to: {', '.join(objs)}")
         dlg.name_edit.setEnabled(False)
-        if dlg.exec() != QDialog.Accepted:
+        if kind == "ThickenSheet":          # arrows in the 3D view show where the sheets grow
+            def arrows(*_):
+                self.view.show_thicken_arrows(objs, dlg.values.get("ReverseDirection") == "True",
+                                              dlg.values.get("BothSides") == "True")
+            dlg.grid.changed.connect(arrows)
+            arrows()
+        try:
+            accepted = dlg.exec() == QDialog.Accepted
+        finally:
+            if kind == "ThickenSheet":
+                self.view.clear_thicken_arrows()
+        if not accepted:
             return
         self.add_command_to_selection(kind, dlg.values, objs)
 
@@ -2288,7 +2365,7 @@ class MainWindow(QMainWindow):
         self.doc.checkpoint()
         for o in objs:
             self.des.obj(o).history.append(Command(kind, dict(values)))
-        self.doc.commit("model")
+        self.doc.commit("model")         # integration lines follow by themselves (model.objframe)
 
     def chamfer(self) -> None:
         if self.doc.selection_mode != "edge" or not self.doc.selection:
@@ -2425,6 +2502,7 @@ class MainWindow(QMainWindow):
     def _duplicate(self, objs: list[str], cmds_for_copy) -> None:
         self.doc.checkpoint()
         new = []
+        copies: list[dict[str, str]] = [{} for _ in cmds_for_copy]
         for name in objs:
             src = self.des.obj(name)
             for i, cmds in enumerate(cmds_for_copy, start=1):
@@ -2445,6 +2523,9 @@ class MainWindow(QMainWindow):
                         cmd.props["Tools"] = ",".join(tools)
                 self.des.objects.append(c)
                 new.append(c.name)
+                copies[i - 1][name] = c.name
+        for cp in copies:               # every copy of a group is a group of its own
+            G.copy_groups(self.des, cp)
         self.doc.commit("model")
         self.msgs.add("info", f"Created {', '.join(new)}")
 
@@ -2510,9 +2591,11 @@ class MainWindow(QMainWindow):
             return
         self.doc.checkpoint()
         new = []
+        copies = {}
         for pack in self.clipboard:
             o = copy.deepcopy(pack["obj"])
             o.name = self.des.unique_name(o.name)
+            copies[pack["obj"].name] = o.name
             mapping = {}
             for t in pack["tools"]:
                 tc = copy.deepcopy(t)
@@ -2526,6 +2609,7 @@ class MainWindow(QMainWindow):
                                                 if x.strip())
             self.des.objects.append(o)
             new.append(o.name)
+        G.copy_groups(self.des, copies)
         self.doc.commit("model")
         self.doc.select([Pick(n) for n in new])
 
@@ -2555,6 +2639,45 @@ class MainWindow(QMainWindow):
         self.doc.commit("model")
         self.doc.selectionChanged.emit()
         self.msgs.add("info", f"Deleted {', '.join(objs)}")
+
+    def group_selection(self) -> None:
+        """Edit > Group: the selected objects (also of different kinds) become one group."""
+        objs = self.doc.selected_objects() if self.doc.selection_mode == "object" else []
+        if len(G.expand(self.des, objs)) < 2:
+            QMessageBox.information(self, "Group", "Please select at least two objects to group.")
+            return
+        self.doc.checkpoint()
+        name = G.make_group(self.des, objs)
+        self.doc.commit("model", geometry=False)
+        self.doc.select([Pick(n) for n in G.members(self.des, name)])
+        self.msgs.add("info", f"Grouped {', '.join(G.members(self.des, name))} as '{name}'")
+
+    def ungroup_selection(self, names: list[str] | None = None) -> None:
+        """Edit > Ungroup: dissolves the groups of the selected objects; the objects stay selected."""
+        objs = names or self.doc.selected_objects()
+        if not any(self.des.has_obj(n) and self.des.obj(n).group or n in G.groups(self.des) for n in objs):
+            QMessageBox.information(self, "Ungroup", "The selection contains no group.")
+            return
+        sel = G.expand(self.des, [n for n in objs if self.des.has_obj(n)]) or \
+            [m for n in objs for m in G.members(self.des, n)]
+        self.doc.checkpoint()
+        gone = G.ungroup(self.des, objs)
+        self.doc.commit("model", geometry=False)
+        self.doc.select([Pick(n) for n in sel])
+        self.msgs.add("info", f"Ungrouped {', '.join(gone)}")
+
+    def rename_group(self, name: str) -> None:
+        new, ok = QInputDialog.getText(self, "Rename Group", "Name:", text=name)
+        if not ok or new.strip() == name:
+            return
+        self.doc.checkpoint()
+        try:
+            G.rename_group(self.des, name, new)
+        except ValueError as e:
+            self.doc.undo_stack.pop()
+            QMessageBox.warning(self, "Rename Group", str(e))
+            return
+        self.doc.commit("model", geometry=False)
 
     def select_all(self) -> None:
         self.set_mode("object")
@@ -2764,7 +2887,7 @@ class MainWindow(QMainWindow):
         v.update_grid()
         if v.draw is not None:
             v._update_preview()
-        v.plotter.render()
+        v.request_render()
         if hasattr(self, "plane_combo") and self.plane_combo.currentText() != plane:
             self.plane_combo.blockSignals(True)
             self.plane_combo.setCurrentText(plane)
@@ -2873,6 +2996,14 @@ class MainWindow(QMainWindow):
         objs = self.selected_objects(1)
         if not objs:
             return
+        objs, others = material_targets(self.doc, objs)
+        if not objs:
+            QMessageBox.information(self, "Assign Material",
+                                    "Sheets and lines have no material. Assign a boundary such as Finite "
+                                    "Conductivity or Impedance instead.")
+            return
+        if others:
+            self.msgs.add("info", f"Assign Material: skipped sheets/lines {', '.join(others)}")
         dlg = MaterialsDialog(self.doc, self, self.des.obj(objs[0]).material)
         if dlg.exec() != QDialog.Accepted or not dlg.selected():
             return
@@ -2955,7 +3086,7 @@ class MainWindow(QMainWindow):
         if kind == "Lumped Port" or kind == "Lumped RLC":
             line = self._auto_integration_line(faces, objs)
             if line:
-                a.props["IntegrationLine"] = line
+                a.props["IntegrationLine"] = self._line_on_object(a, line)
         if not edit_assignment(self, self.doc, family, a):
             return
         self.doc.checkpoint()
@@ -2964,8 +3095,59 @@ class MainWindow(QMainWindow):
         self.view.show_assignments([a])
         self.msgs.add("info", f"Assigned {kind} '{a.name}'")
 
+    def _face_triangles(self, obj: str, face: int = -1):
+        """points and triangles of one face (face < 0: the whole object) of the display tessellation."""
+        t = self.doc.tess.get(obj)
+        if t is None:
+            return None
+        tris = t.tris if face < 0 else t.tris[t.tri_face == face]
+        return np.asarray(t.points, float), tris
+
+    def _conductor_surfaces(self, skip: set[str]) -> dict[str, np.ndarray]:
+        """surface triangles of every conductor: objects of a conducting material and faces/objects with a
+        Perfect E or Finite Conductivity boundary."""
+        out: dict[str, list] = {}
+
+        def add(obj, face=-1):
+            if obj in skip:
+                return
+            ft = self._face_triangles(obj, face)
+            if ft is not None and len(ft[1]):
+                out.setdefault(obj, []).append(ft[0][ft[1]])
+        for o in self.des.live_objects():
+            try:
+                if o.model and is_conductor(self.doc.project.material(o.material)):
+                    add(o.name)
+            except KeyError:
+                pass
+        for b in self.des.boundaries:
+            if b.enabled and b.kind in ("Perfect E", "Finite Conductivity"):
+                for f in b.faces:
+                    add(f.obj, f.face)
+                for o in b.objects:
+                    add(o)
+        return {k: np.concatenate(v) for k, v in out.items()}
+
     def _auto_integration_line(self, faces, objs) -> str:
-        """Integration line across the shorter side of a rectangular port sheet (centre to centre)."""
+        """Integration line of a lumped port/RLC sheet: from the centre of its contact with one conductor to
+        the centre of its contact with the other; without two touching conductors across the shorter side of
+        the sheet (centre to centre)."""
+        from ..model.portline import between_conductors
+        parts = [self._face_triangles(f.obj, f.face) for f in faces] + [self._face_triangles(o) for o in objs]
+        parts = [p for p in parts if p is not None and len(p[1])]
+        if parts:
+            pts, tris, n = [], [], 0
+            for P, T in parts:
+                pts.append(P)
+                tris.append(T + n)
+                n += len(P)
+            try:
+                line = between_conductors(np.concatenate(pts), np.concatenate(tris),
+                                          self._conductor_surfaces({f.obj for f in faces} | set(objs)))
+            except Exception:  # noqa: BLE001
+                line = None
+            if line is not None:
+                return f"{self._pt(line[0])};{self._pt(line[1])}"
         boxes = []
         for f in faces:
             t = self.doc.tess.get(f.obj)
@@ -4031,6 +4213,12 @@ class MainWindow(QMainWindow):
             self.anim_bar.load([p.name for p in fps], frames)
             self.anim_bar.play()
 
+    def export_animation_gif(self) -> None:
+        if not self.anim_bar.frames:
+            QMessageBox.information(self, "Export GIF", "Start an animation first (Animate).")
+            return
+        self.anim_bar.export_gif()
+
     def clear_overlays(self, hide: bool = True) -> None:
         """Remove all field overlays; hide: they stay hidden until a plot or the Field Overlays folder is
         selected again."""
@@ -4054,7 +4242,7 @@ class MainWindow(QMainWindow):
             self.anim_plot = None
         if gone:
             self.hint.setText("Ready")
-            self.view.plotter.render()
+            self.view.request_render()
 
     def hide_overlay(self, name: str) -> None:
         if name in self.anim_bar.names:
@@ -4265,6 +4453,11 @@ class MainWindow(QMainWindow):
             m.addAction("Disable" if a.enabled else "Enable", lambda: self._toggle_enabled(data[1]))
             if kind != "meshop":
                 m.addAction("Reassign to Selection", lambda: self._reassign(data[1]))
+            if a.kind in ("Lumped Port", "Lumped RLC"):
+                m.addSeparator()
+                m.addAction("Draw Integration Line", lambda: self.draw_integration_line(data[1]))
+                m.addAction("Auto Integration Line", lambda: self.auto_integration_line(data[1]))
+                m.addSeparator()
             m.addAction("Delete", self._delete_project_items)
         elif kind == "setup":
             m.addAction("Properties...", lambda: self._project_activated(data))
@@ -4330,6 +4523,111 @@ class MainWindow(QMainWindow):
         a = self.des.assignment(name)
         a.enabled = not a.enabled
         self.doc.commit("boundaries", geometry=False)
+
+    # ---- lumped components (Lumped Elements tab) ---------------------------------------------
+    def _trace_points_mm(self, name: str) -> np.ndarray:
+        t = self.doc.tess.get(name)
+        if t is None:
+            raise ValueError(f"'{name}' has no geometry")
+        return np.asarray(t.points, float) * 1e3
+
+    def insert_component(self, kind: str, package: str | None = None) -> None:
+        """SMD component with its pads, element sheet and Lumped RLC boundary: placed by a click on the board,
+        or in the gap between the two selected traces."""
+        objs = self.doc.selected_objects() if self.doc.selection_mode == "object" else []
+        if len(objs) == 2 and all(self.des.has_obj(o) and self.des.obj(o).dim >= 2 for o in objs):
+            self._insert_between(kind, package, objs)
+            return
+        self._place_target = (kind, package)
+        self.start_draw("PlaceComponent")
+
+    def _component_placed(self, p) -> None:
+        from ..model import lumped as LU
+        from .lumped_dialogs import ComponentDialog
+        kind, package = getattr(self, "_place_target", ("C", None))
+        normal = PLANE_NORMAL[self.view.grid_plane]
+        dlg = ComponentDialog(self, kind, None, package, normal)
+        if dlg.exec() != QDialog.Accepted:
+            return
+        v = dlg.result_values()
+        place = LU.Placement(tuple(float(x) * 1e3 for x in p), v["axis"], normal)
+        self._add_component(v, None, None, None, place)
+
+    def _insert_between(self, kind: str, package: str | None, objs: list[str]) -> None:
+        from ..model import lumped as LU
+        from .lumped_dialogs import ComponentDialog
+        try:
+            ends = LU.trace_ends(self._trace_points_mm(objs[0]), self._trace_points_mm(objs[1]))
+        except ValueError as e:
+            QMessageBox.warning(self, "Insert Component", str(e))
+            return
+        dlg = ComponentDialog(self, kind, ends.gap, package)
+        if dlg.exec() != QDialog.Accepted:
+            return
+        self._add_component(dlg.result_values(), objs[0], objs[1], ends, None)
+
+    def _add_component(self, v: dict, a, b, ends, place) -> None:
+        from ..model import lumped as LU
+        self.doc.checkpoint()
+        try:
+            bnd, made, warns = LU.insert_component(
+                self.doc.project, self.des, a, b, ends, v["pkg"], v["land"], v["kind"], v["value"], v["name"],
+                parasitics=v["parasitics"], terminations=v["terminations"], touchstone=v["touchstone"],
+                mount=v["mount"], place=place)
+        except Exception as e:  # noqa: BLE001
+            self.doc.undo()
+            QMessageBox.warning(self, "Insert Component", str(e))
+            return
+        self.doc.commit("model")
+        self.view.show_assignments([bnd])
+        for w in warns:
+            self.msgs.add("warning", f"{bnd.name}: {w}")
+        where = f"between {a} and {b}" if a else "at the clicked point (move it with its variables " \
+            + ", ".join(k for k in self.des.variables if k.startswith(made[-1].name + "_")) + ")"
+        self.msgs.add("info", f"Inserted {v['pkg'].name} '{made[-1].name}' {where}: "
+                              f"{', '.join(o.name for o in made)}")
+
+    def draw_integration_line(self, name: str) -> None:
+        """Start and end point of the integration line picked in the 3D view (two clicks, with snapping)."""
+        self._line_target = name
+        self.start_draw("IntegrationLine")
+
+    def _line_drawn(self, P: list) -> None:
+        name, self._line_target = getattr(self, "_line_target", None), None
+        if not name or len(P) < 2 or name not in {a.name for a in self.des.excitations + self.des.boundaries}:
+            return
+        if np.linalg.norm(P[1] - P[0]) < 1e-15:
+            self.msgs.add("warning", "Integration line: start and end point are the same")
+            return
+        self._set_integration_line(name, f"{self._pt(P[0])};{self._pt(P[1])}")
+
+    def auto_integration_line(self, name: str) -> None:
+        """Integration line placed again between the conductors that touch the sheet."""
+        a = self.des.assignment(name)
+        line = self._auto_integration_line(a.faces, a.objects)
+        if not line:
+            self.msgs.add("warning", f"{name}: no integration line found, draw it or enter it in the properties")
+            return
+        self._set_integration_line(name, line)
+
+    def _line_on_object(self, a, line: str) -> str:
+        """Integration line picked in the model (global) in the coordinates of its object, so that it moves
+        with the object."""
+        from ..model.objframe import to_object_coords
+        try:
+            return to_object_coords(self.des, a, line, self.doc.evaluator())
+        except Exception as e:  # noqa: BLE001
+            self.msgs.add("warning", f"{a.name}: integration line kept in global coordinates ({e})")
+            return line
+
+    def _set_integration_line(self, name: str, line: str) -> None:
+        self.doc.checkpoint()
+        a = self.des.assignment(name)
+        line = self._line_on_object(a, line)
+        a.props["IntegrationLine"] = line
+        self.doc.commit("boundaries" if any(b is a for b in self.des.boundaries) else "excitations", geometry=False)
+        self.view.show_assignments([a])
+        self.msgs.add("info", f"{name}: integration line {line}")
 
     def _reassign(self, name: str) -> None:
         faces, objs = self._selection_refs()
@@ -4504,7 +4802,8 @@ class MainWindow(QMainWindow):
         mode = self.doc.selection_mode
         if sel:
             if mode == "object":
-                m.addAction("Assign Material...", self.assign_material)
+                m.addAction(self.a_material)
+                m.setToolTipsVisible(True)
             b = m.addMenu("Assign Boundary")
             for k in schema.BOUNDARIES:
                 b.addAction(k, lambda _=False, k=k: self.assign("boundary", k))
@@ -4527,6 +4826,7 @@ class MainWindow(QMainWindow):
                 bo = m.addMenu("Boolean")
                 for a in (self.a_unite, self.a_subtract, self.a_intersect):
                     bo.addAction(a)
+                self._group_actions(m)
                 m.addAction("Hide Selection", lambda: self.set_visible(False))
                 m.addAction("Properties...", self.edit_selected_properties)
             elif mode == "edge":
@@ -4558,17 +4858,33 @@ class MainWindow(QMainWindow):
                 self.set_mode("object")
                 self.doc.select([Pick(name)])
             m.addAction("Properties...", lambda: self.edit_object_dialog(name))
-            m.addAction("Assign Material...", self.assign_material)
+            m.addAction(self.a_material)
+            m.setToolTipsVisible(True)
             m.addAction("Hide" if self.des.obj(name).visible else "Show",
                         lambda: self.set_visible(not self.des.obj(name).visible))
             m.addAction("Copy", self.copy_objects)
             m.addAction("Delete", self.delete_selection)
+            self._group_actions(m)
             b = m.addMenu("Assign Boundary")
             for k in schema.BOUNDARIES:
                 b.addAction(k, lambda _=False, k=k: self.assign("boundary", k))
             e = m.addMenu("Assign Excitation")
             for k in schema.EXCITATIONS:
                 e.addAction(k, lambda _=False, k=k: self.assign("excitation", k))
+        elif data and data[0] == "objgroup":
+            name = data[1]
+            names = G.members(self.des, name)
+            if set(names) != set(self.doc.selected_objects()):
+                self.set_mode("object")
+                self.doc.select([Pick(n) for n in names])
+            m.addAction("Ungroup", lambda: self.ungroup_selection([name]))
+            m.addAction("Rename...", lambda: self.rename_group(name))
+            m.addAction(self.a_material)
+            m.setToolTipsVisible(True)
+            m.addAction("Hide", lambda: self.set_visible(False))
+            m.addAction("Show", lambda: self.set_visible(True))
+            m.addAction("Copy", self.copy_objects)
+            m.addAction("Delete", self.delete_selection)
         elif data and data[0] == "command":
             obj, idx = data[1], data[2]
             c = self.des.obj(obj).history[idx]
@@ -4592,6 +4908,14 @@ class MainWindow(QMainWindow):
         else:
             m.addAction("Show All", self.show_all)
         m.exec(pos)
+
+    def _group_actions(self, m) -> None:
+        """Group / Ungroup entries of a context menu, as far as they apply to the selection."""
+        objs = self.doc.selected_objects()
+        if len(G.expand(self.des, objs)) > 1 and len({self.des.obj(n).group or n for n in objs}) > 1:
+            m.addAction(self.a_group)
+        if any(self.des.obj(n).group for n in objs if self.des.has_obj(n)):
+            m.addAction(self.a_ungroup)
 
     def _suppress(self, obj: str, idx: int) -> None:
         self.doc.checkpoint()
@@ -4681,10 +5005,8 @@ class MainWindow(QMainWindow):
     def about(self) -> None:
         QMessageBox.about(self, "About Hertzon",
                           f"<b>Hertzon {__version__}</b><br>Open-source 3D full-wave FEM workflow with adaptive meshing."
-                          "<br><br>"
-                          "Built on <a href='https://github.com/FennisRobert/EMerge'>EMerge</a>, the open-source FEM "
-                          "solver by Robert Fennis (GPL v2+), which provides the "
-                          "finite-element core.<br>Geometry: gmsh/OpenCASCADE, display: VTK/PyVista.<br><br>"
+                          "<br>By Dominik Mair, built on <a href='https://github.com/FennisRobert/EMerge'>EMerge</a>, "
+                          "the FEM solver by Robert Fennis (GPL v2+), which provides the finite-element core.<br>Geometry: gmsh/OpenCASCADE, display: VTK/PyVista.<br><br>"
                           "Licensed under the GNU GPL v2 or later. Provided without any warranty: check simulation "
                           "results yourself before relying on them.")
 

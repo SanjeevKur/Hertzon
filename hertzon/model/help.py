@@ -53,8 +53,11 @@ HELP: dict[str, str] = {
     "Base": "A point on the mirror plane.",
     "Normal": "Normal vector of the mirror plane.",
     "Factor": "Scale factor (1 = unchanged).",
-    "Thickness": "Thickness.",
+    "Thickness": "Thickness. A positive value thickens to the positive side of the sheet's main axis "
+                 "(+Z for a sheet in XY), a negative value or Reverse direction to the other side. "
+                 "The arrow in the 3D view shows the direction.",
     "BothSides": "Thicken symmetrically to both sides of the sheet.",
+    "ReverseDirection": "Thicken to the other side of the sheet (-Z for a sheet in XY).",
     "Tools": "Objects used as tools of the boolean operation (comma separated).",
     "KeepOriginals": "Keep copies of the tool objects after the operation.",
     "Plane": "Cutting plane through the global origin.",
@@ -95,9 +98,12 @@ HELP: dict[str, str] = {
     "Exponent": "Grading exponent of the PML conductivity profile.",
     "MaxAttenuation": "Attenuation at the outer PML layer.",
     "Type": "Symmetry type: Perfect E (tangential E = 0) or Perfect H (tangential H = 0).",
-    "ImpedanceMultiplier": "Factor for port impedances when a symmetry plane cuts a port (2 for one plane).",
-    "UVector": "In-plane U direction of the periodic boundary.",
-    "Primary": "Primary (master) boundary this secondary (slave) boundary is linked to.",
+    "ImpedanceMultiplier": "Factor for port impedances when a symmetry plane cuts a port (2 for one plane). "
+                           "Not applied by the solver yet: a port cut by the plane is referred to the half port.",
+    "UVector": "In-plane U direction of the periodic boundary. Primary / Secondary boundaries are not passed "
+               "to the solver yet; it skips them with a warning.",
+    "Primary": "Primary boundary this secondary boundary is linked to. Primary / Secondary boundaries are not "
+               "passed to the solver yet; it skips them with a warning.",
     "PhaseDelay": "Phase difference between primary and secondary boundary (scan angle).",
     # ---- excitations --------------------------------------------------------------------------
     "PortNumber": "Port index used in S(i,j).",
@@ -144,7 +150,7 @@ HELP: dict[str, str] = {
     "GrowthRate": "Mesh grading away from refined regions.",
     "EnforceRefinementPercent": "Adjust the refinement until the target percentage is reached.",
     "CurvedElements": "Tetrahedra at curved metal and material surfaces (cylinders, spheres, splines) get curved edges that follow the true geometry instead of flat facets. Removes the faceting error, so round posts, rods and dielectric resonators converge with far fewer elements. Applies to PEC, finite-conductivity metal, symmetry and material surfaces. Surfaces that touch a port, and impedance, lumped and thin-conductor faces, stay flat. Faceted primitives (NumberOfSegments/NumberOfVertices > 0) are flat by definition. Switch off only to compare with the plain flat-faceted mesh.",
-    "RefinementMethod": "Local (Delaunay), the default: local, the mesh is refined in place by local Delaunay point insertion around the worst elements; everything else stays exactly the same (nested meshes, no re-meshing noise, no gmsh run per pass). Remesh (slow): re-mesh the whole model each pass with gmsh. Remesh (stable, experimental): re-mesh, but every region keeps its current element size and only the worst elements are halved (nearly nested meshes, smoother convergence; test option).",
+    "RefinementMethod": "AURA (EMerge), the default: EMerge's local refinement, the worst elements are bisected along their longest edge and the new elements are improved by flips and smoothing; old nodes never move (nested meshes, no gmsh run per pass). Local (Delaunay): local, the mesh is refined in place by local Delaunay point insertion around the worst elements; everything else stays exactly the same (nested meshes, no re-meshing noise, no gmsh run per pass). Remesh (slow): re-mesh the whole model each pass with gmsh. Remesh (stable, experimental): re-mesh, but every region keeps its current element size and only the worst elements are halved (nearly nested meshes, smoother convergence; test option).",
     "SaveFields": "Store fields for field plots (needs disk space). In a sweep (Discrete or Fast): the fields at "
                   "every frequency, needed for far fields, gain patterns and antenna parameters over frequency; "
                   "an Interpolating sweep has S-parameters only.",

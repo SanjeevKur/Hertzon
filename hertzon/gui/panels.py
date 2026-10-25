@@ -16,7 +16,7 @@ from ..model import schema
 from ..model.materials import normalize_color
 from .props import PropertyGrid
 from ..solver.results import ResultStore, results_dir
-from .doc import result_dir
+from .doc import object_attributes, result_dir
 
 
 class PropertiesPanel(QWidget):
@@ -118,7 +118,7 @@ class PropertiesPanel(QWidget):
             elif k == "DisplayWireframe":
                 ob.wireframe = v == "True"
             self.doc.commit("model" if geometry else "attributes", geometry=geometry)
-        g = self._grid("Attribute", schema.OBJECT_ATTRIBUTES, attrs, ach, ev=False)
+        g = self._grid("Attribute", object_attributes(self.doc, name), attrs, ach, ev=False)
         if command_index is None:
             self.tabs.setCurrentWidget(g)
 

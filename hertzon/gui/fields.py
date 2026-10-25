@@ -248,11 +248,14 @@ def load_grid(st: ResultStore, sol: str) -> tuple[pv.UnstructuredGrid, dict]:
     """Solver mesh with the field values. New results store the field at the 4 corners of every
     tetrahedron (discontinuous across materials), old ones at the mesh nodes. Curved tetrahedra
     (curved elements at curved surfaces) get their midpoints on the curved edges."""
+    key = _grid_key(st, sol)
+    if key in _cache:            # the same files as last time: no reading again (animations ask once per frame)
+        return _cache[key][0], _cache[key][2]
     m = st.npz("mesh.npz")
     f = st.npz(f"fields_{sol}.npz")      # computes the fields from the saved solution when needed
-    key = f"{st.folder}|{sol}|{(st.folder / f'fields_{sol}.npz').stat().st_mtime if (st.folder / f'fields_{sol}.npz').exists() else 0}"
     if m is None or f is None:
         raise RuntimeError("No field data saved for this solution (enable 'Save fields' in the setup)")
+    key = _grid_key(st, sol)     # the fields file may just have been written from the solution
     if key not in _cache:
         nodes, tets = m["nodes"], m["tets"]
         npt = 10 if "tet10" in f else (4 if "tet4" in f else 0)
@@ -274,9 +277,82 @@ def load_grid(st: ResultStore, sol: str) -> tuple[pv.UnstructuredGrid, dict]:
         cells = np.hstack([np.full((len(conn), 1), conn.shape[1]), conn]).ravel()
         grid = pv.UnstructuredGrid(cells, np.full(len(conn), ctype, np.uint8), pts)
         grid.field_data["npt"] = np.array([npt])
+        if npt and "tet_obj" in m and len(m["tet_obj"]) == len(tets):
+            grid.cell_data["_obj"] = np.asarray(m["tet_obj"], np.int64)    # keeps materials apart on cut planes
         _cache.clear()
-        _cache[key] = (grid, m)
+        _cache[key] = (grid, m, f)
     return _cache[key][0], f
+
+
+def _grid_key(st: ResultStore, sol: str) -> str:
+    """Cache key of a solution's mesh and fields: the files and their modification times."""
+    def mtime(name):
+        p = st.folder / name
+        return p.stat().st_mtime_ns if p.exists() else 0
+    return f"{st.folder}|{sol}|{mtime('mesh.npz')}|{mtime(f'fields_{sol}.npz')}|{mtime(f'solution_{sol}.npz')}"
+
+
+def _cut(work: pv.UnstructuredGrid, normal, origin, per_element: bool) -> pv.PolyData:
+    """Cut plane through the solver mesh. With per-element fields (discontinuous at material boundaries and
+    metal sheets) the points of neighbouring elements are kept apart: a merging cut gives every point on such
+    a boundary the value of just one side, which shows as jagged spots along patches and ground planes."""
+    if not per_element:
+        return work.slice(normal=normal, origin=origin)
+    plane = vtk.vtkPlane()
+    plane.SetOrigin(*origin)
+    plane.SetNormal(*normal)
+    cut = vtk.vtkCutter()
+    cut.SetCutFunction(plane)
+    cut.SetInputData(work)
+    cut.SetLocator(vtk.vtkNonMergingPointLocator())
+    cut.Update()
+    return pv.wrap(cut.GetOutput())
+
+
+def _sheet_cut(work: pv.UnstructuredGrid, cad: pv.PolyData) -> pv.PolyData | None:
+    """Field on a flat sheet that is not part of the solver mesh (a drawn cut plane): the solver mesh cut by
+    the sheet's plane and cropped to the sheet. Unlike interpolating onto the sheet's own triangles, the
+    triangles then end at the element faces, so jumps at material boundaries and metal sheets stay sharp.
+    None if the sheet is not flat."""
+    pts = np.asarray(cad.points, float)
+    if len(pts) < 3 or not cad.n_cells:
+        return None
+    c = pts.mean(axis=0)
+    _, sv, vt = np.linalg.svd(pts - c, full_matrices=False)
+    size = float(np.ptp(pts, axis=0).max())
+    if size <= 0 or sv[-1] > 1e-6 * size * np.sqrt(len(pts)):
+        return None
+    n = vt[-1]
+    sl = _cut(work, n, c, True)
+    if not sl.n_cells:
+        return None
+    pad = 1e-6 * size
+    # crop to the sheet's bounding rectangle in its own plane (not clip_box: that merges the points of
+    # neighbouring elements)
+    for ax in vt[:2]:
+        d = (pts - c) @ ax
+        for o, nrm in ((d.min() - pad, -ax), (d.max() + pad, ax)):
+            plane = vtk.vtkPlane()
+            plane.SetOrigin(*(c + o * ax))
+            plane.SetNormal(*nrm)
+            clip = vtk.vtkClipPolyData()
+            clip.SetInputData(sl)
+            clip.SetClipFunction(plane)
+            clip.InsideOutOn()
+            clip.SetLocator(vtk.vtkNonMergingPointLocator())
+            clip.Update()
+            sl = pv.wrap(clip.GetOutput())
+    if not sl.n_cells:
+        return None
+    # outline other than the bounding box: keep the cut triangles whose centre lies on the sheet
+    flat = cad.extract_surface(algorithm="dataset_surface").triangulate()
+    cc = np.asarray(sl.cell_centers().points)
+    _, closest = flat.find_closest_cell(cc, return_closest_point=True)
+    on = np.linalg.norm(cc - closest, axis=1) <= 1e-4 * size
+    if not on.all():
+        sl = sl.extract_cells(np.where(on)[0]).extract_surface(algorithm="dataset_surface", pass_pointid=False)
+    sl.field_data["fromgrid"] = np.array([1])
+    return sl if sl.n_cells else None
 
 
 def _mesh_of(grid) -> dict | None:
@@ -535,6 +611,13 @@ def _object_tets(mesh: dict, obj_index: int) -> np.ndarray:
 def _object_faces(mesh: dict, obj_index: int, outside: bool = False):
     """Boundary faces of an object (keys, owners, local corners). outside=True takes the neighbouring
     tets as owners (conductors: the field inside a PEC is zero, the surface current lives on the outer side)."""
+    ck = ("_object_faces", obj_index, outside)
+    if ck not in mesh:
+        mesh[ck] = _object_faces_uncached(mesh, obj_index, outside)
+    return mesh[ck]
+
+
+def _object_faces_uncached(mesh: dict, obj_index: int, outside: bool):
     tets = mesh["tets"]
     sel = _object_tets(mesh, obj_index)
     keys, owner, local = _all_faces(tets[sel])
@@ -614,6 +697,14 @@ def _on_cad(mesh: dict, owner, local, cad: pv.PolyData, face: int = -1) -> np.nd
 
 def _sheet_faces(mesh: dict, cad: pv.PolyData, solid: bool = False, face: int = -1):
     """Mesh faces lying on a CAD surface: a sheet, or the walls of an unmeshed solid (PEC)."""
+    pts = np.ascontiguousarray(cad.points)
+    ck = ("_sheet_faces", solid, face, cad.n_cells, hash(pts.tobytes()))
+    if ck not in mesh:
+        mesh[ck] = _sheet_faces_uncached(mesh, cad, solid, face)
+    return mesh[ck]
+
+
+def _sheet_faces_uncached(mesh: dict, cad: pv.PolyData, solid: bool, face: int):
     keys, owner, local = _all_faces(mesh["tets"])
     if solid:     # walls of a hole: faces with a tet on one side only
         uk, inv, cnt = np.unique(keys, return_inverse=True, return_counts=True)
@@ -774,12 +865,18 @@ def make_overlay(doc, view, quantity: str, solution: str, freq_index: int = 0, p
                  faces=None, objects=None, plane: str = "", log_scale: bool = False, vmin=None, vmax=None,
                  arrow_scale: float = 1.0, attrs: dict | None = None, animating: bool = False):
     """Return (meshes for the viewer, info text). attrs: plot attributes (see ATTR_DEFAULTS)."""
+    prep = prepare_overlay(doc, view, quantity, solution, freq_index, port, faces, objects, plane, attrs)
+    return overlay_at(prep, phase_deg, log_scale, vmin, vmax, arrow_scale, animating)
+
+
+def prepare_overlay(doc, view, quantity: str, solution: str, freq_index: int = 0, port: int = 1,
+                    faces=None, objects=None, plane: str = "", attrs: dict | None = None) -> dict:
+    """The phase independent part of a field plot: the plotted surfaces, cut planes and arrow points with
+    the field at phase 0 ("re") and a quarter period later ("qu"). overlay_at draws it at any phase, so a
+    phase animation builds the plot once and only turns the field per frame."""
     at = attributes(attrs)
     from ..model.expr import LENGTH_UNITS
     spacing_m = at["ArrowSpacing"] * LENGTH_UNITS.get(doc.design.units, 1e-3) if at["ArrowSpacing"] > 0 else 0.0
-    log_scale = log_scale or at["Log"]
-    if at["Scale"] == "Use Limits":
-        vmin, vmax = at["Min"], at["Max"]
     st, sol = store_for(doc, solution)
     grid, fields = load_grid(st, sol)
     jsurf = "Jsurf" in quantity
@@ -791,10 +888,10 @@ def make_overlay(doc, view, quantity: str, solution: str, freq_index: int = 0, p
     if quantity.endswith("_J"):
         vec = vec * _conductivity(doc, grid, float(fields[f"freq_{freq_index}"][0]))[:, None]
     work = grid.copy(deep=False)
-    ph = np.exp(1j * np.radians(phase_deg))
-    work.point_data["re"] = np.real(vec * ph)
-    if jsurf and quantity.startswith("ComplexMag"):
-        work.point_data["qu"] = np.real(1j * vec * ph)   # the field a quarter period later
+    # every step from here to the plotted points (surfaces, jumps, interpolation) is linear in the field,
+    # so the field at phase p is cos(p) re + sin(p) qu there (see _at_phase)
+    work.point_data["re"] = np.real(vec)
+    work.point_data["qu"] = np.real(1j * vec)            # the field a quarter period later
     work.point_data["cmag"] = np.sqrt((np.abs(vec) ** 2).sum(axis=1))
     # target surfaces
     targets = []
@@ -823,7 +920,8 @@ def make_overlay(doc, view, quantity: str, solution: str, freq_index: int = 0, p
                         sel = _restrict_faces(mesh, sel, full, face)
                     surf = _surface(work, mesh, *sel, both=False, toward_owner=pec)
                 elif ob is not None and not ob.model:
-                    return _refined(cad, mesh)      # non-model: interpolate onto a fine surface
+                    # non-model: a plane is cut from the solver mesh, other shapes are interpolated
+                    return _sheet_cut(work, cad) or _refined(cad, mesh)
                 else:
                     # sheets, and the walls of unmeshed solids (PEC): faces with one tet only
                     solid = ob is not None and getattr(ob, "dim", 2) == 3
@@ -834,7 +932,7 @@ def make_overlay(doc, view, quantity: str, solution: str, freq_index: int = 0, p
                     if not solid and surf.area < 0.5 * cad.area:
                         # a sheet the solver mesh does not follow (e.g. drawn after the solve): the few
                         # element faces that happen to lie on it are no plot; interpolate like a non-model sheet
-                        return _refined(cad, mesh)
+                        return _sheet_cut(work, cad) or _refined(cad, mesh)
                 if surf.n_cells:
                     return surf
             except Exception as e:  # noqa: BLE001
@@ -876,42 +974,115 @@ def make_overlay(doc, view, quantity: str, solution: str, freq_index: int = 0, p
         i = int(np.argmax(np.abs(normal)))
         if val.strip():
             center[i] = float(doc.evaluator().length(val))
-        sl = work.slice(normal=normal, origin=center)
+        sl = _cut(work, normal, center, tet4)
         sl.field_data["fromgrid"] = np.array([1])
         targets.append(sl)
     if not targets:
         raise RuntimeError("Select faces, objects or polylines, or give a cut plane")
-    meshes = []
-    allvals = []
-    sampled = []
+    sampled, shared = [], []
     for t in targets:
         s = t if "re" in t.point_data else t.sample(work)
         if jsurf:
             s = s.compute_normals(cell_normals=False, auto_orient_normals=False) if "Normals" not in s.point_data else s
             n = s.point_data["Normals"]
             H = s.point_data["jump"] if "jump" in s.point_data else s.point_data["re"]
-            J = np.cross(n, H)
-            mag = np.linalg.norm(J, axis=1)
+            Hq = s.point_data["jumpq"] if "jumpq" in s.point_data else s.point_data["qu"]
+            s.point_data["re"] = np.cross(n, H)         # Vector_Jsurf: the arrows show J = n x H
+            s.point_data["qu"] = np.cross(n, Hq)
+            for nme in ("jump", "jumpq"):
+                if nme in s.point_data:
+                    s.point_data.remove(nme)
+        inv = None
+        if at["PlotType"] != "Flat Shaded" and s.n_points:
+            # local smooth plot: the per-element values are averaged at shared nodes (overlay_at)
+            key = np.round(np.asarray(s.points) / (1e-9 + 1e-7 * float(np.ptp(s.points, axis=0).max())))
+            if "_obj" in s.cell_data and s.n_cells:
+                # not across material boundaries and metal sheets: the field jumps there
+                obj = np.round(s.cell_data_to_point_data().point_data["_obj"])
+                key = np.column_stack([key, obj])
+            _, inv = np.unique(key, axis=0, return_inverse=True)
+            inv = inv.ravel()
+        sampled.append(s)
+        shared.append(inv)
+    return dict(at=at, quantity=quantity, jsurf=jsurf, work=work, sampled=sampled, shared=shared, arrows={},
+                spacing_m=spacing_m, note=note, freq_index=freq_index, port=port, freqs=frequencies(fields))
+
+
+def _at_phase(base: pv.DataSet, c: float, s: float) -> pv.DataSet:
+    """Shallow copy of base with the field turned to the phase with cosine c and sine s."""
+    out = base.copy(deep=False)
+    pd = base.point_data
+    if "re" in pd:
+        re = np.asarray(pd["re"])
+        qu = np.asarray(pd["qu"]) if "qu" in pd else None
+        out.point_data["re"] = c * re + s * qu if s and qu is not None else c * re
+        if qu is not None:
+            out.point_data["qu"] = c * qu - s * re if s else c * qu
+    return out
+
+
+def _arrow_points(prep: dict, k: int, s: pv.DataSet) -> tuple[pv.PolyData, float]:
+    """Arrow positions on plotted surface k with the field there (re, qu) and the arrow spacing; built
+    once per plot."""
+    if k in prep["arrows"]:
+        return prep["arrows"][k]
+    at, work, spacing_m, jsurf = prep["at"], prep["work"], prep["spacing_m"], prep["jsurf"]
+    # equidistant arrows with a fixed spacing (reference tool style)
+    if "regular" in s.field_data:
+        ok = np.asarray(s.point_data["vtkValidPointMask"]).astype(bool) \
+            if "vtkValidPointMask" in s.point_data else np.ones(s.n_points, bool)
+        sub = pv.PolyData(np.asarray(s.points)[ok])
+        for nme in ("re", "qu"):
+            sub.point_data[nme] = np.asarray(s.point_data[nme])[ok]
+        hh = spacing_m or float(s.field_data["regular"][0])
+    else:
+        area = float((s if isinstance(s, pv.PolyData) else s.extract_surface()).area) if s.n_cells else 0.0
+        hh = spacing_m or (np.sqrt(area / max(10, int(at["ArrowCount"]))) if area > 0 else 1e-3)
+        rp = _regular_points(s, hh)
+        sub = rp
+        if rp.n_points:
+            # values from the plotted surface itself (keeps per-object values); 2D cells need a tolerance
+            smp = rp.sample(work) if "fromgrid" in s.field_data else rp.sample(s, tolerance=1e-2 * hh)
+            ok = smp.point_data["vtkValidPointMask"].astype(bool)
+            if ok.sum() < 0.5 * rp.n_points and "fromgrid" not in s.field_data and not jsurf:
+                smp = rp.sample(work)
+                ok = smp.point_data["vtkValidPointMask"].astype(bool)
+            sub = pv.PolyData(np.asarray(smp.points)[ok]) if ok.any() else pv.PolyData()
+            if ok.any():
+                for nme in ("re", "qu"):
+                    sub.point_data[nme] = np.asarray(smp.point_data[nme])[ok]
+    prep["arrows"][k] = (sub, hh)
+    return sub, hh
+
+
+def overlay_at(prep: dict, phase_deg: float = 0.0, log_scale: bool = False, vmin=None, vmax=None,
+               arrow_scale: float = 1.0, animating: bool = False):
+    """(meshes for the viewer, info text) of a prepared field plot (prepare_overlay) at a phase."""
+    at, quantity, jsurf, note = prep["at"], prep["quantity"], prep["jsurf"], prep["note"]
+    log_scale = log_scale or at["Log"]
+    if at["Scale"] == "Use Limits":
+        vmin, vmax = at["Min"], at["Max"]
+    c, sn = float(np.cos(np.radians(phase_deg))), float(np.sin(np.radians(phase_deg)))
+    meshes = []
+    sampled = []
+    for base, inv in zip(prep["sampled"], prep["shared"]):
+        s = _at_phase(base, c, sn)
+        if jsurf:
+            mag = np.linalg.norm(s.point_data["re"], axis=1)
             if quantity.startswith("ComplexMag"):
-                Hq = s.point_data["jumpq"] if "jumpq" in s.point_data else s.point_data["qu"]
-                mag = np.sqrt(mag ** 2 + (np.cross(n, Hq) ** 2).sum(axis=1))
-            s.point_data["re"] = J                      # Vector_Jsurf: the arrows show J = n x H
+                mag = np.sqrt(mag ** 2 + (np.asarray(s.point_data["qu"]) ** 2).sum(axis=1))
         elif quantity.startswith("ComplexMag"):
             mag = s.point_data["cmag"]
         else:
             mag = np.linalg.norm(s.point_data["re"], axis=1)
-        if at["PlotType"] != "Flat Shaded" and s.n_points:
+        if inv is not None:
             # local smooth plot: average the per-element values at shared nodes
-            key = np.round(np.asarray(s.points) / (1e-9 + 1e-7 * float(np.ptp(s.points, axis=0).max())))
-            _, inv = np.unique(key, axis=0, return_inverse=True)
-            inv = inv.ravel()
             good = np.isfinite(mag)
             acc = np.bincount(inv[good], mag[good], minlength=inv.max() + 1)
             cnt = np.bincount(inv[good], minlength=inv.max() + 1)
             mag = np.where(good, acc[inv] / np.maximum(cnt[inv], 1), mag)
         s.point_data[quantity] = mag
         sampled.append(s)
-        allvals.append(mag[np.isfinite(mag)])
     unit = base_unit(quantity)
     ufac, ulabel = _unit(at["Units"], unit)
     title = quantity
@@ -956,32 +1127,10 @@ def make_overlay(doc, view, quantity: str, solution: str, freq_index: int = 0, p
                       n_colors=int(at["Colors"]) if at["Colors"] else 256,
                       show_scalar_bar=k == 0, scalar_bar_args=bar if k == 0 else None)
         if quantity.startswith("Vector"):
-            # equidistant arrows with a fixed spacing (reference tool style)
-            if "regular" in s.field_data:
-                ok = np.asarray(s.point_data["vtkValidPointMask"]).astype(bool) \
-                    if "vtkValidPointMask" in s.point_data else np.ones(s.n_points, bool)
-                sub = pv.PolyData(np.asarray(s.points)[ok])
-                for nme in ("re", quantity):
-                    sub.point_data[nme] = np.asarray(s.point_data[nme])[ok]
-                hh = spacing_m or float(s.field_data["regular"][0])
-            else:
-                area = float((s if isinstance(s, pv.PolyData) else s.extract_surface()).area) if s.n_cells else 0.0
-                hh = spacing_m or (np.sqrt(area / max(10, int(at["ArrowCount"]))) if area > 0 else 1e-3)
-                rp = _regular_points(s, hh)
-                sub = rp
-                if rp.n_points:
-                    # values from the plotted surface itself (keeps per-object values); 2D cells need a tolerance
-                    smp = rp.sample(work) if "fromgrid" in s.field_data else rp.sample(s, tolerance=1e-2 * hh)
-                    ok = smp.point_data["vtkValidPointMask"].astype(bool)
-                    if ok.sum() < 0.5 * rp.n_points and "fromgrid" not in s.field_data and not jsurf:
-                        smp = rp.sample(work)
-                        ok = smp.point_data["vtkValidPointMask"].astype(bool)
-                    sub = pv.PolyData(np.asarray(smp.points)[ok]) if ok.any() else pv.PolyData()
-                    if ok.any():
-                        sub.point_data["re"] = np.asarray(smp.point_data["re"])[ok]
+            sub, hh = _arrow_points(prep, k, prep["sampled"][k])
             if sub.n_points == 0:
                 continue
-            vecs = np.nan_to_num(np.asarray(sub.point_data["re"]))
+            vecs = np.nan_to_num(np.asarray(_at_phase(sub, c, sn).point_data["re"]))
             nrm = np.linalg.norm(vecs, axis=1)
             sub = pv.PolyData(np.asarray(sub.points))
             sub.point_data["vec"] = vecs / np.maximum(nrm, 1e-300)[:, None]
@@ -1025,7 +1174,7 @@ def make_overlay(doc, view, quantity: str, solution: str, freq_index: int = 0, p
                         meshes.append((cl, kw))
                 except Exception:  # noqa: BLE001
                     pass
-    freqs = frequencies(fields)
+    freqs, freq_index, port = prep["freqs"], prep["freq_index"], prep["port"]
     fr = freqs[freq_index] if freq_index < len(freqs) else 0
     return meshes, f"{quantity}  port {port}  {fr / 1e9:.6g} GHz  phase {phase_deg:g} deg  max {hi:.4g} {ulabel}{note}"
 

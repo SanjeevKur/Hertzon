@@ -15,6 +15,7 @@ from ..model import schema
 from ..model.design import Assignment, Setup, Sweep, InfiniteSphere, GeoObject
 from ..model.materials import EMERGE_DISPERSION, EMERGE_LIBRARY, Material, normalize_color
 from ..model.validate import validate, CATEGORIES, worst
+from .doc import object_attributes
 from .props import PropertyGrid, TabbedPropertyGrid
 
 
@@ -280,7 +281,7 @@ class ObjectPropertiesDialog(QDialog):
                             "Model": str(obj.model), "Color": obj.color, "Transparency": str(obj.transparency),
                             "DisplayWireframe": str(obj.wireframe), "Orientation": obj.orientation}
         self.attr = PropertyGrid(show_evaluated=False)
-        self.attr.set(schema.OBJECT_ATTRIBUTES, self.attr_values, None,
+        self.attr.set(object_attributes(doc, obj.name), self.attr_values, None,
                       materials=[m.name for m in doc.project.all_materials()])
         tabs.addTab(self.attr, "Attribute")
         lay.addWidget(tabs)

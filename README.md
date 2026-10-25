@@ -23,6 +23,8 @@ draw the model, assign boundaries and excitations, add an analysis setup with
 and radiation patterns. The finite-element solver underneath is
 [EMerge](https://github.com/FennisRobert/EMerge) (2nd-order Nédélec FEM, gmsh/OpenCASCADE geometry).
 
+Hertzon is by **Dominik Mair**, built on EMerge, the FEM solver by **Robert Fennis**.
+
 > 📘 **New to Hertzon? Start with the [step-by-step tutorial](docs/TUTORIAL.md):** a waveguide with wave
 > ports, a coaxial cable, a half-wave dipole and the RCS of a sphere, each from the empty window to the
 > result, plus how to let an AI assistant (Claude Code, Codex, VS Code) build and run simulations for you
@@ -31,9 +33,12 @@ and radiation patterns. The finite-element solver underneath is
 > **Built on EMerge.** The finite-element core of Hertzon (Nédélec formulation, element matrices, ports,
 > boundary conditions, solver interface) is [EMerge](https://github.com/FennisRobert/EMerge), the open-source
 > FEM solver developed by **Robert Fennis**. Many thanks to Robert Fennis for making
-> EMerge available under the GPL. Hertzon adds the graphical workflow and its own solver extensions on top:
-> the hzmesh mesher, adaptive refinement (local Delaunay, bisection, Mmg), a fast error estimator, faster
-> assembly kernels, curved elements, far-field and RCS post-processing, and fixes for large models.
+> EMerge available under the GPL. The adaptive mesh refinement (AURA), the error estimate and the curved
+> elements on curved surfaces are EMerge's as well. Hertzon adds the graphical workflow on top: the
+> adaptive pass loop with its convergence criteria, a second local refinement method (hzmesh, local
+> Delaunay), fast and interpolating sweeps with parallel sweep points, far-field and RCS post-processing
+> (also of half and quarter models with symmetry planes), optimization and parametric sweeps, and fixes
+> for large models.
 
 Hertzon is a desktop application (Qt + VTK) built for responsiveness with large models:
 geometry is tessellated incrementally per object, the solver runs in its own process, and
@@ -73,8 +78,12 @@ pip install -e .                                        # installs emerge, PySid
 python -m hertzon examples/WaveguidePost.hzn             # or just: hertzon
 ```
 
+EMerge comes from a pinned commit (see docs/EMERGE_CHANGES.md): prebuilt wheels for Windows x64 and Linux
+x86_64; on other platforms pip builds it from source, which needs a Rust compiler.
+
 EMerge 3 ships its solver kernels compiled; the first solve only compiles Hertzon's own numba kernels
-(curved elements, refinement), which takes about a minute once; later solves start immediately. On Linux without a desktop, run under `xvfb-run`.
+(matrix handling, the size field of the re-mesh refinement), which takes about a minute once; later
+solves start immediately. On Linux without a desktop, run under `xvfb-run`.
 
 ## The workflow
 
@@ -83,15 +92,25 @@ EMerge 3 ships its solver kernels compiled; the first solve only compiles Hertzo
    (air box with fixed margin and a radiation boundary, for filters and other closed-ish circuits).
 2. **Draw** boxes, cylinders, spheres, cones, tori, polyhedra, rectangles, circles, ellipses,
    polygons, polylines and arcs (3 point, center point), region. Click on the grid (snaps to grid and vertices) or type coordinates
-   in the status bar; every parameter accepts expressions with **variables** and units.
+   in the status bar; every parameter accepts expressions with **variables** and units. Relative, face and
+   object coordinate systems set the working plane; grid and axes stay at its origin.
    **Modeler > Boolean** unite / subtract / intersect / split, arrange, duplicate, thicken, sweep, import STEP.
+   A left drag in the 3D view selects everything inside the rectangle; **Edit > Group** (Ctrl+G) makes
+   objects move, rotate and mirror as one unit, and integration lines follow their objects.
 3. Select faces (**F**) or objects (**O**) and assign **Boundaries** (Perfect E/H, Finite
    Conductivity, Impedance, Lumped RLC, Radiation, PML, Symmetry) and **Excitations** (Wave Port,
-   Lumped Port, Floquet Port).
+   Lumped Port, Incident Plane Wave). With Symmetry boundaries a half or quarter model is enough for the
+   far field, which includes the mirror images; a port cut by the plane is still referred to the
+   impedance of the half port ([BACKLOG.md](BACKLOG.md)). Primary / Secondary (periodic) boundaries can
+   be assigned but are not passed to the solver yet, so Floquet ports have no periodic cell to work in.
+   The **Lumped Elements** tab inserts chip resistors, inductors and capacitors (0201 to 1206 and RF
+   series of Coilcraft and Murata) with a click on the board: pads, element sheet and Lumped RLC boundary
+   with an ideal value, typical ESL/ESR or a Touchstone file of the vendor ([docs/LUMPED_ELEMENTS.md](docs/LUMPED_ELEMENTS.md)).
 4. **Analysis > Add Solution Setup**: solution frequency (single / multi / broadband), maximum
    passes, maximum Delta S, matrix convergence, minimum (converged) passes, percent refinement,
-   maximum refinement, lambda refinement, solver choice. **Add Frequency Sweep**: discrete or
-   interpolating, linear step / count / log / single points.
+   maximum refinement, lambda refinement, solver choice, mesh refinement method (AURA of EMerge by
+   default, local Delaunay or re-mesh). **Add Frequency Sweep**: discrete, interpolating or fast,
+   linear step / count / log / single points.
 5. **Validation Check** (also checks overlapping solids exactly: partial overlaps of different
    materials are errors, except a metal in a dielectric with the design setting *Material override*; one
    click resolves them), then **Analyze All** (F5). The progress window shows each adaptive pass;
@@ -99,12 +118,13 @@ EMerge 3 ships its solver kernels compiled; the first solve only compiles Hertzo
 6. **Results**: rectangular plots, Smith chart, data table, radiation pattern, 3D polar plot;
    **Fields**: magnitude, complex magnitude and vector plots of E, H and surface current on faces,
    objects or cut planes, with phase animation. Export Touchstone, CSV, images.
+   **Optimization** (conjugate gradient on report goals) and **Parametric** sweeps of design variables.
 
 See [docs/FEATURE_MATRIX.md](docs/FEATURE_MATRIX.md) for an overview of what is implemented and
 what is still missing.
 
-See [docs/MESHER.md](docs/MESHER.md) for how the adaptive mesh refinement works: hzmesh, the local
-Delaunay mesher, curved elements and benchmark results.
+See [docs/MESHER.md](docs/MESHER.md) for how the adaptive mesh refinement works: EMerge's AURA (the
+default), Hertzon's local Delaunay mesher hzmesh, curved elements and benchmark results.
 
 See [docs/BENCHMARKS.md](docs/BENCHMARKS.md) for solve times on a 32-core workstation: a patch antenna
 with 613k unknowns, swept over a 3:1 band with 101 points, in 203 s (1375 s on one core).
@@ -193,8 +213,11 @@ What changed in each release: [CHANGELOG.md](CHANGELOG.md).
 ## Tests
 
 ```bash
-pip install pytest gerbonara pygerber && python -m pytest tests
+pip install -e ".[test]" && python -m pytest tests
 ```
+
+Run the install again whenever `packaging/emerge-commit` changes: the tests stop with a message when the
+installed EMerge is not the pinned commit.
 
 ## Branches and releases
 

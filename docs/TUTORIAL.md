@@ -31,7 +31,14 @@ is selected. In the middle, the **3D Modeler** tree lists the objects (solids by
 next to the 3D view. At the bottom are the **Message Manager** and the **Progress** of running analyses.
 
 **Selecting.** Press **O** to select whole objects and **F** to select single faces (E for edges, V for
-vertices). Click to select, Ctrl+click to add. **Edit > Select by Name** finds an object in a large model.
+vertices). Click to select, Ctrl+click to add. Drag a box with the left mouse button to select everything
+that lies completely inside it (objects, or faces, edges and vertices in those modes); Ctrl + drag adds to
+the selection. **Edit > Select by Name** finds an object in a large model.
+
+**Groups.** **Edit > Group** (Ctrl+G) joins the selected objects into one group: a click on a member then
+selects the whole group, and Move, Rotate, Mirror, Copy or Delete act on all of it. **Edit > Ungroup**
+(Ctrl+Shift+G) dissolves it again. The model tree lists the groups under **Groups**. SMD components from
+the **Lumped Elements** tab are inserted as a group, and the integration line of a port moves with its sheet.
 
 **Navigating.**
 
@@ -41,7 +48,7 @@ vertices). Click to select, Ctrl+click to add. **Edit > Select by Name** finds a
 | Pan | Shift + left drag | Ctrl + middle drag |
 | Zoom | Mouse wheel (at the cursor) | Right drag, Shift + middle drag, Alt + Shift + left drag |
 
-A plain left drag does not move the view. Without a middle button (touchpad), the
+A plain left drag does not move the view, it draws the selection box. Without a middle button (touchpad), the
 **Rotate** and **Pan** buttons on the Draw tab turn the left mouse button into rotate or pan mode
 until you press Esc or click the button again. **View > Fit All** (or the ribbon button) brings
 everything into view.
@@ -84,7 +91,7 @@ Select an overlap and click **Resolve Overlap**, or **Resolve All Overlaps**: He
 whose material applies (the conductor, otherwise the smaller object) from the other one (**Subtract** with *Clone tool objects before operation*, so both stay). The
 model then shows exactly what is solved, and the geometry is free of overlaps (for example before an export). Undo (Ctrl+Z) takes it back.
 
-> The very first analysis after installing or updating compiles EMerge's solver kernels and takes a few
+> The very first analysis after installing or updating compiles Hertzon's solver kernels and takes a few
 > minutes longer. The installer already does this once, so normally you do not notice it.
 
 ---
@@ -258,9 +265,11 @@ Results are the input impedance (about 73 Ω at resonance), S11, the radiation p
 1. Select `Gap` (**O**), **Simulation > Excitations > Assign > Lumped Port** (or the **Lumped Port**
    ribbon button).
 2. **Full port impedance**: `73ohm` (or `50ohm`, if you want S11 against a 50 Ω generator).
-3. **Integration line**: Hertzon proposes a line across the shorter side of the sheet. The gap sheet here is
-   square, so check it. It must run from one arm to the other, along Z: `0,0,-g/2;0,0,g/2`.
-   The line is drawn as an arrow on the model.
+3. **Integration line**: Hertzon places the line between the two conductors that touch the sheet, from the
+   centre of one contact to the centre of the other, here from one arm to the other along Z:
+   `0,0,-g/2;0,0,g/2`. The line is drawn as an arrow on the model. To set it yourself, enter start and end
+   point, or right click the port in the project tree > **Draw Integration Line** and click both points
+   in the 3D view (**Auto Integration Line** places it automatically again).
 
 ### 3.4 Far field, setup and sweep
 

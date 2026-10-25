@@ -16,7 +16,7 @@ from . import schema
 from .expr import Evaluator
 from .materials import Material, default_color, library_material, library_materials, normalize_color
 
-FILE_VERSION = 1
+FILE_VERSION = 2     # 2: integration lines and U vectors in the coordinates of their object
 
 
 @dataclass
@@ -254,7 +254,7 @@ class Design:
         return f"{stem}{i}"
 
     def all_names(self) -> set[str]:
-        names = {o.name for o in self.objects}
+        names = {o.name for o in self.objects} | {o.group for o in self.objects if o.group}
         for lst in (self.boundaries, self.excitations, self.mesh_ops):
             names |= {a.name for a in lst}
         names |= {s.name for s in self.setups}
@@ -444,4 +444,10 @@ def project_from_dict(d: dict) -> Project:
     p.variables = dict(d.get("variables", {}))
     p.materials = [Material.from_dict(m) for m in d.get("materials", [])]
     p.designs = [design_from_dict(x) for x in d.get("designs", [])] or [Design()]
+    if int(d.get("version", 1) or 1) < 2:
+        from .objframe import migrate_global_points
+        from ..kernel.occ import migrate_thicken_direction
+        for des in p.designs:
+            migrate_global_points(des, des.evaluator(p))
+            migrate_thicken_direction(des, des.evaluator(p))
     return p

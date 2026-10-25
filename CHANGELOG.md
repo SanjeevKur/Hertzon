@@ -3,6 +3,125 @@
 All notable changes of each release. The release workflow copies the section of the released version into
 the GitHub release notes.
 
+## 0.2.0 (2026-10-25)
+
+### Added
+- **Animations as GIF**: **Export GIF...** in the animation bar (or Fields > Export Animation as GIF...)
+  saves all frames of the running animation as a looping GIF. Each frame is the view exactly as shown, in
+  its pixel size, and the GIF runs at the speed you see: the bar measures the frames per second actually
+  drawn during playback (shown next to the speed setting, it can be lower than the setting for heavy
+  plots) and the GIF uses that rate. Without a measurement the export first plays the animation for a
+  moment to measure it. All frames share one colour palette, so the colour scale and the field do not
+  change colour from frame to frame.
+- **Object groups**: Edit > Group (Ctrl+G) puts the selected objects, also solids, sheets and lines
+  together, into one group. A click on a member in the 3D view selects the whole group, so Move, Rotate,
+  Mirror, Copy, Hide or Delete act on all of it; the model tree lists the groups under **Groups** (rename,
+  ungroup, single members selectable there). Edit > Ungroup (Ctrl+Shift+G) dissolves a group to edit single
+  objects again. Groups are saved in the project. SMD components (C, L, R, Touchstone parts) are inserted as
+  a group of pads, terminations and element sheet, and the integration line of a lumped port or element now
+  moves with its objects.
+- **Box selection in the 3D view**: a left drag draws a rectangle and selects every object that lies
+  completely inside it (in face, edge or vertex mode: every face, edge or vertex completely inside).
+  Ctrl + drag adds to the selection. A group is selected only when all its members are inside. Hidden
+  objects are skipped; a click still selects one item.
+- **Mesh refinement "AURA (EMerge)"**, EMerge's own local refinement, with the same error estimate,
+  convergence criterion and curved elements as the other methods. A comparison script measures the time to solution against
+  Local (Delaunay) on the benchmark models (`examples/benchmark/mesher`).
+- **Lumped Elements tab**: inserts a chip resistor, inductor or capacitor, or a component measured by a
+  Touchstone file: pick the package in the menu of the button and click the position on the board. The
+  part comes with its pads (Perfect E), and its position is the design variables <name>_x/_y/_z, so it
+  moves as a whole. With two traces selected it is placed in the gap between them. Packages 0201, 0402, 0603, 0805, 1206 and the RF series
+  Coilcraft 0402HP/0402HPH/0402CS/0603HP/0603CS and Murata LQW15AN/LQP03TN/GJM03/GJM15 with their body
+  dimensions. Hertzon adds the pads of the land pattern (made like the traces), the element sheet with its
+  Lumped RLC boundary and integration line, and optionally a 3D body with metal terminations (the
+  mounted inductance from the field solution). The ideal value can carry the typical ESL and ESR of the size.
+- **Lumped RLC: Model** Parallel RLC (as before), Series RLC or Touchstone (.s1p, or .s2p measured in
+  series or as a shunt). The Validation Check reads the Touchstone file; the solver warns when a sweep
+  leaves its frequency range.
+- **Draw Integration Line** (right click a Lumped Port or Lumped RLC in the project tree): start and end
+  point picked with two clicks in the 3D view, with snapping to vertices and edge centers.
+  **Auto Integration Line** places it between the conductors again.
+
+### Changed
+- **Field plot animations compute much faster**: a phase animation builds the plot (surfaces, cut planes,
+  arrow positions) once and only turns the field for each frame, instead of building the whole plot again.
+  On a patch antenna with 54 000 tetrahedra, 18 frames of Mag_E on the patch take 0.15 s instead of 21 s,
+  on a cut plane 0.2 s instead of 6 s. Frequency and excitation animations no longer read the field file
+  again for every frame, and the mesh faces of a plotted sheet or object are found only once per solution.
+- **Phase animation default: 35 steps** (was 19) from 0 to 360 deg, for a smoother wave.
+- **Documentation** brought up to the current state: the README, the website and the feature overview
+  describe AURA as the default refinement, EMerge's curved elements, object groups, box selection,
+  coordinate systems, parametric sweeps, plane waves and symmetry planes; docs/MESHER.md covers all
+  refinement methods. Primary / Secondary boundaries are marked as not passed to the solver yet.
+- **Faster 3D view with many objects**: the model shows several times faster (300 objects: 1.8 s instead
+  of 7.7 s), a click to select, an attribute change and the edge pre-highlight no longer slow down with
+  the number of objects (300 objects: select 0.3 s instead of 0.8 s, edge hover 2 ms instead of 0.4 s).
+  Several changes in one step now redraw the view once instead of two or three times. The view looks
+  and picks exactly as before.
+- **Assign Material only for solids**: greyed out in the ribbon, the Modeler menu and the context menus
+  when only sheets or lines are selected (they get a boundary such as Finite Conductivity or Impedance);
+  with solids and sheets selected the material goes to the solids. The object properties of sheets and
+  lines have no Material row. A material stored on a sheet by an
+  older project is kept and, as before, not used by the solve.
+- **AURA (EMerge) is the default mesh refinement for new setups** (was Local (Delaunay)). On the
+  benchmark models it reached the convergence criterion in 0.35 to 0.6 times the time in three of four
+  cases and was as accurate or more accurate per tetrahedron. Saved setups keep their method; Local (Delaunay) stays selectable.
+- **EMerge `e03a085` (its `hertzon` branch)**, which now contains three of Hertzon's speed features: the
+  far field of all ports in one pass, the curved elements on curved surfaces and the faster removal of the
+  PEC unknowns before each solve. Hertzon uses EMerge's versions and drops its own (about 1200 lines).
+  Results and meshes are the same on all benchmark models; far fields of many ports are computed about
+  twice as fast, and the one-time compilation of the curved element kernels after an installation
+  (about a minute) is gone.
+- **EMerge 3.0.0b5 plus the fixes on its `hertzon` branch** (commit `2811e9a`; was 3.0.0a25, as advised in
+  #25). Hertzon now installs EMerge from wheels built from a pinned commit, so solver fixes arrive without
+  waiting for a release. Thin conductors with thickness (two-sided Finite Conductivity) are now solved
+  with separate fields on both sides of the sheet: filters with such traces show slightly more conductor
+  loss (hairpin example: S21 about 0.3 dB lower) and smooth surface currents. Parallel sweeps no longer
+  keep the memory of every finished frequency batch. Hertzon's own workarounds for these points, for the
+  port mode solve, for conductor sheets in the error estimate (it changed no mesh) and for the welcome
+  prompt of the setup are removed. Speed and results were checked
+  on the benchmark models (`examples/benchmark/tools/emerge_bench.py`, docs/EMERGE_INTEGRATION.md).
+- **Integration line of Lumped Port and Lumped RLC**: placed automatically between the two conductors
+  that touch the sheet, from the centre of one contact to the centre of the other (conductors: objects of a
+  metal material and faces or objects with a Perfect E or Finite Conductivity boundary). A gap longer than
+  the traces are wide or a sheet wider than the traces now gets the right line. Without two touching
+  conductors the line runs across the shorter side of the sheet as before.
+
+### Fixed
+- **Cut planes no longer show jagged spots at material boundaries and metal sheets**: the field is stored per
+  element and jumps at a substrate surface, a patch or a ground plane, but the cut plane merged the points of
+  both sides and gave each one the value of just one side. Along a patch antenna this drew red sawtooth streaks
+  on the patch and at the ground plane. The cut now keeps the elements apart, and the smooth plot averages
+  only within one material. The peaks at metal edges and corners stay: they are real.
+  A field plot on a drawn plane (a sheet that is not part of the model) is now cut from the solver mesh the
+  same way and cropped to the sheet. Before, the field was interpolated onto the sheet's own triangles, which
+  cross the material boundaries and drew the same sawtooth there.
+- **Thicken sheet direction**: a positive thickness now always thickens to the positive side of the
+  sheet's main axis (+Z for a sheet in XY), a negative one to the other side. Before, the direction followed
+  the winding of the outline, so a rectangle dragged to -X or -Y, or a polyline drawn clockwise and covered,
+  was thickened to -Z. While the Thicken dialog is open, an arrow on each sheet in the 3D view shows the
+  direction, and the new option **Reverse direction** thickens to the other side.
+  Projects saved with an earlier version keep their shape: on loading, Reverse direction is set for the
+  sheets that were thickened to the negative side.
+- **Far fields with symmetry planes**: the far field (gain, directivity, pattern, RCS) of a half or quarter
+  model now includes the mirror images at Symmetry boundaries (Perfect E or Perfect H, planes parallel to XY,
+  YZ or ZX). Before, only the simulated part radiated. Fields and radiated power refer to 1 W into the full
+  structure, as in EMerge's `farfield(syms=...)`. Checked with a dipole as full and half model: peak
+  directivity 1.645 and 1.650.
+- **Grid and axes stay at the origin**: with the model far from the origin of the working coordinate
+  system, the grid now spans from that origin to the model instead of sitting under the model only, and the
+  axis triad at the origin is drawn in full. Before, only its X/Y/Z captions were left floating in space.
+  The automatic grid spacing grows with a far origin so the grid keeps a bounded number of lines.
+- **Integration lines follow their object**: the current or voltage line of a lumped element or lumped port
+  is now given in the coordinates of its sheet as created, so it moves, rotates, mirrors and scales with the
+  sheet (Move, Rotate, Mirror, Scale, Orientation), in the 3D view and in the solve. Before, it stayed where
+  it was set and a moved component kept its arrow, and its port direction, at the old place. Highlighted
+  boundaries and ports are drawn again when the geometry changes. Older projects are converted on loading.
+- **Split in a Face CS or Object CS**: the split plane (XY, YZ, XZ or Custom Base/Normal) is now taken in
+  the working coordinate system, stored with the operation as *Coordinate system*. Before, the plane always
+  lay in the Global CS, and an object far from that plane was deleted instead of split. Older projects keep
+  splitting in the Global CS.
+
 ## 0.1.25 (2026-10-23)
 
 ### Changed

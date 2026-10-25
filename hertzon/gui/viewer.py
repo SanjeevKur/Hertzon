@@ -64,9 +64,12 @@ DRAW_PHASES = {"CreateBox": 3, "CreateCylinder": 3, "CreateCone": 4, "CreateSphe
                "CreateRegularPolygon": 2, "CreatePolyline": 999, "Measure": 2,
                "MeasurePosition": 1, "MeasureAngle": 3,
                "OpMove": 2, "OpDupLine": 2, "OpMirror": 2, "OpDupMirror": 2,
-               "CSOffset": 1, "CSRotated": 2, "CSBoth": 3}
+               "CSOffset": 1, "CSRotated": 2, "CSBoth": 3, "IntegrationLine": 2,
+               "PlaceComponent": 1}
 # interactive operations on selected objects (Move / Duplicate Along Line / Mirror by clicking points)
 OP_KINDS = {"OpMove", "OpDupLine", "OpMirror", "OpDupMirror"}
+# drawn in global coordinates with free 3D points (not held to the plane of the first point)
+FREE_KINDS = OP_KINDS | {"IntegrationLine", "PlaceComponent"}
 # phases that move along the plane normal instead of in the plane
 HEIGHT_PHASE = {"CreateBox": {2}, "CreateCylinder": {2}, "CreateCone": {3}, "CreateRegularPolyhedron": {2}}
 
@@ -222,6 +225,20 @@ class WorkingCSActor:
         L = self.PIXELS * world_h / h
         if L > 0 and math.isfinite(L):
             self.axes.SetTotalLength(L, L, L)
+            self._keep_in_depth(cam, 1.5 * L)
+
+    def _keep_in_depth(self, cam, r: float) -> None:
+        """Widen the clipping range so the triad is drawn: it does not count for the camera bounds, and with
+        the model far from the origin its shafts fell outside, leaving only the X/Y/Z captions on screen."""
+        d = float(np.dot(self.origin - np.array(cam.GetPosition()), np.array(cam.GetDirectionOfProjection())))
+        near, far = cam.GetClippingRange()
+        lo, hi = d - r, d + r
+        if not cam.GetParallelProjection():
+            if hi <= 0:
+                return                  # behind the camera
+            lo = max(lo, 1e-3 * max(far, hi))
+        if lo < near or hi > far:
+            cam.SetClippingRange(min(near, lo), max(far, hi))
 
 
 def nice_length(x: float) -> float:
@@ -354,6 +371,7 @@ class ModelerView(QWidget):
         self.actors: dict[str, ObjActors] = {}
         self.highlight_actors: list = []
         self.assignment_actors: list = []
+        self.direction_actors: list = []                 # Thicken sheet preview arrows
         self.overlay_actors: dict[str, list] = {}
         self.overlay_bars: dict[str, list[str]] = {}     # colour bar titles per overlay
         self.overlay_focus: set[str] | None = None       # overlays drawn full, the others half transparent
@@ -378,10 +396,14 @@ class ModelerView(QWidget):
         self._hover = None              # (pos, list[Pick], key)
         self._hover_index = 0           # B key: next item behind the cursor
         self._hover_actors: list = []
+        self._styled_sel: set[str] = set()     # selected objects when the colours were last set
+        self._styled_mode = None
+        self._edge_cache = None                 # screen-space edge picking: all edge segments, see _edge_segments
         self._hover_pos = None
         self._snap_cache: dict[int, tuple] = {}
         self._snap_marker = None
         self._press_pos = None
+        self._band = None               # plain left drag on the model: (start pos, fill actor, outline actor)
         self._navigating = set()        # mouse buttons currently moving the camera (also while drawing)
         self.nav_mode = ""              # "rotate" / "pan": the left mouse moves the camera until switched off
         self.on_projection = None       # callback(orthographic: bool) after the projection changed
@@ -398,6 +420,41 @@ class ModelerView(QWidget):
         doc.geometryChanged.connect(self.refresh_geometry)
         doc.selectionChanged.connect(self.refresh_selection)
         QTimer.singleShot(0, self.fit_all)   # empty project: start on a 10 cm x 10 cm working area
+
+    def request_render(self) -> None:
+        """Redraw the view once the current event is handled. Several changes in one step (geometry,
+        selection, highlight) then cost one render instead of one each."""
+        w = self.plotter.interactor
+        if w.isVisible():
+            w.update()                  # Qt merges repeated requests into one paint
+        else:
+            self.plotter.render()
+
+    def _plain_actor(self, mesh, color: str, opacity: float = 1.0, line_width: float | None = None,
+                     point_size: float | None = None, spheres: bool = False, pickable: bool = False):
+        """Single-colour actor added straight to the renderer, styled like pyvista's add_mesh with a colour.
+        add_mesh costs milliseconds per call and, with a name, searches all actors, so models with
+        hundreds of objects took seconds to show."""
+        mapper = vtk.vtkDataSetMapper()
+        mapper.SetInputData(mesh)
+        mapper.ScalarVisibilityOff()
+        act = vtk.vtkActor()
+        act.SetMapper(mapper)
+        prop = act.GetProperty()
+        prop.SetColor(*_rgb(color))
+        prop.SetOpacity(opacity)
+        prop.SetInterpolationToFlat()
+        prop.SetSpecularPower(100.0)
+        prop.SetPointSize(point_size or 5.0)
+        if line_width is not None:
+            prop.SetLineWidth(line_width)
+        prop.SetRenderPointsAsSpheres(spheres)
+        act.SetPickable(pickable)
+        self.plotter.renderer.AddActor(act)
+        return act
+
+    def _drop_actor(self, act) -> None:
+        self.plotter.renderer.RemoveActor(act)
 
     # ------------------------------------------------------------------------------------------
     # interaction
@@ -565,6 +622,9 @@ class ModelerView(QWidget):
         self._press_pos = None
         self._rpress_pos = None
         self._last_hits = None
+        if getattr(self, "_band", None) is not None:
+            self._show_band(None)
+            self._band = None
         try:
             for end in (self.style.EndRotate, self.style.EndPan, self.style.EndDolly, self.style.EndSpin,
                         self.style.EndZoom):
@@ -602,7 +662,7 @@ class ModelerView(QWidget):
             p = self._draw_point(pos)
             self.draw.current = p
             self._show_snap_marker(p, self.snap_kind)
-        self.plotter.render()
+        self.request_render()
 
     def _start_dolly(self) -> None:
         # not OnRightButtonDown: with Shift held VTK starts its environment rotation instead
@@ -671,12 +731,17 @@ class ModelerView(QWidget):
             self._panning = True
             self.style.OnMiddleButtonDown()     # Shift + left drag pans
         else:
-            self._dolly = False                 # plain left drag: no camera move (rotate with the middle button)
+            self._dolly = False                 # plain left drag: box selection (rotate with the middle button)
+            self._band = (self._press_pos, None, None)
 
     def _on_left_release(self, obj, ev):
         pos = self._event_pos()
         moved = self._press_pos is None or abs(pos[0] - self._press_pos[0]) + abs(pos[1] - self._press_pos[1]) > 3
         self._press_pos = None
+        band = self._band
+        if band is not None:
+            self._show_band(None)
+            self._band = None
         if self.draw is not None:
             if "left" in self._navigating:
                 self._navigating.discard("left")
@@ -696,9 +761,18 @@ class ModelerView(QWidget):
         self._navigating.discard("left")
         if self.nav_mode:
             return                              # Rotate / Pan mode: the left mouse does not select
+        add = bool(self.plotter.iren.interactor.GetControlKey())
         if not moved:
-            add = bool(self.plotter.iren.interactor.GetControlKey())
             self.picked.emit(self.pick(pos), add)
+        elif band is not None:
+            picks = self.box_picks(band[0], pos)
+            if add:     # Ctrl + drag adds to the selection (a Ctrl click on one item toggles it)
+                have = {(p.obj, p.index) for p in self.doc.selection}
+                picks = [p for p in picks if (p.obj, p.index) not in have]
+                if picks:
+                    self.picked.emit(picks, True)
+            else:
+                self.picked.emit(picks, False)
 
     def _on_right_press(self, obj, ev):
         self._rpress_pos = self._event_pos()
@@ -755,7 +829,7 @@ class ModelerView(QWidget):
         cam.SetViewUp(*(R @ U))
         cam.OrthogonalizeViewUp()
         ren.ResetCameraClippingRange()
-        self.plotter.render()
+        self.request_render()
 
     def _on_move(self, obj, ev):
         if getattr(self, "_rot_last", None) is not None:
@@ -775,6 +849,14 @@ class ModelerView(QWidget):
             self._show_dimensions(p, pos)
             self._update_preview()
             self.cursorMoved.emit(p)
+            return
+        if self._band is not None and self._press_pos is not None:
+            pos = self._event_pos()
+            p0 = self._band[0]
+            if self._band[1] is not None or abs(pos[0] - p0[0]) + abs(pos[1] - p0[1]) > 3:
+                if self._hover_actors:
+                    self._clear_hover(render=False)
+                self._show_band(pos)
             return
         self.style.OnMouseMove()
         if self.prehighlight and not self._navigating and self._press_pos is None and self._rpress_pos is None:
@@ -898,24 +980,20 @@ class ModelerView(QWidget):
             mode = self.doc.selection_mode
             color = "#ffb000"
             if mode == "object" and a.mesh is not None:
-                self._hover_actors.append(self.plotter.add_mesh(a.mesh, color=color, opacity=0.45, pickable=False,
-                                                                render=False, reset_camera=False))
+                self._hover_actors.append(self._plain_actor(a.mesh, color, opacity=0.45))
             elif mode == "face" and a.mesh is not None:
                 sub = a.mesh.extract_cells(np.where(a.mesh.cell_data["face"] == pk.index)[0])
                 if sub.n_cells:
-                    self._hover_actors.append(self.plotter.add_mesh(sub, color=color, opacity=0.6, pickable=False,
-                                                                    render=False, reset_camera=False))
+                    self._hover_actors.append(self._plain_actor(sub, color, opacity=0.6))
             elif mode == "edge" and a.edge_mesh is not None:
                 sub = a.edge_mesh.extract_cells(np.where(a.edge_mesh.cell_data["edge"] == pk.index)[0])
-                self._hover_actors.append(self.plotter.add_mesh(sub, color=color, line_width=4, pickable=False,
-                                                                render=False, reset_camera=False))
+                self._hover_actors.append(self._plain_actor(sub, color, line_width=4))
             elif mode == "vertex":
                 t = self.doc.tess.get(pk.obj)
                 if t is not None and pk.index < len(t.vertices):
-                    self._hover_actors.append(self.plotter.add_mesh(
-                        pv.PolyData(np.asarray(t.vertices[pk.index], float).reshape(1, 3)), color=color,
-                        point_size=12, render_points_as_spheres=True, pickable=False, render=False,
-                        reset_camera=False))
+                    self._hover_actors.append(self._plain_actor(
+                        pv.PolyData(np.asarray(t.vertices[pk.index], float).reshape(1, 3)), color,
+                        point_size=12, spheres=True))
         for act in self._hover_actors:
             try:
                 act.GetMapper().SetResolveCoincidentTopologyToPolygonOffset()
@@ -926,63 +1004,99 @@ class ModelerView(QWidget):
             self.hoverInfo.emit(f"{picks[0].obj}  ({k + 1}/{n} under the cursor, B: next behind)")
         else:
             self.hoverInfo.emit(picks[0].obj if picks else "")
-        self.plotter.render()
+        self.request_render()
 
     def _clear_hover(self, render: bool = True) -> None:
         for act in self._hover_actors:
-            self.plotter.remove_actor(act, render=False)
+            self._drop_actor(act)
         self._hover_actors = []
         self._hover = None
         if render:
-            self.plotter.render()
+            self.request_render()
 
     PICK_PX = 8     # screen distance (pixels) within which a line or edge is picked
 
+    def _edge_segments(self):
+        """Every edge polyline segment of all objects as flat arrays, rebuilt only when the objects change:
+        (names, actors, points, segment start/end point, object of each segment, line of each segment, edge id
+        of each line). Lines are numbered over all objects in the order of self.actors."""
+        key = tuple((n, id(a.edge_mesh)) for n, a in self.actors.items())
+        if self._edge_cache is not None and self._edge_cache[0] == key:
+            return self._edge_cache[1]
+        from vtkmodules.util.numpy_support import vtk_to_numpy
+        names, acts, P, IA, IB, SO, SC, EID = [], [], [], [], [], [], [], []
+        npt = ncell = 0
+        for k, (name, a) in enumerate(self.actors.items()):
+            names.append(name)
+            acts.append(a)
+            em = a.edge_mesh
+            if em is None or em.n_cells == 0:
+                continue
+            ca = em.GetLines()
+            off = vtk_to_numpy(ca.GetOffsetsArray()).astype(np.int64)
+            con = vtk_to_numpy(ca.GetConnectivityArray()).astype(np.int64)
+            i = np.arange(len(con) - 1)
+            i = i[~np.isin(i, off[1:-1] - 1)]          # no segment from the end of one line to the next line
+            P.append(np.asarray(em.points, float))
+            IA.append(con[i] + npt)
+            IB.append(con[i + 1] + npt)
+            SO.append(np.full(len(i), k))
+            SC.append(np.searchsorted(off, i, side="right") - 1 + ncell)
+            EID.append(np.asarray(em.cell_data["edge"]))
+            npt += em.n_points
+            ncell += len(off) - 1
+        cat = lambda L, dt: np.concatenate(L).astype(dt) if L else np.zeros(0, dt)  # noqa: E731
+        data = (names, acts, np.vstack(P) if P else np.zeros((0, 3)), cat(IA, np.int64), cat(IB, np.int64),
+                cat(SO, np.int64), cat(SC, np.int64), cat(EID, np.int64))
+        # the meshes stay referenced with the cache, so a new mesh can never reuse an id in the key
+        self._edge_cache = (key, data, [a.edge_mesh for a in acts])
+        return data
+
     def _nearest_edge(self, pos, dims=None, px: float | None = None) -> tuple[str, int] | None:
         """Visible edge (or polyline) closest to the cursor in screen space, within PICK_PX pixels.
-        Much easier to hit than a ray pick on a 1 px line."""
+        Much easier to hit than a ray pick on a 1 px line. All segments at once (numpy): a loop over
+        the lines took most of a second on models with hundreds of objects."""
         px = self.PICK_PX if px is None else px
+        names, acts, X3, ia, ib, so, sc, eid = self._edge_segments()
+        use = np.array([a.edge_mesh is not None and a.edges is not None and bool(a.edges.GetVisibility())
+                        and (dims is None or a.dim in dims) for a in acts], bool)
+        if not len(ia) or not use.any():
+            return None
+        keep = use[so]
+        ia, ib, so, sc = ia[keep], ib[keep], so[keep], sc[keep]
+        if not len(ia):
+            return None
         ren = self.plotter.renderer
         w, h = ren.GetSize()
         cam = ren.GetActiveCamera()
         M = np.array([[cam.GetCompositeProjectionTransformMatrix(w / max(h, 1), -1, 1).GetElement(i, j)
                        for j in range(4)] for i in range(4)])
-        best = None
+        X = np.c_[X3, np.ones(len(X3))] @ M.T
+        wv = X[:, 3]
+        ok = wv > 1e-12
+        ws = np.where(ok, wv, 1)
+        xy = np.empty((len(X3), 2))
+        xy[:, 0] = (X[:, 0] / ws + 1) * 0.5 * w
+        xy[:, 1] = (X[:, 1] / ws + 1) * 0.5 * h
+        z = X[:, 2] / ws
         P = np.array(pos, float)
-        for name, a in self.actors.items():
-            if a.edge_mesh is None or a.edges is None or not a.edges.GetVisibility():
-                continue
-            if dims is not None and a.dim not in dims:
-                continue
-            em = a.edge_mesh
-            X = np.c_[em.points, np.ones(em.n_points)] @ M.T
-            wv = X[:, 3]
-            ok = wv > 1e-12
-            xy = np.empty((em.n_points, 2))
-            xy[:, 0] = (X[:, 0] / np.where(ok, wv, 1) + 1) * 0.5 * w
-            xy[:, 1] = (X[:, 1] / np.where(ok, wv, 1) + 1) * 0.5 * h
-            z = X[:, 2] / np.where(ok, wv, 1)
-            lines = em.lines
-            i, cid = 0, 0
-            while i < len(lines):
-                n = lines[i]
-                ids = lines[i + 1:i + 1 + n]
-                A, B = xy[ids[:-1]], xy[ids[1:]]
-                good = ok[ids[:-1]] & ok[ids[1:]]
-                d = B - A
-                L2 = np.maximum((d ** 2).sum(1), 1e-12)
-                t = np.clip(((P - A) * d).sum(1) / L2, 0, 1)
-                dist = np.linalg.norm(A + t[:, None] * d - P, axis=1)
-                dist[~good] = np.inf
-                j = int(np.argmin(dist)) if len(dist) else -1
-                if j >= 0 and dist[j] <= px:
-                    depth = float(z[ids[j]] + t[j] * (z[ids[j + 1]] - z[ids[j]]))
-                    cand = (round(dist[j] / 2), depth, name, int(em.cell_data["edge"][cid]))
-                    if best is None or cand[:2] < best[:2]:
-                        best = cand
-                i += n + 1
-                cid += 1
-        return (best[2], best[3]) if best else None
+        A, B = xy[ia], xy[ib]
+        d = B - A
+        L2 = np.maximum((d ** 2).sum(1), 1e-12)
+        t = np.clip(((P - A) * d).sum(1) / L2, 0, 1)
+        dist = np.linalg.norm(A + t[:, None] * d - P, axis=1)
+        dist[~(ok[ia] & ok[ib])] = np.inf
+        # per line its closest segment (the first one on a tie), then the line nearest on screen, nearer in
+        # depth among equally near ones, the first line on a full tie
+        order = np.lexsort((dist, sc))
+        first = np.r_[True, sc[order][1:] != sc[order][:-1]]
+        j = order[first]
+        j = j[dist[j] <= px]
+        if not len(j):
+            return None
+        depth = z[ia[j]] + t[j] * (z[ib[j]] - z[ia[j]])
+        b = j[np.lexsort((sc[j], depth, np.round(dist[j] / 2)))[0]]
+        return names[int(so[b])], int(eid[sc[b]])
 
     def _pick_line_point(self, pos, mode) -> list[Pick]:
         ren = self.plotter.renderer
@@ -1049,6 +1163,101 @@ class ModelerView(QWidget):
         return []
 
     # ------------------------------------------------------------------------------------------
+    # box selection
+    # ------------------------------------------------------------------------------------------
+    def _show_band(self, pos) -> None:
+        """Draw the selection rectangle from the press position to pos (None removes it)."""
+        if self._band is None:
+            return
+        p0, fill, line = self._band
+        ren = self.plotter.renderer
+        if pos is None:
+            for act in (fill, line):
+                if act is not None:
+                    ren.RemoveViewProp(act)
+            self._band = (p0, None, None)
+            self.request_render()
+            return
+        x0, y0 = p0
+        x1, y1 = pos
+        corners = [(x0, y0), (x1, y0), (x1, y1), (x0, y1)]
+        if fill is None:
+            fill, line = vtk.vtkActor2D(), vtk.vtkActor2D()
+            for act, opacity in ((fill, 0.12), (line, 0.9)):
+                m = vtk.vtkPolyDataMapper2D()
+                act.SetMapper(m)
+                act.GetProperty().SetColor(*_rgb(SEL_EDGE))
+                act.GetProperty().SetOpacity(opacity)
+                act.PickableOff()
+                ren.AddViewProp(act)
+            line.GetProperty().SetLineWidth(1.5)
+            self._band = (p0, fill, line)
+        pts = vtk.vtkPoints()
+        for x, y in corners:
+            pts.InsertNextPoint(x, y, 0)
+        for act, closed in ((fill, False), (line, True)):
+            cells = vtk.vtkCellArray()
+            ids = [0, 1, 2, 3, 0] if closed else [0, 1, 2, 3]
+            cells.InsertNextCell(len(ids))
+            for i in ids:
+                cells.InsertCellPoint(i)
+            pd = vtk.vtkPolyData()
+            pd.SetPoints(pts)
+            pd.SetLines(cells) if closed else pd.SetPolys(cells)
+            act.GetMapper().SetInputData(pd)
+        self.request_render()
+
+    def _box_parts(self, name: str, t, mode: str) -> list[tuple[int, np.ndarray]]:
+        """The selectable parts of one object in a selection mode: (pick index, its points in world)."""
+        if mode == "object":
+            X = [np.asarray(t.points, float).reshape(-1, 3)] + [np.asarray(e, float).reshape(-1, 3)
+                                                                  for e in t.edges]
+            X = np.vstack(X) if X else np.empty((0, 3))
+            return [(-1, X)] if len(X) else []
+        if mode == "face":
+            if not len(t.tris):
+                return []
+            tris, tf, P = np.asarray(t.tris), np.asarray(t.tri_face), np.asarray(t.points, float)
+            return [(int(f), P[np.unique(tris[tf == f])]) for f in np.unique(tf)]
+        if mode == "edge":
+            return [(i, np.asarray(e, float).reshape(-1, 3)) for i, e in enumerate(t.edges) if len(e)]
+        if mode == "vertex":
+            return [(i, np.asarray(v, float).reshape(1, 3)) for i, v in enumerate(np.asarray(t.vertices))]
+        return []
+
+    def box_picks(self, p0, p1) -> list[Pick]:
+        """Everything (objects, or faces / edges / vertices in those modes) of the visible objects that
+        lies completely inside the screen rectangle p0-p1 and in front of the camera."""
+        xmin, xmax = sorted((p0[0], p1[0]))
+        ymin, ymax = sorted((p0[1], p1[1]))
+        mode = self.doc.selection_mode
+        out, seen = [], set()
+        for name, t in self.doc.tess.items():
+            a = self.actors.get(name)
+            if a is None:
+                continue
+            shown = [act for act in (a.surface, a.edges) if act is not None]
+            if not shown or not any(act.GetVisibility() for act in shown):
+                continue
+            seen.add(name)
+            for index, X in self._box_parts(name, t, mode):
+                if not len(X):
+                    continue
+                xy, ok = self._display_coords(X)
+                if ok.all() and (xy[:, 0] >= xmin).all() and (xy[:, 0] <= xmax).all() \
+                        and (xy[:, 1] >= ymin).all() and (xy[:, 1] <= ymax).all():
+                    out.append(Pick(name, index))
+        if mode == "object":
+            # a group is one unit: take it only when every shown member is inside (the selection expands
+            # a member to its whole group)
+            from ..model import groups as G
+            des = self.doc.design
+            inside = {p.obj for p in out}
+            out = [p for p in out if not des.has_obj(p.obj) or not des.obj(p.obj).group
+                   or set(G.members(des, des.obj(p.obj).group)) & seen <= inside]
+        return out
+
+    # ------------------------------------------------------------------------------------------
     # geometry display
     # ------------------------------------------------------------------------------------------
     def refresh_cs(self) -> None:
@@ -1074,7 +1283,6 @@ class ModelerView(QWidget):
         except Exception:  # noqa: BLE001
             pass
         live = {o.name: o for o in des.live_objects()}
-        p = self.plotter
         for name in list(self.actors):
             t = self.doc.tess.get(name)
             if name not in live or t is None or id(t) != self.actors[name].tess_id:
@@ -1085,28 +1293,26 @@ class ModelerView(QWidget):
                 continue
             if name not in self.actors:
                 self.actors[name] = self._make_actors(name, t)
-            a = self.actors[name]
-            self._style_obj(name)
         self.update_grid()
-        self.refresh_selection()
+        self.refresh_selection(full=True)
+        self._refresh_assignments()
         if self._first_fit and self.doc.tess:
             self._first_fit = False
             self.fit_all()
         elif not self.doc.tess and not self._first_fit:
             self._first_fit = True      # model emptied: back to the 10 cm working area
             self.fit_all()
-        p.render()
+        self.request_render()
 
     def _remove_obj(self, name: str) -> None:
         a = self.actors.pop(name, None)
         if a:
             for act in (a.surface, a.edges, a.vertices):
                 if act is not None:
-                    self.plotter.remove_actor(act, render=False)
+                    self._drop_actor(act)
 
     def _make_actors(self, name: str, t) -> ObjActors:
         a = ObjActors(tess_id=id(t), dim=int(getattr(t, "dim", 3)))
-        p = self.plotter
         if len(t.tris):
             # one vertex per (point, CAD face): normals are smooth inside a curved face and sharp at its
             # edges, so spheres and cones look round instead of faceted
@@ -1128,8 +1334,7 @@ class ModelerView(QWidget):
             except Exception:  # noqa: BLE001
                 pass
             a.mesh = mesh
-            a.surface = p.add_mesh(mesh, color="#999999", smooth_shading=False,
-                                   pickable=True, render=False, reset_camera=False, name=f"obj_{name}")
+            a.surface = self._plain_actor(mesh, "#999999", pickable=True)
             a.surface.GetProperty().SetInterpolationToPhong()
             # coplanar faces: pull sheets forward by a hair so they win over the solid face they lie on,
             # small enough that a sheet behind a thin solid (ground under a substrate) stays hidden
@@ -1154,20 +1359,26 @@ class ModelerView(QWidget):
                 em = pv.PolyData(np.vstack(pts), lines=np.concatenate(lines))
                 em.cell_data["edge"] = np.array(eids)
                 a.edge_mesh = em
-                a.edges = p.add_mesh(em, color="#202020", line_width=1, pickable=True,
-                                     render=False, reset_camera=False, name=f"edges_{name}")
+                a.edges = self._plain_actor(em, "#202020", line_width=1, pickable=True)
         if len(t.vertices):
             vm = pv.PolyData(np.asarray(t.vertices, float))
-            a.vertices = p.add_mesh(vm, color="#000000", point_size=7, render_points_as_spheres=True,
-                                    pickable=True, render=False, reset_camera=False, name=f"verts_{name}")
+            a.vertices = self._plain_actor(vm, "#000000", point_size=7, spheres=True, pickable=True)
             a.vertices.SetVisibility(self.doc.selection_mode == "vertex")
         return a
 
-    def _style_obj(self, name: str) -> None:
+    def _objects(self) -> dict:
+        """Design objects by name, built once per refresh: Design.obj() searches the whole list, which
+        made restyling hundreds of objects quadratic."""
+        objs = {}
+        for o in self.doc.design.objects:
+            objs.setdefault(o.name, o)       # the first one, as Design.obj() finds it
+        return objs
+
+    def _style_obj(self, name: str, objs: dict | None = None) -> None:
         a = self.actors.get(name)
-        if a is None or not self.doc.design.has_obj(name):
+        o = (objs if objs is not None else self._objects()).get(name)
+        if a is None or o is None:
             return
-        o = self.doc.design.obj(name)
         vis = o.visible
         if a.surface is not None:
             prop = a.surface.GetProperty()
@@ -1190,25 +1401,34 @@ class ModelerView(QWidget):
             a.vertices.SetVisibility(vis and self.doc.selection_mode == "vertex")
 
     def restyle_all(self) -> None:
-        for n in self.actors:
-            self._style_obj(n)
-        self.refresh_selection()
+        self.refresh_selection(full=True)
 
     # ------------------------------------------------------------------------------------------
     # selection / assignment highlight
     # ------------------------------------------------------------------------------------------
     def _clear_highlight(self) -> None:
         for act in self.highlight_actors:
-            self.plotter.remove_actor(act, render=False)
+            self._drop_actor(act)
         self.highlight_actors = []
 
-    def refresh_selection(self) -> None:
+    def refresh_selection(self, full: bool = False) -> None:
+        """Selection colours. Only the objects that were or are selected are restyled, unless full is set
+        or the selection mode changed (vertex markers show or hide everywhere)."""
         self._clear_highlight()
-        for n in self.actors:
-            self._style_obj(n)
-        for a in self.actors.values():
+        objs = self._objects()
+        mode = self.doc.selection_mode
+        sel = {s.obj for s in self.doc.selection}
+        if full or mode != self._styled_mode:
+            names = list(self.actors)
+        else:
+            names = [n for n in self._styled_sel | sel if n in self.actors]
+        for n in names:
+            self._style_obj(n, objs)
+        for n in names:
+            a = self.actors[n]
             if a.vertices is not None:
-                a.vertices.SetVisibility(self.doc.selection_mode == "vertex")
+                a.vertices.SetVisibility(mode == "vertex")
+        self._styled_sel, self._styled_mode = sel, mode
         for s in self.doc.selection:
             a = self.actors.get(s.obj)
             if a is None:
@@ -1217,7 +1437,7 @@ class ModelerView(QWidget):
             if s.index < 0 or self.doc.selection_mode == "object":
                 if a.surface is not None:
                     a.surface.GetProperty().SetColor(*_rgb(hl))
-                    if self.doc.design.has_obj(s.obj) and self.doc.design.obj(s.obj).transparency > 0.5:
+                    if s.obj in objs and objs[s.obj].transparency > 0.5:
                         self._add_highlight_mesh(a.mesh, hl, opacity=0.35)
                 if a.edges is not None:
                     a.edges.GetProperty().SetColor(*_rgb(SEL_EDGE))
@@ -1229,8 +1449,7 @@ class ModelerView(QWidget):
                     rim = sub.extract_surface(algorithm="dataset_surface").extract_feature_edges(boundary_edges=True, feature_edges=False,
                                                                       manifold_edges=False, non_manifold_edges=False)
                     if rim.n_cells:
-                        act = self.plotter.add_mesh(rim, color=SEL_EDGE, line_width=2.5, pickable=False,
-                                                    render=False, reset_camera=False)
+                        act = self._plain_actor(rim, SEL_EDGE, line_width=2.5)
                         act.GetMapper().SetResolveCoincidentTopologyToPolygonOffset()
                         act.GetMapper().SetRelativeCoincidentTopologyLineOffsetParameters(-2, -300)
                         self.highlight_actors.append(act)
@@ -1238,16 +1457,14 @@ class ModelerView(QWidget):
                     pass
             elif self.doc.selection_mode == "edge" and a.edge_mesh is not None:
                 sub = a.edge_mesh.extract_cells(np.where(a.edge_mesh.cell_data["edge"] == s.index)[0])
-                self.highlight_actors.append(self.plotter.add_mesh(sub, color=SEL_EDGE, line_width=5, pickable=False,
-                                                                   render=False, reset_camera=False))
+                self.highlight_actors.append(self._plain_actor(sub, SEL_EDGE, line_width=5))
             elif self.doc.selection_mode == "vertex":
                 t = self.doc.tess.get(s.obj)
                 if t is not None and s.index < len(t.vertices):
-                    self.highlight_actors.append(self.plotter.add_mesh(
-                        pv.PolyData(np.asarray(t.vertices[s.index], float).reshape(1, 3)), color=SEL_EDGE,
-                        point_size=14, render_points_as_spheres=True, pickable=False, render=False,
-                        reset_camera=False))
-        self.plotter.render()
+                    self.highlight_actors.append(self._plain_actor(
+                        pv.PolyData(np.asarray(t.vertices[s.index], float).reshape(1, 3)), SEL_EDGE,
+                        point_size=14, spheres=True))
+        self.request_render()
 
     def _highlight_color(self, name: str) -> str:
         """Selection colour: copper for conductors (as before), #8080ff for everything else."""
@@ -1261,19 +1478,66 @@ class ModelerView(QWidget):
     def _add_highlight_mesh(self, mesh, color, opacity=1.0) -> None:
         if mesh is None or mesh.n_cells == 0:
             return
-        act = self.plotter.add_mesh(mesh, color=color, opacity=opacity, pickable=False, render=False,
-                                    reset_camera=False)
-        act.GetProperty().SetLighting(True)
+        act = self._plain_actor(mesh, color, opacity=opacity)
         mapper = act.GetMapper()
         mapper.SetResolveCoincidentTopologyToPolygonOffset()
         mapper.SetRelativeCoincidentTopologyPolygonOffsetParameters(-1.5, -2)
         self.highlight_actors.append(act)
+
+    def show_thicken_arrows(self, names: list[str], reverse: bool = False, both: bool = False) -> None:
+        """Arrows on the sheets in names pointing where Thicken sheet grows (both ways with both)."""
+        from ..kernel.occ import thicken_direction
+        self.clear_thicken_arrows(render=False)
+        for name in names:
+            a = self.actors.get(name)
+            if a is None or a.dim != 2 or a.mesh is None or a.mesh.n_points < 3:
+                continue
+            P = np.asarray(a.mesh.points, float)
+            c = P.mean(axis=0)
+            # the normal of the best fitting plane; its sign does not matter, thicken_direction sets it
+            n = np.linalg.svd(P - c, full_matrices=False)[2][-1]
+            d = thicken_direction(n, reverse)
+            size = float(np.linalg.norm(np.ptp(P, axis=0)))
+            L = 0.3 * size if np.isfinite(size) and size > 0 else 1.0
+            for v in ((d, -d) if both else (d,)):
+                arrow = pv.Arrow(start=c, direction=v, scale=L, tip_length=0.25, tip_radius=0.08,
+                                 shaft_radius=0.03)
+                act = self.plotter.add_mesh(arrow, color="#c2185b", pickable=False, render=False,
+                                            reset_camera=False)
+                # drawn over the model, so an arrow pointing behind the sheet is not hidden by it
+                self.plotter.renderer.RemoveActor(act)
+                self._top_layer().AddActor(act)
+                self.direction_actors.append(act)
+        self.request_render()
+
+    def clear_thicken_arrows(self, render: bool = True) -> None:
+        for act in self.direction_actors:
+            self._top_layer().RemoveActor(act)
+        self.direction_actors = []
+        if render:
+            self.request_render()
+
+    def _top_layer(self):
+        """A renderer on top of the model with the same camera, for helpers that must stay visible."""
+        r = getattr(self, "_top_ren", None)
+        if r is None:
+            rw = self.plotter.render_window
+            rw.SetNumberOfLayers(max(2, rw.GetNumberOfLayers()))
+            r = vtk.vtkRenderer()
+            r.SetLayer(1)
+            r.InteractiveOff()
+            r.SetViewport(self.plotter.renderer.GetViewport())
+            r.SetActiveCamera(self.plotter.renderer.GetActiveCamera())
+            rw.AddRenderer(r)
+            self._top_ren = r
+        return r
 
     def show_assignments(self, assignments: list, kind_colors: dict | None = None) -> None:
         """Highlight the faces of boundaries/excitations (selected in the project tree)."""
         for act in self.assignment_actors:
             self.plotter.remove_actor(act, render=False)
         self.assignment_actors = []
+        self._shown = (list(assignments), kind_colors)
         colors = {**BOUNDARY_COLORS, **EXCITATION_COLORS, **(kind_colors or {})}
         for a in assignments:
             color = colors.get(a.kind, "#ff00ff")
@@ -1297,7 +1561,8 @@ class ModelerView(QWidget):
             line = a.props.get("IntegrationLine", "").strip() if hasattr(a, "props") else ""
             if line:
                 try:
-                    pts = self.doc.evaluator().points(line)
+                    from ..model.objframe import global_points
+                    pts = global_points(self.doc.design, a, "IntegrationLine", self.doc.evaluator())
                     if len(pts) == 2:
                         p0, p1 = np.asarray(pts[0]), np.asarray(pts[1])
                         arrow = pv.Arrow(start=p0, direction=p1 - p0, scale=float(np.linalg.norm(p1 - p0)),
@@ -1306,7 +1571,22 @@ class ModelerView(QWidget):
                                                                             render=False, reset_camera=False))
                 except Exception:  # noqa: BLE001
                     pass
-        self.plotter.render()
+        self.request_render()
+
+    def _refresh_assignments(self) -> None:
+        """Draws the shown boundaries/excitations again on the rebuilt geometry, so faces and integration
+        lines follow their moved objects."""
+        shown, colors = getattr(self, "_shown", ([], None))
+        if not shown:
+            return
+        des = self.doc.design
+        now = []
+        for a in shown:
+            try:
+                now.append(des.assignment(a.name))
+            except (KeyError, AttributeError):
+                pass                        # deleted meanwhile
+        self.show_assignments(now, colors)
 
     def _plane_wave_arrows(self, a) -> None:
         """draws the incident plane wave as its propagation vector k with the E vector at its tip."""
@@ -1376,7 +1656,7 @@ class ModelerView(QWidget):
         self._layout_bars()
         self.restyle_all()
         if render:
-            self.plotter.render()
+            self.request_render()
 
     def remove_overlay(self, name: str, render: bool = True) -> None:
         had = name in self.overlay_actors
@@ -1392,18 +1672,18 @@ class ModelerView(QWidget):
         if had:
             self._layout_bars()
         if render:
-            self.plotter.render()
+            self.request_render()
 
     def clear_overlays(self) -> None:
         for n in list(self.overlay_actors):
             self.remove_overlay(n, render=False)
-        self.plotter.render()
+        self.request_render()
 
     def set_overlay_focus(self, names) -> None:
         """Overlays in names drawn as set up, all others at half their opacity; None: all as set up."""
         self.overlay_focus = set(names) if names else None
         self._apply_overlay_focus()
-        self.plotter.render()
+        self.request_render()
 
     def _apply_overlay_focus(self) -> None:
         foc = self.overlay_focus
@@ -1453,10 +1733,10 @@ class ModelerView(QWidget):
             n = PLANE_NORMAL[self.grid_plane]
             lo, hi = list(b[:3]), list(b[3:])
             lo[n] = hi[n] = 0.0
-            self.plotter.reset_camera(bounds=(lo[0], hi[0], lo[1], hi[1], lo[2], hi[2]))
+            self.plotter.reset_camera(bounds=(lo[0], hi[0], lo[1], hi[1], lo[2], hi[2]), render=False)
         else:
-            self.plotter.reset_camera()
-        self.plotter.render()
+            self.plotter.reset_camera(render=False)
+        self.request_render()
 
     def fit_selection(self) -> None:
         objs = self.doc.selected_objects()
@@ -1466,17 +1746,18 @@ class ModelerView(QWidget):
         if boxes:
             b = np.array(boxes)
             self.plotter.reset_camera(bounds=(b[:, 0].min(), b[:, 3].max(), b[:, 1].min(), b[:, 4].max(),
-                                              b[:, 2].min(), b[:, 5].max()))
-            self.plotter.render()
+                                              b[:, 2].min(), b[:, 5].max()), render=False)
+            self.request_render()
 
     def view(self, which: str) -> None:
         p = self.plotter
         {"iso": p.view_isometric, "top": p.view_xy, "bottom": lambda: p.view_xy(negative=True),
          "front": p.view_xz, "back": lambda: p.view_xz(negative=True), "right": p.view_yz,
          "left": lambda: p.view_yz(negative=True)}[which]()
-        p.render()
+        self.request_render()
 
     def screenshot(self, path: str) -> None:
+        self.plotter.render()           # pending render requests are not drawn yet
         self.plotter.screenshot(path)
 
     def is_orthographic(self) -> bool:
@@ -1492,17 +1773,33 @@ class ModelerView(QWidget):
             cam.SetParallelProjection(on)
         if self.on_projection is not None:
             self.on_projection(on)
-        self.plotter.render()
+        self.request_render()
 
     # ------------------------------------------------------------------------------------------
     # grid / working plane
     # ------------------------------------------------------------------------------------------
+    def _grid_bounds(self) -> list[float]:
+        """Model bounding box in the working CS, widened to take in the CS origin: the grid always reaches the
+        origin, also when the model lies far away from it."""
+        b = self.view_bbox()
+        Ow, Rw = self.wcs
+        if np.linalg.norm(Ow) > 0 or not np.allclose(Rw, np.eye(3)):
+            C = np.array([[b[i] if (k >> j) & 1 == 0 else b[i + 3] for j, i in enumerate(range(3))]
+                          for k in range(8)])
+            L = (C - Ow) @ Rw
+            b = list(L.min(axis=0)) + list(L.max(axis=0))
+        return [min(b[i], 0.0) for i in range(3)] + [max(b[i + 3], 0.0) for i in range(3)]
+
+    GRID_MAX_LINES = 200       # per direction; a far origin coarsens the automatic spacing
+
     def auto_spacing(self) -> float:
         if self.grid_spacing:
             return self.grid_spacing
         b = self.view_bbox()
         size = max(b[3] - b[0], b[4] - b[1], b[5] - b[2], 1e-3)
-        raw = size / 20
+        g = self._grid_bounds()
+        extent = max(g[3] - g[0], g[4] - g[1], g[5] - g[2])
+        raw = max(size / 20, extent / self.GRID_MAX_LINES)
         e = 10 ** math.floor(math.log10(raw))
         for m in (1, 2, 5, 10):
             if raw <= m * e:
@@ -1516,15 +1813,12 @@ class ModelerView(QWidget):
         if not self.show_grid:
             return
         s = self.auto_spacing()
-        b = self.view_bbox()
+        b = self._grid_bounds()
         Ow, Rw = self.wcs
-        if np.linalg.norm(Ow) > 0 or not np.allclose(Rw, np.eye(3)):
-            C = np.array([[b[i] if (k >> j) & 1 == 0 else b[i + 3] for j, i in enumerate(range(3))]
-                          for k in range(8)])
-            L = (C - Ow) @ Rw
-            b = list(L.min(axis=0)) + list(L.max(axis=0))
         n = PLANE_NORMAL[self.grid_plane]
         axes = [i for i in range(3) if i != n]
+        while max(b[i + 3] - b[i] for i in range(3)) / s > 10 * self.GRID_MAX_LINES:
+            s *= 10                 # a fine fixed spacing over a far origin: draw every 10th line only
         pad = 0 if not self.doc.tess else 5 * s
         lo = [math.floor((b[i] - pad) / s + 1e-9) * s for i in range(3)]
         hi = [math.ceil((b[i + 3] + pad) / s - 1e-9) * s for i in range(3)]
@@ -1580,7 +1874,7 @@ class ModelerView(QWidget):
             self.set_nav_mode("")
         self.cancel_draw()
         # primitives are drawn in the working CS; measuring and move/mirror stay global
-        local = not kind.startswith("Measure") and kind not in OP_KINDS
+        local = not kind.startswith("Measure") and kind not in FREE_KINDS
         self._frame = self.wcs if local else self._identity
         self.draw = DrawState(kind, DRAW_PHASES.get(kind, 2))
         self.plotter.interactor.setCursor(Qt.CrossCursor)
@@ -1595,7 +1889,7 @@ class ModelerView(QWidget):
         self._show_snap_marker(None, "")
         self.plotter.interactor.unsetCursor()
         self.drawPhaseChanged.emit("")
-        self.plotter.render()
+        self.request_render()
 
     def _phase_hint(self) -> str:
         if self.draw is None:
@@ -1621,6 +1915,10 @@ class ModelerView(QWidget):
             "CSOffset": ["Enter the origin of the new coordinate system"],
             "CSRotated": ["Enter a point on the new X axis", "Enter a point in the new XY plane"],
             "CSBoth": ["Enter the origin", "Enter a point on the new X axis", "Enter a point in the new XY plane"],
+            "IntegrationLine": ["Enter the start point of the integration line (snaps to vertices and edge centers)",
+                                "Enter the end point of the integration line"],
+            "PlaceComponent": ["Click the centre of the component on the board surface (snaps to surfaces, "
+                               "vertices and edge centers)"],
             "MeasureAngle": ["Enter a point on the first leg", "Enter the vertex of the angle",
                              "Enter a point on the second leg"],
         }.get(k)
@@ -1848,14 +2146,14 @@ class ModelerView(QWidget):
                 kind = "grid" if "grid" in self.snap_modes else ""
             self.snap_kind = kind
             return p
-        if geo is None and self.movement_mode == "3D":
+        if geo is None and (self.movement_mode == "3D" or d.kind == "PlaceComponent"):
             hit = self._surface_point(pos)
             if hit is not None:
                 hit = R.T @ (hit - O)
                 geo, kind = self._snap_plane(hit, n), ("grid" if "grid" in self.snap_modes else "")
         if geo is not None:
             p = geo
-            if d.points and not d.kind.startswith("Measure") and d.kind not in OP_KINDS:
+            if d.points and not d.kind.startswith("Measure") and d.kind not in FREE_KINDS:
                 p[n] = d.points[0][n]
             self.snap_kind = kind
             return p
@@ -1969,7 +2267,7 @@ class ModelerView(QWidget):
                                               render=False, reset_camera=False, show_edges=False)
             if self._frame is not self._identity:
                 d.preview.SetUserMatrix(_vtk_matrix(*self._frame))
-        self.plotter.render()
+        self.request_render()
 
     def _arc_plane(self) -> str:
         """Plane of center point arcs: the grid plane (ArcPlane)."""
@@ -2152,7 +2450,8 @@ def preview_mesh(kind: str, pts: list, n: int, modes: list | None = None):
             return pv.lines_from_points(densify(P, modes, ARC_PLANE[n]))
         if kind == "CSRotated":
             P = [np.zeros(3)] + list(P)
-        if kind in ("CreatePolyline", "Measure", "MeasureAngle", "CSRotated", "CSBoth") or kind in OP_KINDS:
+        if kind in ("CreatePolyline", "Measure", "MeasureAngle", "CSRotated", "CSBoth", "IntegrationLine") \
+                or kind in OP_KINDS:
             line = pv.lines_from_points(np.array(P))
             return line
     except Exception:  # noqa: BLE001

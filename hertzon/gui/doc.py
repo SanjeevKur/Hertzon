@@ -8,6 +8,7 @@ import gmsh
 import numpy as np
 from PySide6.QtCore import QObject, Signal
 
+from ..model import schema
 from ..model.design import Project, Design, project_from_dict
 from ..kernel import occ as K
 
@@ -111,7 +112,11 @@ class Document(QObject):
             self.selection = []
             self.selectionChanged.emit()
 
-    def select(self, picks: list[Pick], add: bool = False) -> None:
+    def select(self, picks: list[Pick], add: bool = False, whole_groups: bool = True) -> None:
+        """Selects the picks (``add``: toggles them). In object mode a pick of a grouped object stands for its
+        whole group unless ``whole_groups`` is off (single members picked in the model tree)."""
+        if whole_groups and self.selection_mode == "object":
+            picks = self._group_picks(picks, add)
         if add:
             keys = {(p.obj, p.index) for p in self.selection}
             for p in picks:
@@ -122,6 +127,25 @@ class Document(QObject):
         else:
             self.selection = list(picks)
         self.selectionChanged.emit()
+
+    def _group_picks(self, picks: list[Pick], add: bool) -> list[Pick]:
+        from ..model import groups as G
+        des = self.design
+        sel = {(s.obj, s.index) for s in self.selection}
+        out: list[Pick] = []
+        seen: set[str] = set()
+        for p in picks:
+            if p.index >= 0 or not des.has_obj(p.obj) or not des.obj(p.obj).group:
+                out.append(p)
+                continue
+            unit = [m for m in G.members(des, des.obj(p.obj).group) if m not in seen]
+            seen.update(unit)
+            if add:
+                # Ctrl+click toggles the whole group: off when the clicked member is selected, else on
+                on = (p.obj, -1) in sel
+                unit = [m for m in unit if ((m, -1) in sel) == on]
+            out += [Pick(m) for m in unit]
+        return out
 
     def selected_objects(self) -> list[str]:
         out = []
@@ -204,6 +228,26 @@ class Document(QObject):
             return (-1e-3, -1e-3, -1e-3, 1e-3, 1e-3, 1e-3)
         b = np.array(boxes)
         return (*b[:, :3].min(0), *b[:, 3:].max(0))
+
+
+def material_targets(doc, names: list[str]) -> tuple[list[str], list[str]]:
+    """Split objects into solids, which take a material, and sheets/lines, which do not (a material on a
+    sheet is not used by the solve; old projects may still carry one)."""
+    solids, others = [], []
+    for n in names:
+        if not doc.design.has_obj(n):
+            continue
+        t = doc.tess.get(n)
+        dim = t.dim if t is not None else doc.design.obj(n).dim
+        (solids if dim == 3 else others).append(n)
+    return solids, others
+
+
+def object_attributes(doc, name: str) -> list:
+    """Attribute rows of an object: sheets and lines have no Material row."""
+    if material_targets(doc, [name])[0]:
+        return schema.OBJECT_ATTRIBUTES
+    return [p for p in schema.OBJECT_ATTRIBUTES if p.name != "Material"]
 
 
 def result_dir(doc, setup: str):

@@ -114,6 +114,7 @@ class Bridge:
     store: ResultStore = None  # type: ignore[assignment]
     t0: float = field(default_factory=time.time)
     profile: list = field(default_factory=list)
+    touchstone_elements: list = field(default_factory=list)     # (boundary name, ComponentImpedance)
 
     def __post_init__(self):
         self.ev = self.design.evaluator(self.project)
@@ -522,6 +523,7 @@ class Bridge:
                     self.open_faces = self.ff_box.boundary()
             else:
                 self.open_faces = self.region_geo.boundary()
+        self.sym_faces = []
         for b in self.design.boundaries:
             if not b.enabled:
                 continue
@@ -535,6 +537,8 @@ class Bridge:
                 warn(f"{b.name}: empty selection, skipped")
                 continue
             p, ev = b.props, self.ev
+            if b.kind == "Symmetry":
+                self.sym_faces.append(("E" if p.get("Type", "Perfect E") == "Perfect E" else "H", b.name, tags))
             if b.kind == "Perfect E" or (b.kind == "Symmetry" and p.get("Type") == "Perfect E"):
                 mw.bc.PEC(sel)
             elif b.kind == "Perfect H" or (b.kind == "Symmetry" and p.get("Type") == "Perfect H"):
@@ -556,21 +560,7 @@ class Bridge:
                 mw.bc.SurfaceImpedance(sel, impedance_function=lambda f, Zs=Zs: Zs)
             elif b.kind == "Lumped RLC":
                 w, h, _ = self.port_geometry(b, tags)
-                R = ev.value(p["Resistance"]) if p.get("UseResistance") == "True" else None
-                L = ev.value(p["Inductance"]) if p.get("UseInductance") == "True" else None
-                C = ev.value(p["Capacitance"]) if p.get("UseCapacitance") == "True" else None
-
-                def zfun(f, R=R, L=L, C=C):
-                    # parallel RLC as in the reference tool
-                    w_ = 2 * np.pi * f
-                    y = 0j
-                    if R:
-                        y += 1 / R
-                    if L:
-                        y += 1 / (1j * w_ * L)
-                    if C:
-                        y += 1j * w_ * C
-                    return 1 / y if y != 0 else 1e12
+                zfun = self.lumped_impedance(b)
                 mw.bc.LumpedElement(sel, impedance_function=zfun, width=w, height=h)
             elif b.kind == "Radiation":
                 order = 2 if p.get("Order") == "Second order" else 1
@@ -604,6 +594,56 @@ class Bridge:
              f"E0 = ({e[0]:.3g}, {e[1]:.3g}, {e[2]:.3g}), zero phase at ({origin[0] * 1e3:.4g}, {origin[1] * 1e3:.4g}, {origin[2] * 1e3:.4g}) mm")
         self.pw_bcs = getattr(self, "pw_bcs", []) + [bc]
 
+    def lumped_impedance(self, b: Assignment):
+        """Z(f) of a lumped RLC boundary: parallel or series R, L, C, or a Touchstone component."""
+        p, ev = b.props, self.ev
+        model = p.get("Model", "Parallel RLC") or "Parallel RLC"
+        if model == "Touchstone":
+            from ..model.touchstone import ComponentImpedance
+            path = Path(p.get("TouchstoneFile", "").strip())
+            if not str(path) or str(path) == ".":
+                raise ValueError(f"{b.name}: no Touchstone file given")
+            if not path.is_absolute() and self.project.path:
+                path = Path(self.project.path).parent / path
+            z = ComponentImpedance(path, p.get("TouchstoneMount", "Series"))
+            info(f"{b.name}: Touchstone {path.name}, {z.f[0] / 1e9:g} to {z.f[-1] / 1e9:g} GHz")
+            try:
+                f0 = ev.freq(self.setup.props.get("Frequency", ""))
+                if not z.f[0] <= f0 <= z.f[-1]:
+                    warn(f"{b.name}: the solution frequency {f0 / 1e9:g} GHz is outside the Touchstone data")
+            except Exception:  # noqa: BLE001
+                pass
+            self.touchstone_elements.append((b.name, z))
+            return z
+        R = ev.value(p["Resistance"]) if p.get("UseResistance") == "True" else None
+        L = ev.value(p["Inductance"]) if p.get("UseInductance") == "True" else None
+        C = ev.value(p["Capacitance"]) if p.get("UseCapacitance") == "True" else None
+        if model == "Series RLC":
+            def zfun(f, R=R, L=L, C=C):
+                w_ = 2 * np.pi * f
+                z = 0j
+                if R:
+                    z += R
+                if L:
+                    z += 1j * w_ * L
+                if C:
+                    z += 1 / (1j * w_ * C)
+                return z if z != 0 else 1e-6
+            return zfun
+
+        def zfun(f, R=R, L=L, C=C):
+            # parallel RLC as in the reference tool
+            w_ = 2 * np.pi * f
+            y = 0j
+            if R:
+                y += 1 / R
+            if L:
+                y += 1 / (1j * w_ * L)
+            if C:
+                y += 1j * w_ * C
+            return 1 / y if y != 0 else 1e12
+        return zfun
+
     def port_geometry(self, a: Assignment, tags: list[int]):
         """width, height, direction of a lumped port/element from its integration line or bounding box."""
         import gmsh
@@ -618,7 +658,8 @@ class Bridge:
             hi = np.maximum(hi, b[3:])
             area += gmsh.model.occ.getMass(2, t)
         if line:
-            pts = ev.points(line)
+            from ..model.objframe import global_points
+            pts = global_points(self.design, a, "IntegrationLine", ev)    # follows its moved object
             v = np.asarray(pts[1]) - np.asarray(pts[0])
             h = float(np.linalg.norm(v))
             d = v / h
@@ -778,9 +819,10 @@ class Bridge:
             info(f"Order of basis functions: {name}")
         except Exception as ex:  # noqa: BLE001
             warn(f"Basis order '{name}' not available ({ex}); using second order")
-        try:      # curved elements at curved surfaces (setting "CurvedElements", default on)
+        try:      # EMerge's curved elements at curved surfaces (setting "CurvedElements", default on)
             from . import curvilinear
             curvilinear.CTX["enabled"] = self.setup.props.get("CurvedElements", "True") == "True"
+            self.m.settings.mw_curved_elements = curvilinear.enabled()
         except Exception:  # noqa: BLE001
             pass
 
@@ -935,8 +977,6 @@ class Bridge:
                 break
             self._pw_fields = None
             pec = [int(t) for bc in m.mw.bc.oftype(PEC) for t in m.mesh.get_triangles(bc.tags)]
-            pec = _with_conductor_sheets(m, pec)
-            _parallel_error_estimate(step)
             errors, lengths = [], None
             for fl in fields:
                 fl.set_field_vector()
@@ -951,9 +991,11 @@ class Bridge:
             method = str(p.get("RefinementMethod", ""))
             snap = (np.asarray(m.mesh.nodes), np.asarray(m.mesh.tets), m.mesh.n_tets)
             g = _refine_delaunay(m, error, lengths, pct, growth, step, self.out) if method.startswith("Local") else None
+            if g is None and method.startswith("AURA"):
+                g = _refine_aura(m, error, pct, step)
             if g is not None:
                 grow = g
-            elif method.startswith("Local"):        # failed local pass: keep the refinement so far
+            elif method.startswith("Local") or method.startswith("AURA"):  # failed local pass: keep the refinement so far
                 grow = _refine_stable(m, error, lengths, pct, growth, step, snap)
             elif _refine_local(m, p, coords, sizes, ratio, growth, pct, error, lengths):
                 grow = (m.mesh.n_tets / last_n - 1) * 100
@@ -1216,6 +1258,11 @@ class Bridge:
             warn(f"Far field surface not available: {ex}")
             return False
         out = {"vis": vis, "wns": wns, "stamp": np.array([time.time_ns()])}
+        planes = self.symmetry_planes()
+        if planes:
+            out["sym_kind"] = np.array([p[0] for p in planes])
+            out["sym_axis"] = np.array([p[1] for p in planes], np.int64)
+            out["sym_pos"] = np.array([p[2] for p in planes], np.float64)
         pw = self.plane_wave()
         if pw is not None:
             out["E0"] = np.array([abs(self.ev.value(pw.props.get("EMagnitude", "1") or "1"))])
@@ -1242,10 +1289,40 @@ class Bridge:
                     out[f"E_{k}_{n}"], out[f"H_{k}_{n}"] = E.astype(np.complex128), H.astype(np.complex128)
                     S = 0.5 * np.cross(E.T, np.conj(H).T).T
                     out[f"Prad_{k}_{n}"] = np.array([float(np.real(np.sum(S * wns)))])
+                    if port.get("kind") == "Incident Plane Wave":
+                        out[f"pw_{n}"] = np.array([1])
                 except Exception as ex:  # noqa: BLE001
                     warn(f"Far field surface fields for port {port['number']} failed: {ex}")
         self.store.save_npz(f"huygens_{label}.npz", **out)
         return True
+
+    def symmetry_planes(self) -> list[tuple[str, int, float]]:
+        """Symmetry boundaries as mirror planes of the far field: (E or H, axis 0/1/2, position in m). Only a
+        plane parallel to a coordinate plane can be mirrored, and only one plane per axis."""
+        planes: list[tuple[str, int, float]] = []
+        m = self.m
+        for kind, name, tags in getattr(self, "sym_faces", []):
+            try:
+                tris = np.asarray(m.mesh.get_triangles(tags), np.int64)
+                pts = np.asarray(m.mesh.nodes)[:, np.unique(np.asarray(m.mesh.tris)[:, tris])]
+            except Exception as ex:  # noqa: BLE001
+                warn(f"{name}: symmetry plane not found in the mesh ({ex}); the far field is not mirrored there")
+                continue
+            span = np.ptp(pts, axis=1)
+            ax = int(np.argmin(span))
+            if span[ax] > 1e-6 * max(float(span.max()), 1e-12):
+                warn(f"{name}: the symmetry faces are not one plane parallel to XY, YZ or ZX; "
+                     "the far field is not mirrored there")
+                continue
+            pos = float(np.mean(pts[ax]))
+            same = [p for p in planes if p[1] == ax]
+            if same:
+                if abs(same[0][2] - pos) > 1e-9 + 1e-6 * float(span.max()) or same[0][0] != kind:
+                    warn(f"{name}: a second symmetry plane normal to {'XYZ'[ax]}; "
+                         "the far field is mirrored only at the first one")
+                continue
+            planes.append((kind, ax, pos))
+        return planes
 
     def antenna_pass(self, step: int) -> None:
         """Antenna parameters of an adaptive pass (Antenna Parameters report over the passes)."""
@@ -1283,6 +1360,10 @@ class Bridge:
                 mt_pardiso = None
             p = sw.props
             fr = sweep_frequencies(p, ev)
+            for nm, z in self.touchstone_elements:
+                if len(fr) and (fr.min() < z.f[0] * (1 - 1e-9) or fr.max() > z.f[-1] * (1 + 1e-9)):
+                    warn(f"{nm}: sweep '{sw.name}' goes beyond the Touchstone data ({z.f[0] / 1e9:g} to "
+                         f"{z.f[-1] / 1e9:g} GHz); outside it the nearest data point is used")
             par = p.get("Parallel") == "True"
             nw = max(1, int(os.environ.get("HERTZON_SWEEP_WORKERS", "2") or 2))
             prog = SweepProgress(sw.name, 65 + 30 * i / max(1, len(sweeps)), 30 / max(1, len(sweeps)))
@@ -1612,19 +1693,16 @@ def adaptive_loop(m, fa: list[float], p: dict, out: Path, on_pass=None, key: str
         # ---- refine ----------------------------------------------------------------------------
         emit("progress", value=12 + 40 * (step - 0.5) / maxp,
              text=f"Pass {step}: estimating solution error" + (" (first run compiles solver kernels, "
-                                                                 "this can take a few minutes)" if _first_run() or not _error_kernel_cached() else ""))
+                                                                 "this can take a few minutes)" if _first_run() else ""))
         info(f"Pass {step}: estimating solution error and refining the mesh")
-        _parallel_error_estimate(step)
         t_err = time.time()
         errors = np.empty((m.mesh.n_tets, len(fa)))
         lengths = None
-        est_tris = _with_conductor_sheets(m, solve_ids)
         for i in range(len(fa)):
-            err, lengths = fields[i]._solution_quality(est_tris)
+            err, lengths = fields[i]._solution_quality(solve_ids)
             errors[:, i] = err
         error = errors.max(axis=1)
         info(f"Pass {step}: error estimate {time.time() - t_err:.2f} s ({m.mesh.n_tets} tetrahedra)")
-        _log_error_threads()
         emit("progress", value=12 + 40 * (step - 0.4) / maxp, text=f"Pass {step}: refining the mesh")
         t_ref = time.time()
         ids = select_refinement_indices(error, incl)[::-1]
@@ -1635,9 +1713,11 @@ def adaptive_loop(m, fa: list[float], p: dict, out: Path, on_pass=None, key: str
         # the current mesh, kept for the stable fallback: a failed local pass may already have reset the model
         snap = (np.asarray(m.mesh.nodes), np.asarray(m.mesh.tets), m.mesh.n_tets)
         grow = _refine_delaunay(m, error, lengths, pct, growth, step, out) if method.startswith("Local") else None
+        if grow is None and method.startswith("AURA"):
+            grow = _refine_aura(m, error, pct, step)
         if grow is not None:
             pass
-        elif method.startswith("Remesh (stable") or method.startswith("Local"):
+        elif method.startswith("Remesh (stable") or method.startswith("Local") or method.startswith("AURA"):
             grow = _refine_stable(m, error, lengths, pct, growth, step, snap)
         else:
             # keep the ratio that hit the target in the previous pass (good first guess)
@@ -1865,6 +1945,36 @@ def _refine_delaunay(m, error, lengths, pct: float, growth: float, step: int, ou
         return None
 
 
+def _refine_aura(m, error, pct: float, step: int):
+    """AURA (EMerge): EMerge's own local refinement, longest-edge bisection of the worst tets followed by
+    flips and smoothing. Every old node stays. Returns the growth in percent, None when it failed (the
+    caller then re-meshes with the stable size field)."""
+    try:
+        from emerge._emerge.aura import BrepSnapshot
+        from emerge._emerge.aura.brep import snapshot_gmsh
+        from emerge._emerge.aura.emerge_tools import refine_mesh_step
+        if getattr(m, "_aura_brep", None) is None:
+            try:
+                m._aura_brep = snapshot_gmsh(scale=1 / m._geo_scale_factor)
+            except Exception as e:  # noqa: BLE001
+                warn(f"AURA: no geometry snapshot ({e}); new boundary nodes stay on the facets")
+                m._aura_brep = BrepSnapshot.empty()
+        periodic = [(bc.face1.tags, bc.face2.tags, np.asarray(bc.dv)) for bc in m.mesher._get_periodic_bcs()]
+        t0 = time.time()
+        new, rep = refine_mesh_step(m.mesh, np.asarray(error, float), brep=m._aura_brep, growth=pct / 100.0,
+                                    periodic=periodic)
+        n0 = m.mesh.n_tets
+        m._install_refined_mesh(new)
+        m._local_mesh = None
+        grow = (m.mesh.n_tets / n0 - 1) * 100
+        info(f"Pass {step}: AURA refinement -> {m.mesh.n_tets} tetrahedra (+{grow:.1f}%), "
+             f"min. quality {rep['q_min']:.3f}, {time.time() - t0:.2f} s")
+        return grow
+    except Exception as e:  # noqa: BLE001
+        warn(f"AURA refinement failed ({e}); re-meshing the model instead")
+        return None
+
+
 MMG_SHRINK = 0.5           # Mmg: refined elements are halved (a quarter made the passes slower overall)
 
 
@@ -1968,16 +2078,7 @@ def excite(fld, port: dict) -> None:
 
 def _interp_known_tets(fld, x, y, z, mapping) -> None:
     """fld.interpolate at points whose containing tetrahedron is known (skips the point location search)."""
-    basis = fld.basis
-    orig = basis.interpolate_index
-    try:
-        basis.interpolate_index = lambda *a, **k: mapping.astype(orig(x[:1], y[:1], z[:1]).dtype, copy=False)
-        fld.interpolate(x, y, z, usenan=False)
-    finally:
-        try:
-            del basis.interpolate_index
-        except AttributeError:
-            basis.interpolate_index = orig
+    fld.interpolate(x, y, z, usenan=False, mapping=mapping)
 
 
 def _peak_rss() -> float:
@@ -2095,56 +2196,6 @@ def _save_pass_results(out: Path, fa: list[float], Ss: list, z0, passes: list, m
                                               "frequencies": list(fa), "running": True})
     except Exception as e:  # noqa: BLE001
         warn(f"Could not store intermediate pass results: {e}")
-
-
-def _with_conductor_sheets(m, pec_tris):
-    """Triangles the error estimate treats as conductor faces: EMerge's PEC triangles plus the faces with
-    a finite conductivity (surface impedance / thin conductor). Across a conductor sheet the tangential
-    H jumps by the surface current, which is physical and no discretization error; there, as on PEC, the
-    residual is the tangential E on the face."""
-    try:
-        from emerge._emerge.physics.microwave.bcs.boundary_conditions import SurfaceImpedance, ThinConductor
-        tags = []
-        for bc in m.mw.bc.boundary_conditions:
-            if isinstance(bc, ThinConductor) or (isinstance(bc, SurfaceImpedance) and bc._material is not None):
-                tags.extend(bc.tags)
-        if not tags:
-            return pec_tris
-        extra = np.asarray(m.mesh.get_triangles(sorted(set(tags))), np.int64).ravel()
-        return np.concatenate([np.asarray(pec_tris if pec_tris is not None else [], np.int64).ravel(), extra])
-    except Exception as e:  # noqa: BLE001
-        warn(f"Conductor faces not excluded from the error estimate ({e})")
-        return pec_tris
-
-
-def _parallel_error_estimate(step: int) -> None:
-    """Multi-threaded error estimate (hertzon.solver.fast_error); compiled once per machine and EMerge
-    version, EMerge's serial kernel otherwise."""
-    from . import fast_error
-    if "active" in fast_error._STATE:
-        return
-    if not fast_error.cached():
-        info(f"Pass {step}: compiling the parallel error estimate (once per machine, about 1-2 minutes)")
-    ok = fast_error._STATE["active"] = fast_error.apply()
-    if not ok:
-        info("Parallel error estimate not available; using EMerge's serial one")
-
-
-def _log_error_threads() -> None:
-    from . import fast_error
-    tr = fast_error._STATE.pop("threads", None)
-    if tr:
-        best, trials = tr
-        info("Error estimate threads: " + ", ".join(f"{n}: {t * 1e5:.2f} s/100k tets" for n, t in trials.items())
-             + f" -> using {best}")
-
-
-def _error_kernel_cached() -> bool:
-    try:
-        from . import fast_error
-        return fast_error.cached()
-    except Exception:  # noqa: BLE001
-        return True
 
 
 def kernel_tag() -> str:

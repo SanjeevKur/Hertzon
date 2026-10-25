@@ -215,7 +215,7 @@ def _check_profile_crosses(prof: list, curves: list[int]) -> None:
     Such a profile (e.g. a circle drawn in XY at a helix along Z) is turned perpendicular to the path
     and moved to the path start, so the sweep is what the user meant."""
     o = _occ()
-    n = _sheet_normal(prof)
+    n = _face_normal(prof)
     c = curves[0]
     lo, _ = gmsh.model.getParametrizationBounds(1, c)
     t = np.asarray(gmsh.model.getDerivative(1, c, [lo[0]]), float)
@@ -838,13 +838,52 @@ def _import_stl_build(path: str, unit_scale: float, count_only: bool = False,
     return out
 
 
-def _sheet_normal(dimtags) -> np.ndarray:
+def _face_normal(dimtags) -> np.ndarray:
     gmsh.model.occ.synchronize()
     d, t = dimtags[0]
     lo, hi = gmsh.model.getParametrizationBounds(2, t)
     uv = [(lo[0] + hi[0]) / 2, (lo[1] + hi[1]) / 2]
     n = np.asarray(gmsh.model.getNormal(t, uv))
     return n / (np.linalg.norm(n) + 1e-300)
+
+
+def thicken_direction(normal, reverse: bool = False) -> np.ndarray:
+    """Direction of Thicken sheet for a sheet normal: pointing to the positive side of the sheet's main axis
+    (+Z for a sheet in XY), opposite with ``reverse``. The face normal itself follows the winding of the
+    outline, i.e. how the sheet was drawn (a rectangle dragged to -X, a polyline drawn clockwise), so its
+    sign is not used. Also used by the direction preview of the GUI."""
+    n = np.asarray(normal, float)
+    n = n / (np.linalg.norm(n) + 1e-300)
+    main = int(np.flatnonzero(np.abs(n) > np.abs(n).max() - 1e-9)[0])   # first axis on a tie
+    n = -n if n[main] < 0 else n
+    return -n if reverse else n
+
+
+def migrate_thicken_direction(design: Design, ev: Evaluator) -> list[str]:
+    """Older files thickened along the face normal, whose sign follows how the sheet was drawn. Set Reverse
+    direction where that normal pointed to the negative side, so these sheets keep their old shape. The
+    sheets are built up to each Thicken sheet step in a separate gmsh model. Returns messages for steps that
+    could not be checked (they keep the new default direction)."""
+    from dataclasses import replace
+    steps = [(obj, i) for obj in design.objects for i, c in enumerate(obj.history)
+             if c.kind == "ThickenSheet" and c.props.get("BothSides") != "True"]
+    if not steps:
+        return []
+    prev = gmsh.model.getCurrent() if gmsh.isInitialized() else None
+    msgs = []
+    for obj, i in steps:
+        ensure_gmsh("hertzon-migrate")
+        try:
+            dt = _build_object(replace(obj, history=obj.history[:i]), BuildContext(design, ev))
+            n = _face_normal(dt)
+            obj.history[i].props["ReverseDirection"] = str(bool(thicken_direction(n) @ n < 0))
+        except Exception as e:  # noqa: BLE001
+            msgs.append(f"{obj.name}: Thicken sheet direction not checked ({e})")
+        finally:
+            gmsh.model.remove()
+    if prev:
+        gmsh.model.setCurrent(prev)
+    return msgs
 
 
 def _apply(cmd: Command, dt: list[tuple[int, int]], ctx: BuildContext, owner: str) -> list[tuple[int, int]]:
@@ -879,7 +918,7 @@ def _apply(cmd: Command, dt: list[tuple[int, int]], ctx: BuildContext, owner: st
             if dim != 2:
                 raise GeometryError("Thicken sheet needs a sheet object")
             t = ev.length(p["Thickness"])
-            n = _sheet_normal(dt)
+            n = thicken_direction(_face_normal(dt), p.get("ReverseDirection") == "True")
             if p.get("BothSides") == "True":
                 o.translate(dt, *(-n * t))
                 t *= 2
@@ -914,35 +953,32 @@ def _apply(cmd: Command, dt: list[tuple[int, int]], ctx: BuildContext, owner: st
             raise GeometryError(f"{k} produced an empty object")
         return out
     if k == "Split":
-        xmin, ymin, zmin, xmax, ymax, zmax = _bbox(dt)
-        big = 10 * max(xmax - xmin, ymax - ymin, zmax - zmin, 1e-6)
-        cx, cy, cz = (xmin + xmax) / 2, (ymin + ymax) / 2, (zmin + zmax) / 2
-        pos = p.get("Keep", "Positive") == "Positive"
+        # the plane lies in the coordinate system of the command (XY, YZ, XZ or Custom Base/Normal);
+        # the kept half space is a slab on the chosen side that reaches over the whole object
+        from ..model import coordsys
+        try:
+            O, R = coordsys.frame(ctx.design, p.get("CoordinateSystem", "Global") or "Global", ev)
+        except (KeyError, ValueError) as e:
+            raise GeometryError(f"Split: coordinate system: {e}") from e
         plane = p.get("Plane", "XY")
         if plane == "Custom":
-            # arbitrary plane through Base with Normal: keep the half space on the chosen side
-            b = np.asarray(ev.point(p.get("Base", "0,0,0") or "0,0,0"), float)
-            n = _plane_normal(p, ev)
-            if not pos:
-                n = -n
-            c = np.array([cx, cy, cz])
-            c = c - n * ((c - b) @ n)
-            disk = o.addDisk(*c, 2 * big, 2 * big, zAxis=list(n))
-            half = o.extrude([(2, disk)], *(n * 2 * big))
-            box = [d for d in half if d[0] == 3][0][1]
-            out, _ = o.intersect(dt, [(3, box)])
-            if not out:
-                raise GeometryError("Split removed the whole object")
-            return out
-        if plane == "XY":
-            box = o.addBox(cx - big, cy - big, 0 if pos else -big, 2 * big, 2 * big, big)
-        elif plane == "YZ":
-            box = o.addBox(0 if pos else -big, cy - big, cz - big, big, 2 * big, 2 * big)
+            b = O + R @ np.asarray(ev.point(p.get("Base", "0,0,0") or "0,0,0"), float)
+            n = R @ _plane_normal(p, ev)
         else:
-            box = o.addBox(cx - big, 0 if pos else -big, cz - big, 2 * big, big, 2 * big)
+            b, n = O, R[:, {"XY": 2, "YZ": 0, "XZ": 1}[plane]]
+        if p.get("Keep", "Positive") != "Positive":
+            n = -n
+        xmin, ymin, zmin, xmax, ymax, zmax = _bbox(dt)
+        lo, hi = np.array([xmin, ymin, zmin]), np.array([xmax, ymax, zmax])
+        c = (lo + hi) / 2
+        dist = (c - b) @ n
+        size = 2 * (np.linalg.norm(hi - lo) + abs(dist)) + 1e-6
+        disk = o.addDisk(*(c - n * dist), size, size, zAxis=list(n))
+        half = o.extrude([(2, disk)], *(n * size))
+        box = [d for d in half if d[0] == 3][0][1]
         out, _ = o.intersect(dt, [(3, box)])
         if not out:
-            raise GeometryError("Split removed the whole object")
+            raise GeometryError("Split removed the whole object (it lies completely on the other side of the plane)")
         return out
     if k in ("SweepAlongPath", "Connect", "Imprint"):
         tools = _tools(p, ctx)

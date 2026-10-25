@@ -3,36 +3,15 @@
 The solver stores the tangential E/H on the open boundary (radiation/PML faces) once per solution in
 ``huygens_<solution>.npz``. Every infinite sphere is then evaluated from that file with the
 Stratton-Chu integral, without the field solution or a new analysis.
+
+With symmetry planes the far field of the full structure is the integral over the stored surface and its
+mirror images. The fields are scaled to 1 W into the full structure, as EMerge's ``farfield(syms=...)``
+does (after EMerge #75); the radiated power over the simulated part already is that of the full structure
+at 1 W.
 """
 from __future__ import annotations
 
 import numpy as np
-
-Z0 = 376.730313412
-
-
-_CEXP = None
-
-
-def _cexp(x: np.ndarray) -> np.ndarray:
-    """exp(1j * x) on all cores (numpy's exp is single-threaded and dominated the far field time)."""
-    global _CEXP
-    if _CEXP is None:
-        try:
-            from numba import njit, prange
-            import math
-
-            @njit(parallel=True, cache=True, fastmath=False)
-            def k(a):
-                out = np.empty(a.shape, np.complex128)
-                for i in prange(a.shape[0]):
-                    for j in range(a.shape[1]):
-                        out[i, j] = complex(math.cos(a[i, j]), math.sin(a[i, j]))
-                return out
-            _CEXP = k
-        except Exception:  # noqa: BLE001
-            _CEXP = lambda a: np.exp(1j * a)  # noqa: E731
-    return _CEXP(np.ascontiguousarray(x, np.float64))
 
 
 def stratton_chu(E: np.ndarray, H: np.ndarray, vis: np.ndarray, wns: np.ndarray,
@@ -43,34 +22,56 @@ def stratton_chu(E: np.ndarray, H: np.ndarray, vis: np.ndarray, wns: np.ndarray,
 
 def stratton_chu_multi(Es: list, Hs: list, vis: np.ndarray, wns: np.ndarray, th: np.ndarray, ph: np.ndarray,
                        k0: float, progress=None) -> list:
-    """stratton_chu for several excitations at one frequency: the phase matrix exp(jk r.x) is the same for
-    all of them, so it is computed once and multiplied with every excitation in one BLAS call."""
-    Es = [np.asarray(E, np.complex128) for E in Es]
-    Hs = [np.asarray(H, np.complex128) for H in Hs]
-    keep = np.zeros(vis.shape[1], bool)
-    for E in Es:                        # sources that matter for any excitation
-        mag = np.sqrt((np.abs(E) ** 2).sum(0))
-        if mag.size:
-            keep |= mag > mag.max() * 1e-3
-    vis, wns = vis[:, keep], wns[:, keep]
-    r = np.stack([np.sin(th) * np.cos(ph), np.sin(th) * np.sin(ph), np.cos(th)]).T   # (N, 3)
+    """stratton_chu for several excitations at one frequency with EMerge's kernel emr.sc_multi (the phase
+    factor exp(jk r.x) is computed once for all excitations), in blocks of directions for the progress bar."""
+    from emr.sc_multi import stratton_chu_ff_multi
     ne = len(Es)
-    # columns: n x E then n x H of every excitation (M, 6 * ne)
-    src = np.concatenate([np.cross(wns.T, E[:, keep].T) for E in Es] + [np.cross(wns.T, H[:, keep].T) for H in Hs],
-                         axis=1)
-    out = np.zeros((ne, r.shape[0], 3), np.complex128)
-    # sum over the sources first: A = sum G n x E, B = sum G n x H (r is constant per direction)
-    step = max(1, 4_000_000 // max(1, src.shape[0]))
-    for a in range(0, r.shape[0], step):
-        rr = r[a:a + step]
-        G = _cexp(k0 * (rr @ vis))                               # (n, M)
-        AB = (G @ src).reshape(len(rr), 2, ne, 3)
-        for i in range(ne):
-            A, B = AB[:, 0, i], AB[:, 1, i]
-            out[i, a:a + step] = -1j * k0 / (4 * np.pi) * np.cross(rr, A - Z0 * np.cross(rr, B))
+    Ein = np.ascontiguousarray(np.concatenate([np.asarray(E, np.complex128) for E in Es], axis=0))
+    Hin = np.ascontiguousarray(np.concatenate([np.asarray(H, np.complex128) for H in Hs], axis=0))
+    vis = np.ascontiguousarray(vis, np.float64)
+    wns = np.ascontiguousarray(wns, np.float64)
+    tp = np.ascontiguousarray([np.ravel(th), np.ravel(ph)], np.float64)
+    n = tp.shape[1]
+    step = n if progress is None else max(1, -(-n // 20))
+    out = np.empty((3 * ne, n), np.complex128)
+    for a in range(0, n, step):
+        out[:, a:a + step] = stratton_chu_ff_multi(Ein, Hin, vis, wns, np.ascontiguousarray(tp[:, a:a + step]),
+                                                   np.float64(k0))[0]
         if progress is not None:
-            progress(min(1.0, (a + step) / r.shape[0]))
-    return [o.T for o in out]
+            progress(min(1.0, (a + step) / n))
+    return [out[3 * i:3 * i + 3] for i in range(ne)]
+
+
+def symmetry_planes(huy: dict) -> list[tuple[str, int, float]]:
+    """Mirror planes stored with the surface fields: (E or H, axis 0/1/2, position in m)."""
+    if "sym_axis" not in huy:
+        return []
+    return [(str(k), int(a), float(x)) for k, a, x in zip(huy["sym_kind"], huy["sym_axis"], huy["sym_pos"])]
+
+
+def mirrored(vis: np.ndarray, wns: np.ndarray, Es: list, Hs: list, planes: list) -> tuple:
+    """The surface and the fields with all mirror images at the symmetry planes appended (1, 2 or 4 ... copies).
+    At a Perfect E plane normal to axis a, E_a and the other two H components keep their sign, the other two E
+    components and H_a flip (tangential E and normal H vanish on the plane); at a Perfect H plane the other way
+    round. Same rule as EMerge's _mirrored_sources."""
+    V, W, EE, HH = [vis], [wns], [list(Es)], [list(Hs)]
+    for kind, ax, pos in planes:
+        sE = -np.ones((3, 1))
+        sE[ax] = 1.0
+        sH = -sE
+        if kind == "H":
+            sE, sH = sH, sE
+        for i in range(len(V)):
+            v, w = V[i].copy(), W[i].copy()
+            v[ax] = 2.0 * pos - v[ax]
+            w[ax] = -w[ax]
+            V.append(v)
+            W.append(w)
+            EE.append([E * sE for E in EE[i]])
+            HH.append([H * sH for H in HH[i]])
+    cat = lambda arrs: np.concatenate(arrs, axis=1)  # noqa: E731
+    return (cat(V), cat(W), [cat([e[j] for e in EE]) for j in range(len(Es))],
+            [cat([h[j] for h in HH]) for j in range(len(Hs))])
 
 
 def compute_sphere(huy: dict, props: dict, ev, design=None, plane_wave=None, progress=None) -> dict:
@@ -96,6 +97,8 @@ def compute_sphere(huy: dict, props: dict, ev, design=None, plane_wave=None, pro
         rg = R @ rl
         Tg, Pg = np.arccos(np.clip(rg[2], -1, 1)), np.arctan2(rg[1], rg[0])
     vis, wns = huy["vis"], huy["wns"]
+    planes = symmetry_planes(huy)
+    scale = (0.5 ** len(planes)) ** 0.5     # 1 W into the full structure instead of into the simulated part
     if "E0" in huy:
         res["E0"] = huy["E0"]
     keys = [k for k in huy if k.startswith("E_")]
@@ -107,21 +110,24 @@ def compute_sphere(huy: dict, props: dict, ev, design=None, plane_wave=None, pro
         f = float(huy[f"freq_{k}"][0])
         k0 = 2 * np.pi * f / 299792458.0
         ports = [key.split("_")[2] for key in group]
-        Es = stratton_chu_multi([huy[key] for key in group], [huy[f"H_{k}_{p}"] for p in ports], vis, wns, Tg, Pg,
-                                k0, None if progress is None else
+        Hs = [huy[f"H_{k}_{p}"] for p in ports]
+        v2, w2, Ein, Hin = mirrored(vis, wns, [huy[key] for key in group], Hs, planes)
+        Es = stratton_chu_multi(Ein, Hin, v2, w2, Tg, Pg, k0, None if progress is None else
                                 (lambda x, d=done, n=len(group): progress((d + x * n) / len(keys))))
         done += len(group)
         for key, port, E in zip(group, ports, Es):
+            pw = f"pw_{port}" in huy    # a plane wave keeps its amplitude; its scattered power is all images'
             if R is not None:
                 E = R.T @ E
-            res[key] = E.reshape((3,) + T.shape)
-            res[f"Prad_{k}_{port}"] = huy[f"Prad_{k}_{port}"]
+            res[key] = (E if pw else E * scale).reshape((3,) + T.shape)
+            prad = huy[f"Prad_{k}_{port}"]
+            res[f"Prad_{k}_{port}"] = prad * 2 ** len(planes) if pw else prad
         res[f"freq_{k}"] = np.array([f])
         if "mono_dir" in huy:
             tb, pb = [float(x) for x in huy["mono_dir"]]
             key = group[-1]
-            res[f"Emono_{k}"] = stratton_chu(huy[key], huy[f"H_{k}_{ports[-1]}"], vis, wns,
-                                             np.array([tb]), np.array([pb]), k0).reshape(3)
+            v2, w2, Ein, Hin = mirrored(vis, wns, [huy[key]], [huy[f"H_{k}_{ports[-1]}"]], planes)
+            res[f"Emono_{k}"] = stratton_chu(Ein[0], Hin[0], v2, w2, np.array([tb]), np.array([pb]), k0).reshape(3)
             res["mono_dir"] = huy["mono_dir"]
     return res
 

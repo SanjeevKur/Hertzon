@@ -1,8 +1,9 @@
 # Hertzon roadmap
 
 Hertzon today is a frequency-domain 3D FEM simulator built on [EMerge](https://github.com/FennisRobert/EMerge),
-with its own adaptive meshing (hzmesh, local Delaunay, bisection, Mmg), curved elements, fast and
-interpolating sweeps, far field and RCS, optimization and an MCP server. This roadmap describes how it
+with adaptive meshing (EMerge's AURA by default, Hertzon's local Delaunay mesher hzmesh, re-mesh),
+curved elements, fast and interpolating sweeps, far field and RCS, optimization, parametric sweeps and an
+MCP server. This roadmap describes how it
 grows into an open simulation suite: time domain, low frequency, circuits and photonics, built from open
 solvers under one user interface.
 
@@ -71,9 +72,11 @@ reports read regardless of the solver.
   tetrahedral or rectilinear grids, scalar values (C, L, R, force, n<sub>eff</sub>). Reports and field
   plots read only this format. *Needs 0.1.*
 - [ ] **0.3 Stable face assignment and coordinate systems (L).** Ports and boundaries stay on the
-  right face when the geometry changes or the solver is switched; relative and face coordinate systems.
+  right face when the geometry changes or the solver is switched. Relative, face and object coordinate
+  systems exist already.
 - [ ] **0.4 Solution management for all solvers (M).** Mark results as out of date after a change,
-  finish the parametric sweep (`hertzon/solver/parametric.py`), job queue. *Needs 0.2.*
+  parametric sweeps for every solver (today for EMerge only, `hertzon/solver/parametric.py`), job queue.
+  *Needs 0.2.*
 - [ ] **0.5 Cross-solver benchmark suite (S–M).** The same models with several solvers, against
   analytic results, the Mie series and measurements. It grows with every step. *Needs 0.2.*
 
@@ -91,8 +94,9 @@ touch the EMerge core should go upstream to EMerge, so that Hertzon does not dep
   tensors. *Used by steps 2 and 6.*
 - [ ] **1.4 Field post-processing (M–L).** Fields calculator, losses, quality factor Q, field export,
   antenna parameter table, near field. *Used by step 5 (thermal).*
-- [ ] **1.5 Modeler and usability (M).** Arcs and splines in polylines, interactive move/rotate,
-  measure tools, clickable messages, report markers and axes, more modeler operations.
+- [ ] **1.5 Modeler and usability (M).** Interactive move/rotate, measure tools, clickable messages,
+  report axes, more modeler operations. Done so far: arcs and splines in polylines, report markers,
+  object groups, box selection.
 
 ## Step 2: openEMS as a second solver (EC-FDTD)
 
@@ -146,14 +150,14 @@ solved again, the circuit follows.
 
 Quasi-static fields: capacitances, inductances, forces, current paths.
 [GetDP](https://getdp.info) works directly with gmsh, which Hertzon already uses, and is licensed like
-Hertzon. The hzmesh and Mmg refinement can be reused with a scalar error estimator (energy norm,
+Hertzon. The local refinement (hzmesh, AURA) can be reused with a scalar error estimator (energy norm,
 Zienkiewicz-Zhu).
 
 - [ ] **4.1 Electrostatics and DC conduction (M–L).** Capacitance matrix, field strength and breakdown
   margin, resistance and current density in traces. *Needs 0.1, 0.2.*
 - [ ] **4.2 Magnetostatics (L).** Inductance matrix, force and torque (Maxwell stress tensor, virtual
   work), permanent magnets, nonlinear B-H curves. *Needs 4.1.*
-- [ ] **4.3 Adaptive meshing for scalar problems (M).** Based on hzmesh and Mmg. *Needs 4.1.*
+- [ ] **4.3 Adaptive meshing for scalar problems (M).** Based on hzmesh or AURA. *Needs 4.1.*
 - [ ] **4.4 Extraction into circuits (M).** RLGC parameters of lines and packages from 4.1 and 4.2 as
   components in the circuit design. *Needs 4.1, 4.2, 3.2.*
 
