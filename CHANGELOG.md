@@ -3,6 +3,13 @@
 All notable changes of each release. The release workflow copies the section of the released version into
 the GitHub release notes.
 
+## Unreleased
+
+### Changed
+- **Fillet of a sheet at its vertices**: a sheet (for example a patch) is now filleted by selecting its corner
+  vertices (press V) instead of edges; each selected vertex gets one fillet with the radius. Projects that
+  filleted a sheet by its edges in 0.2.3 build as before.
+
 ## 0.2.3 (2026-10-25)
 
 ### Changed

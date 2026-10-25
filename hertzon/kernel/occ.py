@@ -1085,16 +1085,28 @@ def _apply(cmd: Command, dt: list[tuple[int, int]], ctx: BuildContext, owner: st
         return res
     if k == "Fillet":
         o.synchronize()
+        r = ev.length(p["Radius"])
+        if r <= 0:
+            raise GeometryError("Fillet radius must be positive")
+        solid = any(d == 3 for d, _ in dt)
+        vids = [int(e) for e in p.get("Vertices", "").split(",") if e.strip()]
+        if vids:
+            if solid:
+                raise GeometryError("Vertices can be filleted on sheets; select the edges of a solid")
+            verts = object_vertices(dt)
+            corners = {verts[i] for i in vids if 0 <= i < len(verts)}
+            if not corners:
+                raise GeometryError("No valid vertices selected for fillet")
+            return _fillet_sheet(dt, corners, r)
         edges = object_edges(dt)
         ids = [int(e) for e in p.get("Edges", "").split(",") if e.strip()]
         curves = [edges[i] for i in ids if 0 <= i < len(edges)]
         if not curves:
             raise GeometryError("No valid edges selected for fillet")
-        r = ev.length(p["Radius"])
-        if r <= 0:
-            raise GeometryError("Fillet radius must be positive")
-        if not any(d == 3 for d, _ in dt):
-            return _fillet_sheet(dt, curves, r)
+        if not solid:
+            # edges of a sheet (projects of 0.2.3): the corners at both ends of each edge
+            return _fillet_sheet(dt, {abs(v) for c in curves
+                                      for _, v in gmsh.model.getBoundary([(1, c)], oriented=False)}, r)
         try:
             out = o.fillet([t for d, t in dt if d == 3], curves, [r])
         except Exception as e:  # noqa: BLE001
@@ -1105,15 +1117,10 @@ def _apply(cmd: Command, dt: list[tuple[int, int]], ctx: BuildContext, owner: st
     raise GeometryError(f"Unknown operation {k}")
 
 
-def _fillet_sheet(dt: list[tuple[int, int]], curves: list[int], r: float) -> list[tuple[int, int]]:
-    """Fillet of a planar sheet: rounds the corners at the end points of the selected edges. Each face is
-    extruded to a temporary solid, its edges through those corners are filleted and the face in the
-    original plane is kept."""
+def _fillet_sheet(dt: list[tuple[int, int]], corners: set[int], r: float) -> list[tuple[int, int]]:
+    """Fillet of a planar sheet: rounds the corners (vertex tags). Each face is extruded to a temporary
+    solid, its edges through those corners are filleted and the face in the original plane is kept."""
     o = _occ()
-    corners = set()
-    for c in curves:
-        for _, v in gmsh.model.getBoundary([(1, c)], oriented=False):
-            corners.add(abs(v))
     faces = [t for d, t in dt if d == 2]
     if not faces:
         raise GeometryError("Fillet needs a solid or a sheet")
@@ -1155,7 +1162,7 @@ def _fillet_sheet(dt: list[tuple[int, int]], curves: list[int], r: float) -> lis
                     edges.append(c)
         if len(edges) != len(sel):
             o.remove(vols, recursive=True)
-            raise GeometryError("Fillet of a sheet: the corners of the selected edges were not found")
+            raise GeometryError("Fillet of a sheet: the selected corners were not found")
         try:
             filleted = o.fillet([t for _, t in vols], edges, [r])
         except Exception as e:  # noqa: BLE001

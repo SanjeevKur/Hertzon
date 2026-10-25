@@ -33,7 +33,7 @@ Legend: **✔** implemented and tested · **◐** implemented with limitations �
 | Move, Rotate, Mirror, Scale, Duplicate along line / around axis / mirror | Edit > Arrange / Duplicate | ✔ | |
 | Object groups (also of solids, sheets and lines together), ungroup, rename | Edit > Group (Ctrl+G) / Ungroup (Ctrl+Shift+G), model tree > Groups | ✔ | A group is selected and transformed as one unit; SMD components are groups; saved in the project |
 | Thicken sheet, Sweep along vector / around axis / along path, Cover lines | Draw / Modeler | ✔ | |
-| Fillet, Chamfer | Modeler > Fillet / Chamfer | ◐ | Edges of solids; fillet also rounds corners of flat sheets |
+| Fillet, Chamfer | Modeler > Fillet / Chamfer | ◐ | Edges of solids; fillet also rounds the selected vertices of flat sheets |
 | Import STEP / IGES / BREP, Export STEP | File / Modeler | ✔ | |
 | History tree with editable commands, suppress | Model tree + Properties | ✔ | Every command parameter accepts expressions |
 | Object attributes: material, solve inside, model, color, transparency, wireframe | Properties > Attribute | ✔ | |

@@ -63,6 +63,7 @@ HELP: dict[str, str] = {
     "Plane": "Cutting plane through the global origin.",
     "Keep": "Which side of the cut to keep.",
     "Edges": "Edge indices to round, comma separated.",
+    "Vertices": "Vertex indices of a sheet, comma separated: each of these corners is rounded with the radius.",
     # ---- object attributes --------------------------------------------------------------------
     "Name": "Name of the item; must be unique in the design.",
     "Material": "Material assigned to the object. Perfect conductors and metals are not meshed inside.",
