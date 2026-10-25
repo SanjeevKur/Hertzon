@@ -805,6 +805,17 @@ def _variables(p):
     p.drawText(QRectF(6, 8, 52, 48), Qt.AlignCenter, "x=")
 
 
+def _calculator(p):
+    """Fields Calculator: a field patch with an integral sign."""
+    _field(p)
+    f = p.font()
+    f.setPixelSize(34)
+    f.setBold(True)
+    p.setFont(f)
+    p.setPen(QColor("#202020"))
+    p.drawText(QRectF(10, 4, 44, 52), Qt.AlignCenter, "∫")
+
+
 def _screenshot(p):
     p.setPen(_pen(GREY.darker(130), 2))
     p.setBrush(GREY)
@@ -1198,7 +1209,7 @@ _DRAW = {
     "validate": _validate, "analyze": _analyze, "farfield": _sphere_ff,
     "rect_plot": _report, "smith": lambda p: _report(p, "smith"), "table": lambda p: _report(p, "table"),
     "pattern": lambda p: _report(p, "pattern"), "polar3d": lambda p: _report(p, "polar3d"),
-    "field": _field, "field_vec": lambda p: _field(p, "vec"), "field_h": lambda p: _field(p, "h"),
+    "field": _field, "calculator": _calculator, "field_vec": lambda p: _field(p, "vec"), "field_h": lambda p: _field(p, "h"),
     "animate": _animate, "clear": _clear, "soldata": _soldata, "export": _export, "design": _design,
     "variables": _variables, "screenshot": _screenshot, "help": _help, "projection": _projection,
     "byname": _byname, "selall": _selall, "group": _group, "ungroup": lambda p: _group(p, True), "exit": _exit, "filter": _filter, "antenna": _antenna,

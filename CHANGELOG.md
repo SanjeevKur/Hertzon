@@ -5,6 +5,19 @@ the GitHub release notes.
 
 ## Unreleased
 
+### Added
+- **Fields Calculator** (Results > Fields > Fields Calculator, or Calculator in the Results ribbon): a docked
+  panel for expressions of the stored fields, typed as text with units, for example
+  `flux(Port1, re(S))`, `int_line(Radial, E)`, `max(Dielectric, |E|)` or
+  `int_vol(Dielectric, 0.5*omega*eps0*eps_r*tand*|E|^2)`. Each expression shows its kind (field or value),
+  unit and a typeset formula while you type; errors are underlined where they are. Integrals over lines,
+  faces and volumes of model and non-model objects, cut planes (`cut_xy(10mm)`), points, components in
+  cylindrical and spherical coordinate systems, curl, divergence and gradient. Values are computed on the
+  solver's elements with their quadrature, curved elements included. Named expressions and user functions
+  are saved with the design; a library has power, loss, energy, Q, voltage and current. A named field can be
+  plotted like E or H (Plot Fields > Quantity), and a named value can be shown over frequency in a report
+  (category Fields).
+
 ### Changed
 - **Examples on the current features**: all examples use hzAURA refinement and curved elements and are
   saved in the current file format. New in the examples: field plots on cut planes (waveguide post, coax,

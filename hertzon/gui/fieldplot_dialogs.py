@@ -29,8 +29,18 @@ class FieldPlotDialog(QDialog):
             f.addRow("Name", self.name)
         self.qty = QComboBox()
         self.qty.addItems(F.QUANTITIES)
+        exprs = [e.name for e in getattr(win.doc.design, "field_exprs", None) or []]
+        if exprs:
+            self.qty.insertSeparator(self.qty.count())
+            self.qty.addItems(exprs)
         self.qty.setCurrentText(fp.quantity if fp else quantity)
-        f.addRow("Quantity", self.qty)
+        qrow = QHBoxLayout()
+        qrow.addWidget(self.qty, 1)
+        calc = QPushButton("Fields Calculator...")
+        calc.setToolTip("Define a new quantity as an expression of E, H and J")
+        calc.clicked.connect(self._calculator)
+        qrow.addWidget(calc)
+        f.addRow("Quantity", qrow)
         self.sol = QComboBox()
         sols = F.field_solutions(win.doc)
         self.sol.addItems(sols)
@@ -80,6 +90,11 @@ class FieldPlotDialog(QDialog):
         bb.accepted.connect(self.accept)
         bb.rejected.connect(self.reject)
         f.addRow(bb)
+
+    def _calculator(self) -> None:
+        """Leave this dialog for the calculator; saving the new expression there opens it again."""
+        self.reject()
+        self.win.fields_calculator(for_plot=True)
 
     def _load_freqs(self, text: str) -> None:
         self.freq.clear()
@@ -315,10 +330,11 @@ class PlotAttributesDialog(QDialog):
         a = F.attributes(fp.props)
         self._loading = True
         try:
-            base = F.base_unit(fp.quantity)
+            calc = F.calc_expression(self.win.doc, fp.quantity) is not None
+            base = "" if calc else F.base_unit(fp.quantity)    # an expression shows its own unit
             un = self.w["Units"]
             un.clear()
-            un.addItems([u for u, _ in F.UNITS[base]])
+            un.addItems([u for u, _ in F.UNITS.get(base, [])] or ["(expression)"])
             un.setCurrentText(a["Units"] or base)
             for k, wdg in self.w.items():
                 v = a[k]

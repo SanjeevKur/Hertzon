@@ -521,6 +521,11 @@ class ReportWindow(QWidget):
                 self.nf[key] = e
         else:
             self.cat.addItems(CATEGORIES)
+            if report.kind in ("Rectangular", "Data Table"):
+                self.cat.addItem("Fields")          # values of the Fields Calculator over frequency
+                from .calc_bridge import field_names_in
+                if report.traces and field_names_in(doc.design, report.traces[0]):
+                    self.cat.setCurrentText("Fields")
             self.func.addItems(FUNCS + ["<none>"])
             self.cat.currentTextChanged.connect(self._fill_qty)
         form.addRow("Category:", self.cat)
@@ -645,7 +650,11 @@ class ReportWindow(QWidget):
         self.qty.clear()
         n = self._ports()
         cat = self.cat.currentText()
-        if cat == "VSWR":
+        if cat == "Fields":
+            from .calc_bridge import value_names
+            self.qty.addItems(value_names(self.doc))
+            self.func.setCurrentText("<none>")       # values in their own unit (W, V, J, ...)
+        elif cat == "VSWR":
             self.qty.addItems([f"VSWR({i})" for i in range(1, n + 1)])
         elif cat == "Gamma":
             self.qty.addItems([f"S({i},{i})" for i in range(1, n + 1)])
@@ -1233,10 +1242,38 @@ class ReportWindow(QWidget):
                 raise RuntimeError(f"No data for '{tr}'")
             return f, y
         expr, sol = split_trace(tr)
+        from .calc_bridge import field_names_in
+        if field_names_in(self.doc.design, expr):
+            return self._field_trace(expr, sol, root)
         data = self._sol_data(sol, root)
         xs, _, _ = x_axis(data)
         v = eval_expr(data, expr, self._outvars())
         return xs, (np.real(v) if np.iscomplexobj(v) else v.astype(float))
+
+    def _field_trace(self, expr: str, sol: str | None, root=None):
+        """A trace with values of the Fields Calculator: each named value at every frequency with saved
+        fields (S, Y, Z of the trace are taken at those frequencies)."""
+        from .calc_bridge import field_names_in, over_frequency
+        cache = self.__dict__.setdefault("_cache", {})
+        key = sol or self.sol.currentText()
+        st, _, data = load_solution(self.doc, key, root)
+        port = int(self.report.props.get("port", "1") or 1)
+        names = dict(_FUNCS)
+        f = None
+        for n in field_names_in(self.doc.design, expr):
+            ck = ("field", n, key, root, port)
+            if ck not in cache:
+                cache[ck] = over_frequency(self.doc, n, key, port, store=st if root is not None else None)
+            f, names[n] = cache[ck]
+        names.update({"Freq": f, "pi": np.pi, "j": 1j})
+        if data is not None and re.search(r"\b(S|Y|Z|VSWR)\s*\(", expr):
+            idx = [int(np.argmin(np.abs(data["freq"] - x))) for x in f]
+            sub = {**data, "freq": data["freq"][idx], **{k: v[idx] for k, v in data.items()
+                                                       if isinstance(v, np.ndarray) and v.shape[:1] == data["freq"].shape}}
+            for k in ("S", "Y", "Z", "VSWR"):
+                names[k] = (lambda k=k: lambda *a: eval_expr(sub, f"{k}({','.join(map(str, a))})"))()
+        v = np.asarray(_ast_eval(expr, names)) * np.ones(len(f))
+        return f / 1e9, (np.real(v) if np.iscomplexobj(v) else v.astype(float))
 
     def _sol_data(self, sol: str | None, root=None):
         cache = self.__dict__.setdefault("_cache", {})
@@ -1600,6 +1637,8 @@ class ReportWindow(QWidget):
         st, sol, data = self._data()
         cols = self._family_columns()
         f, xlabel, _ = x_axis(data)
+        if self.report.traces and len(cols) and len(cols[0][1]) != len(f):
+            f = self._trace_xy(self.report.traces[0], self._variations()[0][1])[0]   # field values: their freqs
         self.table.setColumnCount(1 + len(cols))
         self.table.setHorizontalHeaderLabels([xlabel] + [c[0] for c in cols])
         self.table.setRowCount(len(f))

@@ -430,6 +430,7 @@ class MainWindow(QMainWindow):
         pf = fm.addMenu("Plot Fields")
         for q in F.QUANTITIES:
             pf.addAction(q, lambda _=False, q=q: self.plot_fields(q))
+        fm.addAction("Fields Calculator...", lambda: self.fields_calculator())
         fm.addAction("Animate Last Field Plot", self.toggle_animation)
         fm.addAction("Export Animation as GIF...", self.export_animation_gif)
         fm.addAction("Clear Field Overlays", self.clear_overlays)
@@ -798,6 +799,7 @@ class MainWindow(QMainWindow):
         g.small("Attributes", "options", lambda: self._on_current_plot(self.field_plot_attributes))
         g.small("Clear", "clear", self.clear_overlays)
         g.small("Plot Mesh", "plot_mesh", lambda: self.plot_mesh())
+        g.large("Calculator", "calculator", lambda: self.fields_calculator())
         rb.setCurrentIndex(2)
 
     def _connect(self) -> None:
@@ -3988,6 +3990,35 @@ class MainWindow(QMainWindow):
         while self.tabs.count() > 1:
             self.tabs.removeTab(1)
         self.report_tabs.clear()
+
+    def fields_calculator(self, name: str | None = None, for_plot: bool = False) -> None:
+        """Results > Fields > Fields Calculator: the docked panel for expressions of E, H and J."""
+        from .calculator import CalculatorPanel
+        if getattr(self, "calc_dock", None) is None:
+            self.calc_panel = CalculatorPanel(self)
+            self.calc_dock = self._dock("Fields Calculator", self.calc_panel, Qt.RightDockWidgetArea)
+        self.calc_dock.show()
+        self.calc_dock.raise_()
+        self.calc_panel.refresh()
+        if for_plot:
+            self.calc_panel.open_for_plot()
+        elif name:
+            self.calc_panel.load(name)
+
+    def field_report(self, name: str, solution: str = "", port: int = 1) -> None:
+        """A rectangular report of a value of the Fields Calculator over frequency."""
+        sols = F.field_solutions(self.doc)
+        # over frequency: a sweep with saved fields, else the given solution
+        sol = next((s for s in sols if not s.endswith("LastAdaptive")), solution or (sols[0] if sols else ""))
+        names = {r.name for r in self.des.reports}
+        i = 1
+        while f"Fields Plot {i}" in names:
+            i += 1
+        r = Report(f"Fields Plot {i}", "Rectangular", sol, [name], {"port": str(port)})
+        self.des.reports.append(r)
+        self.doc.dirty = True
+        self.doc.changed.emit("results")
+        self.open_report(r.name)
 
     def plot_fields(self, quantity: str) -> None:
         from .fieldplot_dialogs import FieldPlotDialog, default_attributes

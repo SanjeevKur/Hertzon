@@ -12,6 +12,19 @@ QUANTITIES = ["Mag_E", "ComplexMag_E", "Vector_E", "Mag_H", "ComplexMag_H", "Vec
               "Mag_Jsurf", "ComplexMag_Jsurf", "Vector_Jsurf", "Mag_J", "ComplexMag_J", "Vector_J"]
 
 
+def calc_expression(doc, quantity: str) -> str | None:
+    """The Fields Calculator expression a field plot shows (its quantity is the name of a named
+    expression of the design, or "=expression" for an unsaved one), else None."""
+    if quantity.startswith("="):
+        return quantity[1:]
+    if quantity in QUANTITIES or quantity in ("Mesh", "RadiationField"):
+        return None
+    for e in getattr(getattr(doc, "design", None), "field_exprs", None) or []:
+        if e.name == quantity:
+            return e.expr
+    return None
+
+
 def base_unit(quantity: str) -> str:
     """Unit of a field quantity: E in V/m, H and the surface current Jsurf in A/m, the volume current J in A/m^2."""
     if quantity.endswith("_E"):
@@ -939,14 +952,31 @@ def prepare_overlay(doc, view, quantity: str, solution: str, freq_index: int = 0
     spacing_m = at["ArrowSpacing"] * LENGTH_UNITS.get(doc.design.units, 1e-3) if at["ArrowSpacing"] > 0 else 0.0
     st, sol = store_for(doc, solution)
     grid, fields = load_grid(st, sol)
-    jsurf = "Jsurf" in quantity
-    which = "E" if quantity.endswith(("_E", "_J")) else "H"
-    key = f"{which}_{freq_index}_{port}"
-    if key not in fields:
-        raise RuntimeError(f"No {which} field for port {port} at frequency index {freq_index}")
-    vec = source_vector(doc, st, fields, grid, which, freq_index, port)
-    if quantity.endswith("_J"):
-        vec = vec * _conductivity(doc, grid, float(fields[f"freq_{freq_index}"][0]))[:, None]
+    calc = calc_expression(doc, quantity)
+    unit, signed, static = base_unit(quantity), False, False
+    if calc is not None:
+        # a named expression of the Fields Calculator, evaluated at every field node of the solution
+        from .calc_bridge import field_values_at_grid
+        from ..post.calc import units as UN
+        vals, cinfo, _ = field_values_at_grid(doc, calc, solution, freq_index, port)
+        jsurf, vector, unit = False, cinfo.vec, UN.label(cinfo.unit)
+        if cinfo.vec:
+            vec = vals
+        else:
+            # a scalar keeps its sign: the colour shows Re{v e^(j phase)}, a real expression ignores the phase
+            vec = np.zeros((len(vals), 3), complex)
+            vec[:, 0] = vals
+            signed, static = True, not cinfo.cx
+    else:
+        jsurf = "Jsurf" in quantity
+        vector = quantity.startswith("Vector")
+        which = "E" if quantity.endswith(("_E", "_J")) else "H"
+        key = f"{which}_{freq_index}_{port}"
+        if key not in fields:
+            raise RuntimeError(f"No {which} field for port {port} at frequency index {freq_index}")
+        vec = source_vector(doc, st, fields, grid, which, freq_index, port)
+        if quantity.endswith("_J"):
+            vec = vec * _conductivity(doc, grid, float(fields[f"freq_{freq_index}"][0]))[:, None]
     work = grid.copy(deep=False)
     # every step from here to the plotted points (surfaces, jumps, interpolation) is linear in the field,
     # so the field at phase p is cos(p) re + sin(p) qu there (see _at_phase)
@@ -1014,7 +1044,7 @@ def prepare_overlay(doc, view, quantity: str, solution: str, freq_index: int = 0
             L = _line_length(a.edge_mesh)
             if L <= 0:
                 continue
-            if quantity.startswith("Vector"):
+            if vector:
                 # the arrow spacing, else the number of arrows on all lines of the plot (Arrows on line)
                 h = line_spacing(line_cells or _cell_lengths(a.edge_mesh), spacing_m, int(at["LineArrows"]))
             else:
@@ -1022,7 +1052,7 @@ def prepare_overlay(doc, view, quantity: str, solution: str, freq_index: int = 0
             targets.append(_line_points(a.edge_mesh, h))
             continue
         if a is not None and a.mesh is not None:
-            if quantity.startswith("Vector") and not jsurf and doc.design.obj(o).dim == 3:
+            if vector and not jsurf and doc.design.obj(o).dim == 3:
                 targets.append(_volume_points(work, a.mesh, nmax=max(10, int(at["ArrowCount"])), h=spacing_m))
             else:
                 targets.append(on_solver_mesh(o, a.mesh))
@@ -1065,7 +1095,8 @@ def prepare_overlay(doc, view, quantity: str, solution: str, freq_index: int = 0
         sampled.append(s)
         shared.append(inv)
     return dict(at=at, quantity=quantity, jsurf=jsurf, work=work, sampled=sampled, shared=shared, arrows={},
-                spacing_m=spacing_m, note=note, freq_index=freq_index, port=port, freqs=frequencies(fields))
+                spacing_m=spacing_m, note=note, freq_index=freq_index, port=port, freqs=frequencies(fields),
+                vector=vector, unit=unit, signed=signed, static=static)
 
 
 def _at_phase(base: pv.DataSet, c: float, s: float) -> pv.DataSet:
@@ -1123,11 +1154,16 @@ def overlay_at(prep: dict, phase_deg: float = 0.0, log_scale: bool = False, vmin
     if at["Scale"] == "Use Limits":
         vmin, vmax = at["Min"], at["Max"]
     c, sn = float(np.cos(np.radians(phase_deg))), float(np.sin(np.radians(phase_deg)))
+    if prep.get("static"):
+        c, sn = 1.0, 0.0                   # a real expression does not change with phase
+    vector = prep.get("vector", quantity.startswith("Vector"))
     meshes = []
     sampled = []
     for base, inv in zip(prep["sampled"], prep["shared"]):
         s = _at_phase(base, c, sn)
-        if jsurf:
+        if prep.get("signed"):
+            mag = np.asarray(s.point_data["re"])[:, 0].copy()
+        elif jsurf:
             mag = np.linalg.norm(s.point_data["re"], axis=1)
             if quantity.startswith("ComplexMag"):
                 mag = np.sqrt(mag ** 2 + (np.asarray(s.point_data["qu"]) ** 2).sum(axis=1))
@@ -1143,7 +1179,7 @@ def overlay_at(prep: dict, phase_deg: float = 0.0, log_scale: bool = False, vmin
             mag = np.where(good, acc[inv] / np.maximum(cnt[inv], 1), mag)
         s.point_data[quantity] = mag
         sampled.append(s)
-    unit = base_unit(quantity)
+    unit = prep.get("unit", base_unit(quantity))
     ufac, ulabel = _unit(at["Units"], unit)
     title = quantity
     for s in sampled:
@@ -1186,7 +1222,7 @@ def overlay_at(prep: dict, phase_deg: float = 0.0, log_scale: bool = False, vmin
         common = dict(scalars=quantity, cmap=cmap, clim=clim, log_scale=log_scale, opacity=opacity,
                       n_colors=int(at["Colors"]) if at["Colors"] else 256,
                       show_scalar_bar=k == 0, scalar_bar_args=bar if k == 0 else None)
-        if quantity.startswith("Vector"):
+        if vector:
             sub, hh = _arrow_points(prep, k, prep["sampled"][k])
             if sub.n_points == 0:
                 continue
