@@ -6,6 +6,12 @@ the GitHub release notes.
 ## Unreleased
 
 ### Added
+- **Animations as GIF**: **Export GIF...** in the animation bar (or Fields > Export Animation as GIF...)
+  saves all frames of the running animation as a looping GIF. Each frame is the view exactly as shown, in
+  its pixel size, and the GIF runs at the speed you see: the bar measures the frames per second actually
+  drawn during playback (shown next to the speed setting, it can be lower than the setting for heavy
+  plots) and the GIF uses that rate. Without a measurement the export first plays the animation for a
+  moment to measure it.
 - **Object groups**: Edit > Group (Ctrl+G) puts the selected objects, also solids, sheets and lines
   together, into one group. A click on a member in the 3D view selects the whole group, so Move, Rotate,
   Mirror, Copy, Hide or Delete act on all of it; the model tree lists the groups under **Groups** (rename,
@@ -85,6 +91,13 @@ the GitHub release notes.
   both sides and gave each one the value of just one side. Along a patch antenna this drew red sawtooth streaks
   on the patch and at the ground plane. The cut now keeps the elements apart, and the smooth plot averages
   only within one material. The peaks at metal edges and corners stay: they are real.
+- **Thicken sheet direction**: a positive thickness now always thickens to the positive side of the
+  sheet's main axis (+Z for a sheet in XY), a negative one to the other side. Before, the direction followed
+  the winding of the outline, so a rectangle dragged to -X or -Y, or a polyline drawn clockwise and covered,
+  was thickened to -Z. While the Thicken dialog is open, an arrow on each sheet in the 3D view shows the
+  direction, and the new option **Reverse direction** thickens to the other side.
+  Projects saved with an earlier version keep their shape: on loading, Reverse direction is set for the
+  sheets that were thickened to the negative side.
 - **Far fields with symmetry planes**: the far field (gain, directivity, pattern, RCS) of a half or quarter
   model now includes the mirror images at Symmetry boundaries (Perfect E or Perfect H, planes parallel to XY,
   YZ or ZX). Before, only the simulated part radiated. Fields and radiated power refer to 1 W into the full

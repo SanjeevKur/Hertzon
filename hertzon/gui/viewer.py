@@ -371,6 +371,7 @@ class ModelerView(QWidget):
         self.actors: dict[str, ObjActors] = {}
         self.highlight_actors: list = []
         self.assignment_actors: list = []
+        self.direction_actors: list = []                 # Thicken sheet preview arrows
         self.overlay_actors: dict[str, list] = {}
         self.overlay_bars: dict[str, list[str]] = {}     # colour bar titles per overlay
         self.overlay_focus: set[str] | None = None       # overlays drawn full, the others half transparent
@@ -1482,6 +1483,54 @@ class ModelerView(QWidget):
         mapper.SetResolveCoincidentTopologyToPolygonOffset()
         mapper.SetRelativeCoincidentTopologyPolygonOffsetParameters(-1.5, -2)
         self.highlight_actors.append(act)
+
+    def show_thicken_arrows(self, names: list[str], reverse: bool = False, both: bool = False) -> None:
+        """Arrows on the sheets in names pointing where Thicken sheet grows (both ways with both)."""
+        from ..kernel.occ import thicken_direction
+        self.clear_thicken_arrows(render=False)
+        for name in names:
+            a = self.actors.get(name)
+            if a is None or a.dim != 2 or a.mesh is None or a.mesh.n_points < 3:
+                continue
+            P = np.asarray(a.mesh.points, float)
+            c = P.mean(axis=0)
+            # the normal of the best fitting plane; its sign does not matter, thicken_direction sets it
+            n = np.linalg.svd(P - c, full_matrices=False)[2][-1]
+            d = thicken_direction(n, reverse)
+            size = float(np.linalg.norm(np.ptp(P, axis=0)))
+            L = 0.3 * size if np.isfinite(size) and size > 0 else 1.0
+            for v in ((d, -d) if both else (d,)):
+                arrow = pv.Arrow(start=c, direction=v, scale=L, tip_length=0.25, tip_radius=0.08,
+                                 shaft_radius=0.03)
+                act = self.plotter.add_mesh(arrow, color="#c2185b", pickable=False, render=False,
+                                            reset_camera=False)
+                # drawn over the model, so an arrow pointing behind the sheet is not hidden by it
+                self.plotter.renderer.RemoveActor(act)
+                self._top_layer().AddActor(act)
+                self.direction_actors.append(act)
+        self.request_render()
+
+    def clear_thicken_arrows(self, render: bool = True) -> None:
+        for act in self.direction_actors:
+            self._top_layer().RemoveActor(act)
+        self.direction_actors = []
+        if render:
+            self.request_render()
+
+    def _top_layer(self):
+        """A renderer on top of the model with the same camera, for helpers that must stay visible."""
+        r = getattr(self, "_top_ren", None)
+        if r is None:
+            rw = self.plotter.render_window
+            rw.SetNumberOfLayers(max(2, rw.GetNumberOfLayers()))
+            r = vtk.vtkRenderer()
+            r.SetLayer(1)
+            r.InteractiveOff()
+            r.SetViewport(self.plotter.renderer.GetViewport())
+            r.SetActiveCamera(self.plotter.renderer.GetActiveCamera())
+            rw.AddRenderer(r)
+            self._top_ren = r
+        return r
 
     def show_assignments(self, assignments: list, kind_colors: dict | None = None) -> None:
         """Highlight the faces of boundaries/excitations (selected in the project tree)."""

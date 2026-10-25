@@ -421,6 +421,7 @@ class MainWindow(QMainWindow):
         for q in F.QUANTITIES:
             pf.addAction(q, lambda _=False, q=q: self.plot_fields(q))
         fm.addAction("Animate Last Field Plot", self.toggle_animation)
+        fm.addAction("Export Animation as GIF...", self.export_animation_gif)
         fm.addAction("Clear Field Overlays", self.clear_overlays)
         om = m.addMenu("Optimization")
         om.addAction("Add Parametric...", self.add_parametric)
@@ -2342,7 +2343,18 @@ class MainWindow(QMainWindow):
         dlg = NamedPropsDialog(kind, kind, props, vals, self.doc.evaluator(), parent=self,
                                info=f"Apply to: {', '.join(objs)}")
         dlg.name_edit.setEnabled(False)
-        if dlg.exec() != QDialog.Accepted:
+        if kind == "ThickenSheet":          # arrows in the 3D view show where the sheets grow
+            def arrows(*_):
+                self.view.show_thicken_arrows(objs, dlg.values.get("ReverseDirection") == "True",
+                                              dlg.values.get("BothSides") == "True")
+            dlg.grid.changed.connect(arrows)
+            arrows()
+        try:
+            accepted = dlg.exec() == QDialog.Accepted
+        finally:
+            if kind == "ThickenSheet":
+                self.view.clear_thicken_arrows()
+        if not accepted:
             return
         self.add_command_to_selection(kind, dlg.values, objs)
 
@@ -4200,6 +4212,12 @@ class MainWindow(QMainWindow):
             self.tabs.setCurrentIndex(0)
             self.anim_bar.load([p.name for p in fps], frames)
             self.anim_bar.play()
+
+    def export_animation_gif(self) -> None:
+        if not self.anim_bar.frames:
+            QMessageBox.information(self, "Export GIF", "Start an animation first (Animate).")
+            return
+        self.anim_bar.export_gif()
 
     def clear_overlays(self, hide: bool = True) -> None:
         """Remove all field overlays; hide: they stay hidden until a plot or the Field Overlays folder is

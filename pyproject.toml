@@ -21,6 +21,7 @@ dependencies = [
     "pyvista>=0.43",
     "pyvistaqt>=0.11",
     "matplotlib>=3.7",
+    "pillow",                     # GIF export of field animations (also needed by matplotlib)
     "numpy",
     "pymmg>=1.0",                 # mmg3d (LGPL) for the "Mmg" adaptive refinement
     "fast-simplification>=0.1",   # MIT, shape-preserving STL simplification on import
