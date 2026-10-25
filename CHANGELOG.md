@@ -3,6 +3,16 @@
 All notable changes of each release. The release workflow copies the section of the released version into
 the GitHub release notes.
 
+## Unreleased
+
+### Changed
+- **More accurate RCS of scattering problems**: with an incident plane wave, Auto Open now leaves one
+  wavelength of air around the objects (was half a wavelength), and the far field is integrated with Gauss
+  points over a box λ/8 around the scatterers instead of over mesh faces halfway to the boundary. For the
+  250 mm PEC sphere at 1 GHz the error of the bistatic RCS against the exact solution drops from 0.6 dB to
+  about 0.4 dB (monostatic from +1.4 dB to +0.2 dB), with fewer tetrahedra (26k instead of 38k). A padding
+  set in the design is used as before.
+
 ## 0.2.1 (2026-10-25)
 
 ### Added

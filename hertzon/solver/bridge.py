@@ -30,6 +30,7 @@ from .results import ResultStore
 from .emerge_compat import amr as _amr
 
 C0 = 299792458.0
+FF_OFFSET = 1 / 8     # far-field box of a scattering problem: distance from the scatterers in wavelengths
 TAG = "@@HZN "
 
 
@@ -53,6 +54,38 @@ def warn(msg: str) -> None:
 
 class SolveAbort(RuntimeError):
     pass
+
+
+# --------------------------------------------------------------------------------------------
+# Far field helpers
+# --------------------------------------------------------------------------------------------
+def box_quadrature(bounds, panel: float, skip=()) -> tuple[np.ndarray, np.ndarray]:
+    """Gauss points and outward area vectors (3, N) on the faces of the box (x0, y0, z0, x1, y1, z1):
+    4 x 4 Gauss-Legendre points on panels of at most `panel`; faces (axis, 0 low / 1 high) in skip are left out."""
+    g, gw = np.polynomial.legendre.leggauss(4)
+    pts, wts = [], []
+    for ax in range(3):
+        u, v = [i for i in range(3) if i != ax]
+        rule = []
+        for i in (u, v):
+            a, b = float(bounds[i]), float(bounds[i + 3])
+            n = max(1, math.ceil((b - a) / panel))
+            e = np.linspace(a, b, n + 1)
+            h = np.diff(e) / 2
+            rule.append(((e[:-1] + h)[:, None] + h[:, None] * g).ravel())
+            rule.append((h[:, None] * gw).ravel())
+        U, V = np.meshgrid(rule[0], rule[2], indexing="ij")
+        A = np.outer(rule[1], rule[3]).ravel()
+        for side in (0, 1):
+            if (ax, side) in skip:
+                continue
+            P = np.empty((3, U.size))
+            P[u], P[v], P[ax] = U.ravel(), V.ravel(), bounds[ax + 3 * side]
+            N = np.zeros((3, U.size))
+            N[ax] = A if side else -A
+            pts.append(P)
+            wts.append(N)
+    return np.concatenate(pts, axis=1), np.concatenate(wts, axis=1)
 
 
 # --------------------------------------------------------------------------------------------
@@ -405,7 +438,8 @@ class Bridge:
             pad = settings.get("AutoOpenPadding", "")
             margin = self.ev.length(pad) if pad.strip() else (lam / 4 if kind == "PML" else lam / 3)  # guidance
             if self.plane_wave() is not None and not pad.strip():
-                margin = lam / 2     # room for the far-field surface inside the scattered-field ABC
+                # scattering problem: the first-order scattered-field ABC reflects less the farther out it is
+                margin = lam
         W = xmax - xmin + 2 * margin
         D = ymax - ymin + 2 * margin
         H = zmax - zmin + 2 * margin
@@ -427,14 +461,14 @@ class Bridge:
             self.region_geo = box
             self.open_kind = "Radiation"
             if self.plane_wave() is not None:
-                # far-field integration surface between scatterer and the scattered-field ABC, where the
-                # scattered field is free of the boundary's reflection error
-                h = margin / 2
-                sx0, sy0, sz0, sx1, sy1, sz1 = self.scatter_bbox
-                self.ff_box = em.geo.Box(sx1 - sx0 + 2 * h, sy1 - sy0 + 2 * h, sz1 - sz0 + 2 * h,
-                                         position=(sx0 - h, sy0 - h, sz0 - h))
-                self.ff_box.set_material(em.lib.AIR).background()
-                self.ff_center = ((sx0 + sx1) / 2, (sy0 + sy1) / 2, (sz0 + sz1) / 2)
+                # far-field integration surface: a box close around the scatterers, integrated with Gauss
+                # points (not over mesh faces), where the mesh is fine and the ABC reflection is weak
+                sb = np.asarray(self.scatter_bbox, np.float64)
+                gap = min(min(sb[i] - pos[i], pos[i] + (W, D, H)[i] - sb[i + 3]) for i in range(3))
+                d = min(FF_OFFSET * lam, gap / 2)
+                self.ff_bounds = np.r_[sb[:3] - d, sb[3:] + d]
+                self.ff_region = np.r_[pos, pos[0] + W, pos[1] + D, pos[2] + H]
+                self.ff_panel = lam / 4
         self.store.write_json("auto_open.json", {"kind": kind, "padding": margin, "lambda_low": lam,
                                                  "box": [*pos, W, D, H]})
 
@@ -520,8 +554,6 @@ class Bridge:
                 sel = self.region_geo.boundary()
                 self.open_bc(sel, 1)
                 self.open_faces = sel
-                if getattr(self, "ff_box", None) is not None:
-                    self.open_faces = self.ff_box.boundary()
             else:
                 self.open_faces = self.region_geo.boundary()
         self.sym_faces = []
@@ -1248,20 +1280,27 @@ class Bridge:
         if self.open_faces is None:
             return False
         m = self.m
-        try:
-            # the far field box of a scattering problem lies inside the air, with tets on both sides: EMerge
-            # orients the normals away from one neighbouring tet, which flips on a locally refined mesh,
-            # so they are aligned away from the box centre (the box is convex)
-            surf = m.mesh.boundary_surface(self.open_faces.tags, inward_normal=False,
-                                           origin=getattr(self, "ff_center", None))
-            vis = np.asarray(surf.edge_centers, np.float64)
-            wns = np.zeros_like(vis)
-            nrm, ar, t2e = surf.normals, surf.areas, surf.tri_to_edge
-            for j in range(3):
-                np.add.at(wns.T, t2e[j], (nrm * ar / 3).T)
-        except Exception as ex:  # noqa: BLE001
-            warn(f"Far field surface not available: {ex}")
-            return False
+        if getattr(self, "ff_bounds", None) is not None:
+            b = np.array(self.ff_bounds, np.float64)
+            skip = set()
+            for _, ax, p in self.symmetry_planes():
+                # only the solved half lies in the mesh; the face on the mirror plane is left out
+                if b[ax] < p < b[ax + 3] or abs(p - b[ax]) < 1e-9 or abs(p - b[ax + 3]) < 1e-9:
+                    lower = (self.ff_region[ax] + self.ff_region[ax + 3]) / 2 < p
+                    b[ax + 3 if lower else ax] = p
+                    skip.add((ax, 1 if lower else 0))
+            vis, wns = box_quadrature(b, self.ff_panel, skip)
+        else:
+            try:
+                surf = m.mesh.boundary_surface(self.open_faces.tags, inward_normal=False)
+                vis = np.asarray(surf.edge_centers, np.float64)
+                wns = np.zeros_like(vis)
+                nrm, ar, t2e = surf.normals, surf.areas, surf.tri_to_edge
+                for j in range(3):
+                    np.add.at(wns.T, t2e[j], (nrm * ar / 3).T)
+            except Exception as ex:  # noqa: BLE001
+                warn(f"Far field surface not available: {ex}")
+                return False
         out = {"vis": vis, "wns": wns, "stamp": np.array([time.time_ns()])}
         planes = self.symmetry_planes()
         if planes:
