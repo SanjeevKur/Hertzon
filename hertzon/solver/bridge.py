@@ -1024,11 +1024,11 @@ class Bridge:
             method = str(p.get("RefinementMethod", ""))
             snap = (np.asarray(m.mesh.nodes), np.asarray(m.mesh.tets), m.mesh.n_tets)
             g = _refine_delaunay(m, error, lengths, pct, growth, step, self.out) if method.startswith("Local") else None
-            if g is None and method.startswith("AURA"):
+            if g is None and method.startswith(AURA_METHODS):
                 g = _refine_aura(m, error, pct, step)
             if g is not None:
                 grow = g
-            elif method.startswith("Local") or method.startswith("AURA"):  # failed local pass: keep the refinement so far
+            elif method.startswith("Local") or method.startswith(AURA_METHODS):  # failed local pass: keep the refinement so far
                 grow = _refine_stable(m, error, lengths, pct, growth, step, snap)
             elif _refine_local(m, p, coords, sizes, ratio, growth, pct, error, lengths):
                 grow = (m.mesh.n_tets / last_n - 1) * 100
@@ -1757,11 +1757,11 @@ def adaptive_loop(m, fa: list[float], p: dict, out: Path, on_pass=None, key: str
         # the current mesh, kept for the stable fallback: a failed local pass may already have reset the model
         snap = (np.asarray(m.mesh.nodes), np.asarray(m.mesh.tets), m.mesh.n_tets)
         grow = _refine_delaunay(m, error, lengths, pct, growth, step, out) if method.startswith("Local") else None
-        if grow is None and method.startswith("AURA"):
+        if grow is None and method.startswith(AURA_METHODS):
             grow = _refine_aura(m, error, pct, step)
         if grow is not None:
             pass
-        elif method.startswith("Remesh (stable") or method.startswith("Local") or method.startswith("AURA"):
+        elif method.startswith("Remesh (stable") or method.startswith("Local") or method.startswith(AURA_METHODS):
             grow = _refine_stable(m, error, lengths, pct, growth, step, snap)
         else:
             # keep the ratio that hit the target in the previous pass (good first guess)
@@ -1989,8 +1989,11 @@ def _refine_delaunay(m, error, lengths, pct: float, growth: float, step: int, ou
         return None
 
 
+AURA_METHODS = ("hzAURA", "AURA")   # "AURA (EMerge)" is the former name of "hzAURA (EMerge)" (scripts, AI clients)
+
+
 def _refine_aura(m, error, pct: float, step: int):
-    """AURA (EMerge): EMerge's own local refinement, longest-edge bisection of the worst tets followed by
+    """hzAURA (EMerge): EMerge's own local refinement, longest-edge bisection of the worst tets followed by
     flips and smoothing. Every old node stays. Returns the growth in percent, None when it failed (the
     caller then re-meshes with the stable size field)."""
     try:
@@ -2013,11 +2016,11 @@ def _refine_aura(m, error, pct: float, step: int):
         m._install_refined_mesh(new)
         m._local_mesh = None
         grow = (m.mesh.n_tets / n0 - 1) * 100
-        info(f"Pass {step}: AURA refinement -> {m.mesh.n_tets} tetrahedra (+{grow:.1f}%), "
+        info(f"Pass {step}: hzAURA refinement -> {m.mesh.n_tets} tetrahedra (+{grow:.1f}%), "
              f"min. quality {rep['q_min']:.3f}, {time.time() - t0:.2f} s")
         return grow
     except Exception as e:  # noqa: BLE001
-        warn(f"AURA refinement failed ({e}); re-meshing the model instead")
+        warn(f"hzAURA refinement failed ({e}); re-meshing the model instead")
         return None
 
 
