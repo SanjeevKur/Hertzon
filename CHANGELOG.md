@@ -3,6 +3,18 @@
 All notable changes of each release. The release workflow copies the section of the released version into
 the GitHub release notes.
 
+## Unreleased
+
+### Changed
+- **Field plots on helper sheets follow the sheet**: a field plot on a non-model object is drawn again on
+  the new shape when the object is moved, resized or otherwise changed. The solution stays valid, as
+  non-model objects are not part of the solve.
+
+### Fixed
+- **Clean edges for field plots on drawn planes**: the plot on a non-model sheet now ends exactly on the
+  sheet's outline, also for round outlines and sheets with holes. Before, whole cut triangles stuck out over
+  the edge or were missing next to it.
+
 ## 0.2.0 (2026-10-25)
 
 ### Added

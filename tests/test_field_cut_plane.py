@@ -62,3 +62,43 @@ def test_drawn_plane_is_cut_from_the_solver_mesh(plot):
     on = np.isclose(np.asarray(s.points)[:, 2], 0.5e-3)
     assert on.any() and set(np.round(vals[on])) == {LOW, HIGH}
     assert F._sheet_cut(work, pv.Sphere(radius=0.2e-3, center=(0.5e-3,) * 3)) is None   # not flat
+
+
+def test_drawn_plane_is_cropped_exactly_to_its_outline(plot):
+    """Round outlines and holes: the plot covers exactly the sheet, without whole cut triangles sticking out
+    over the edge or missing next to it."""
+    grid, fields = F.load_grid(*F.store_for(None, ""))
+    work = grid.copy(deep=False)
+    work.point_data["cmag"] = np.linalg.norm(np.abs(fields["E_0_1"]), axis=1)
+    ring = pv.Disc(center=(0.5e-3, 0.4e-3, 0.5e-3), normal=(0, 1, 0), inner=0.1e-3, outer=0.35e-3, c_res=48)
+    s = F._sheet_cut(work, ring)
+    assert s.area == pytest.approx(ring.area, rel=1e-6)
+    r = np.linalg.norm(np.asarray(s.points)[:, [0, 2]] - 0.5e-3, axis=1)
+    assert r.min() >= 0.1e-3 * np.cos(np.pi / 48) - 1e-9 and r.max() <= 0.35e-3 + 1e-9
+    tilted = pv.Rectangle([[0.1e-3, 0.2e-3, 0.1e-3], [0.9e-3, 0.7e-3, 0.1e-3], [0.9e-3, 0.7e-3, 0.9e-3]])
+    assert F._sheet_cut(work, tilted).area == pytest.approx(tilted.area, rel=1e-6)
+
+
+def test_plot_on_a_helper_sheet_follows_the_sheet():
+    """Resizing or moving a non-model sheet draws its field plot again on the new shape; a model object,
+    an unchanged sheet or a plot that is not on screen are left alone."""
+    from hertzon.gui import main_window as MW
+
+    objs = {"Cut": types.SimpleNamespace(model=False), "Patch": types.SimpleNamespace(model=True)}
+    plots = [types.SimpleNamespace(name="Mag_E1", objects=["Cut"], faces=[]),
+             types.SimpleNamespace(name="Mag_E2", objects=["Patch"], faces=[]),
+             types.SimpleNamespace(name="Mag_E3", objects=["Cut"], faces=[])]
+    des = types.SimpleNamespace(field_plots=plots, has_obj=lambda n: n in objs, obj=lambda n: objs[n])
+    drawn = []
+    win = types.SimpleNamespace(des=des, doc=types.SimpleNamespace(tess={"Cut": object(), "Patch": object()}),
+                                view=types.SimpleNamespace(overlay_actors={"Mag_E1": 1, "Mag_E2": 1}),
+                                anim_bar=types.SimpleNamespace(names=[], close_player=lambda: None),
+                                _draw_field_plot=lambda n, loud=True: drawn.append(n))
+    for n in ("_helper_geometry", "_follow_helper_plots"):
+        setattr(win, n, types.MethodType(getattr(MW.MainWindow, n), win))
+    win._plot_geom = {p.name: win._helper_geometry(p) for p in plots}
+    win._follow_helper_plots()
+    assert drawn == []                                      # nothing changed
+    win.doc.tess = {"Cut": object(), "Patch": object()}     # both rebuilt (e.g. the sheet was resized)
+    win._follow_helper_plots()
+    assert drawn == ["Mag_E1"]                              # not the model object, not the hidden plot
