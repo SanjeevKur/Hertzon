@@ -134,6 +134,8 @@ solvers, openEMS (FDTD), electrostatics and magnetostatics, circuit co-simulatio
 
 ## Examples
 
+In Hertzon, **File > Open Example** opens any of them as an untitled copy, so the shipped files stay unchanged.
+
 | File | What it shows |
 |---|---|
 | `examples/WaveguidePost.hzn` | WR-90 waveguide with an inductive PEC post, wave ports, interpolating sweep 8-12 GHz |

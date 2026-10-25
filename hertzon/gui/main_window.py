@@ -62,6 +62,12 @@ def _point_triangle_dist(P, A, B, C):
 
 AXIS_OF_PLANE = {"XY": "Z", "YZ": "X", "XZ": "Y", "ZX": "Y"}
 FILE_FILTER = "Hertzon project (*.hzn)"
+EXAMPLES_DIR = Path(__file__).resolve().parents[2] / "examples"   # next to the package in the repo and installs
+
+
+def example_projects(folder: Path = EXAMPLES_DIR) -> list[Path]:
+    """The shipped example projects for File > Open Example, sorted by name."""
+    return sorted(folder.glob("*.hzn"), key=lambda p: p.stem.lower()) if folder.is_dir() else []
 
 
 class MainWindow(QMainWindow):
@@ -243,6 +249,8 @@ class MainWindow(QMainWindow):
         m = mb.addMenu("&File")
         for a in (self.a_new, self.a_open, self.a_save, self.a_saveas):
             m.addAction(a)
+        self.example_menu = m.addMenu("Open Example")
+        self._fill_examples()
         self.recent_menu = m.addMenu("Recent Projects")
         self._fill_recent()
         m.addAction("Save As Archive...", self.save_archive)
@@ -1485,7 +1493,8 @@ class MainWindow(QMainWindow):
                 d.units = self.settings.value("modeler/default_units", d.units)
             self.set_project(p)
 
-    def file_open(self, path: str | None = None) -> None:
+    def file_open(self, path: str | None = None, as_copy: bool = False) -> None:
+        """Open a project; as_copy opens it untitled (examples), so saving asks for a new file."""
         if not self.maybe_save():
             return
         if not path:
@@ -1494,7 +1503,7 @@ class MainWindow(QMainWindow):
             return
         auto = Path(path + ".auto")
         load_from = path
-        if auto.exists() and auto.stat().st_mtime > Path(path).stat().st_mtime:
+        if not as_copy and auto.exists() and auto.stat().st_mtime > Path(path).stat().st_mtime:
             r = QMessageBox.question(self, "Autosave",
                                      f"An autosave of {Path(path).name} is newer than the project file "
                                      "(Hertzon was not closed normally).\n\nOpen the autosaved version?",
@@ -1545,7 +1554,7 @@ class MainWindow(QMainWindow):
         try:
             try:
                 proj = Project.load(load_from)
-                proj.path = path
+                proj.path = None if as_copy else path
             except Exception as e:  # noqa: BLE001
                 QMessageBox.critical(self, "Open", f"Cannot open {path}:\n{e}")
                 return
@@ -1560,6 +1569,9 @@ class MainWindow(QMainWindow):
             self.doc.dirty = True
             self._update_title()
             self.msgs.add("warning", f"Recovered from autosave; save to keep it ({path})")
+        if as_copy:
+            self.msgs.add("info", f"Opened example {Path(path).stem} as a copy; save it to a folder of your own")
+            return
         self._add_recent(path)
         self.msgs.add("info", f"Opened {path}")
 
@@ -1759,7 +1771,13 @@ class MainWindow(QMainWindow):
             self.msgs.add("info", f"Script saved: {path}")
 
     def file_save_as(self) -> bool:
-        path, _ = QFileDialog.getSaveFileName(self, "Save Project As", f"{self.doc.project.name}.hzn", "Hertzon project (*.hzn)")
+        start = f"{self.doc.project.name}.hzn"
+        if not self.doc.project.path:      # untitled or an example copy: not into the working (install) folder
+            from PySide6.QtCore import QStandardPaths
+            docs = QStandardPaths.writableLocation(QStandardPaths.DocumentsLocation)
+            if docs:
+                start = str(Path(docs) / start)
+        path, _ = QFileDialog.getSaveFileName(self, "Save Project As", start, "Hertzon project (*.hzn)")
         if not path:
             return False
         if not path.endswith(".hzn"):
@@ -1771,6 +1789,13 @@ class MainWindow(QMainWindow):
         self._update_title()
         self.project_tree.rebuild()
         return True
+
+    def _fill_examples(self) -> None:
+        self.example_menu.clear()
+        for p in example_projects():
+            self.example_menu.addAction(p.stem, lambda _=False, p=p: self.file_open(str(p), as_copy=True))
+        if self.example_menu.isEmpty():
+            self.example_menu.addAction("(no examples installed)").setEnabled(False)
 
     def _fill_recent(self) -> None:
         self.recent_menu.clear()

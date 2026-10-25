@@ -10,6 +10,9 @@ the GitHub release notes.
   than the running version, the Message Manager and the status bar say "Hertzon X is available" with a link
   to the release page. The start does not wait for it, and without network nothing is shown. Switch it off in
   Tools > Options > General (or with the environment variable `HERTZON_NO_UPDATE_CHECK=1`).
+- **File > Open Example**: lists the example projects shipped with Hertzon (patch antenna, hairpin filter,
+  waveguide post, RCS models, ...) and opens the chosen one as an untitled copy. The example files stay
+  unchanged; Save asks for a new file name (in the Documents folder) and an analysis asks to save first.
 
 ## 0.2.0 (2026-10-25)
 

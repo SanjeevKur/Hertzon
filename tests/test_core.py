@@ -1034,3 +1034,13 @@ def test_grid_and_triad_stay_at_the_origin_of_a_far_model():
     near, far = cam.GetClippingRange()
     d = float(np.dot(-np.array(cam.GetPosition()), np.array(cam.GetDirectionOfProjection())))
     assert d > 0.016 and near <= d - 0.001 and far >= d + 0.001
+
+
+def test_open_example_lists_the_shipped_examples(tmp_path):
+    """File > Open Example: every shipped .hzn is listed, sorted by name; no folder gives an empty list."""
+    from hertzon.gui.main_window import EXAMPLES_DIR, example_projects
+    names = [p.stem for p in example_projects()]
+    assert EXAMPLES_DIR == EX.resolve()
+    assert {"PatchAntenna", "HairpinFilter", "WaveguidePost", "DroneRCS"} <= set(names)
+    assert names == sorted(names, key=str.lower)
+    assert example_projects(tmp_path / "missing") == []
