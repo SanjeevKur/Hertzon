@@ -434,6 +434,7 @@ class Bridge:
                 self.ff_box = em.geo.Box(sx1 - sx0 + 2 * h, sy1 - sy0 + 2 * h, sz1 - sz0 + 2 * h,
                                          position=(sx0 - h, sy0 - h, sz0 - h))
                 self.ff_box.set_material(em.lib.AIR).background()
+                self.ff_center = ((sx0 + sx1) / 2, (sy0 + sy1) / 2, (sz0 + sz1) / 2)
         self.store.write_json("auto_open.json", {"kind": kind, "padding": margin, "lambda_low": lam,
                                                  "box": [*pos, W, D, H]})
 
@@ -1248,7 +1249,11 @@ class Bridge:
             return False
         m = self.m
         try:
-            surf = m.mesh.boundary_surface(self.open_faces.tags, inward_normal=False)
+            # the far field box of a scattering problem lies inside the air, with tets on both sides: EMerge
+            # orients the normals away from one neighbouring tet, which flips on a locally refined mesh,
+            # so they are aligned away from the box centre (the box is convex)
+            surf = m.mesh.boundary_surface(self.open_faces.tags, inward_normal=False,
+                                           origin=getattr(self, "ff_center", None))
             vis = np.asarray(surf.edge_centers, np.float64)
             wns = np.zeros_like(vis)
             nrm, ar, t2e = surf.normals, surf.areas, surf.tri_to_edge

@@ -28,6 +28,14 @@ the GitHub release notes.
   time (and it stayed so after closing the player). The bar now fits the view as it is; long texts in it
   are cut instead.
 
+### Fixed
+- **RCS and far fields of scattering problems with AURA refinement**: the far-field surface (the box
+  between scatterer and radiation boundary) lies inside the air, and the direction of its normals was taken
+  from a neighbouring element. After an AURA pass part of them pointed inwards, so the monostatic RCS
+  jumped by several dB from pass to pass (NATO sphere: between -6.5 and +3.5 dB from the Mie value, and
+  the scattered power through the box fell below zero). The normals now point away from the box centre.
+  Local (Delaunay) and Remesh were not affected.
+
 ## 0.2.0 (2026-10-25)
 
 ### Added
