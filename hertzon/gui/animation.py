@@ -308,7 +308,7 @@ def precompute(win, fps, frames: list[tuple[str, dict]]) -> list[tuple[str, dict
             freqs[fp.name] = []
     out = [(label, {}) for label, _ in frames]
     for j, fp in enumerate(fps):
-        static = None
+        static = prep = None
         fixed = fp.quantity.startswith("ComplexMag") and frames and frames[0][1].get("swept") == "phase"
         for i, (label, o) in enumerate(frames):
             if prog.wasCanceled():
@@ -331,8 +331,15 @@ def precompute(win, fps, frames: list[tuple[str, dict]]) -> list[tuple[str, dict
                     out[i][1][fp.name] = out[0][1][fp.name]
                 continue
             try:
-                meshes, _ = F.make_overlay(win.doc, win.view, fp.quantity, fp.solution, fi, port, ph,
-                                           fp.faces, fp.objects, fp.plane, attrs=fp.props, animating=True)
+                if sw == "phase":
+                    # only the phase changes: the plot is built once, every frame just turns the field
+                    if prep is None:
+                        prep = F.prepare_overlay(win.doc, win.view, fp.quantity, fp.solution, fi, port,
+                                                 fp.faces, fp.objects, fp.plane, attrs=fp.props)
+                    meshes, _ = F.overlay_at(prep, ph, animating=True)
+                else:
+                    meshes, _ = F.make_overlay(win.doc, win.view, fp.quantity, fp.solution, fi, port, ph,
+                                               fp.faces, fp.objects, fp.plane, attrs=fp.props, animating=True)
             except Exception:  # noqa: BLE001
                 if len(fps) == 1:
                     raise
