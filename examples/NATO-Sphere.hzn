@@ -10,6 +10,7 @@
     "AutoOpenBoundary": "Radiation",
     "AutoOpenPadding": "",
     "FilterAirMargin": "12mm",
+    "MaterialOverride": "True",
     "RadiatingStructure": "False",
     "Sources": "{\"IncPWave1\": {\"mag\": 1.0, \"phase\": 0.0}}",
     "FieldType": "Total"
@@ -118,7 +119,7 @@
       "RefinementRatio": "0.6",
       "GrowthRate": "1.6",
       "EnforceRefinementPercent": "True",
-      "RefinementMethod": "Local (Delaunay)",
+      "RefinementMethod": "hzAURA (EMerge)",
       "SaveFields": "True",
       "Threads": "0",
       "_BasisNames": "v2"
@@ -245,6 +246,8 @@
     }
    ],
    "coord_systems": [],
+   "optimetrics": [],
+   "parametrics": [],
    "working_cs": "Global",
    "notes": ""
   }
@@ -252,5 +255,5 @@
  "variables": {},
  "materials": [],
  "format": "hertzon-project",
- "version": 1
+ "version": 2
 }

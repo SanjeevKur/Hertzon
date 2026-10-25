@@ -14,6 +14,9 @@ to find the best number of cores and sweep processes for it.
 | System | Windows 10, Python 3.13 |
 
 Measured on 18 and 19 October 2026, shortly before the rename to Hertzon.
+These runs used the mesh refinement of that time; the benchmark projects now use the default
+hzAURA refinement, so the meshes and times of a new run differ (sizes and 4-core times with hzAURA:
+[`examples/benchmark/scaling`](../examples/benchmark/scaling/README.md)).
 
 ## Broadband sweeps
 

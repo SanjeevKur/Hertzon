@@ -10,6 +10,7 @@
     "AutoOpenBoundary": "Radiation",
     "AutoOpenPadding": "",
     "FilterAirMargin": "12mm",
+    "MaterialOverride": "True",
     "RadiatingStructure": "True"
    },
    "variables": {
@@ -56,8 +57,8 @@
        "props": {
         "Position": "-Ws/2,-Ls/2,0",
         "Axis": "Z",
-        "Width": "Ws",
-        "Height": "Ls"
+        "XSize": "Ws",
+        "YSize": "Ls"
        },
        "suppressed": false
       }
@@ -81,8 +82,8 @@
        "props": {
         "Position": "-Wp/2,-Lp/2,h",
         "Axis": "Z",
-        "Width": "Wp",
-        "Height": "Lp"
+        "XSize": "Wp",
+        "YSize": "Lp"
        },
        "suppressed": false
       },
@@ -122,8 +123,8 @@
        "props": {
         "Position": "-wf/2-gap,-Lp/2,h",
         "Axis": "Z",
-        "Width": "wf+2*gap",
-        "Height": "inset"
+        "XSize": "wf+2*gap",
+        "YSize": "inset"
        },
        "suppressed": false
       }
@@ -147,8 +148,8 @@
        "props": {
         "Position": "-wf/2,-Ls/2,h",
         "Axis": "Z",
-        "Width": "wf",
-        "Height": "Ls/2-Lp/2+inset"
+        "XSize": "wf",
+        "YSize": "Ls/2-Lp/2+inset"
        },
        "suppressed": false
       }
@@ -172,8 +173,8 @@
        "props": {
         "Position": "-wf/2,-Ls/2,0",
         "Axis": "Y",
-        "Width": "h",
-        "Height": "wf"
+        "ZSize": "h",
+        "XSize": "wf"
        },
        "suppressed": false
       }
@@ -260,16 +261,17 @@
       "MinimumPasses": "2",
       "MinimumConvergedPasses": "2",
       "BasisOrder": "Second Order",
+      "CurvedElements": "True",
       "Solver": "Auto",
       "ErrorInclusion": "50",
       "RefinementRatio": "0.6",
       "GrowthRate": "2",
       "EnforceRefinementPercent": "True",
-      "RefinementMethod": "Remesh",
-      "HybridRemeshPasses": "4",
-      "HybridBlockPasses": "2",
+      "RefinementMethod": "Remesh (slow)",
       "SaveFields": "False",
       "Threads": "0",
+      "HybridRemeshPasses": "4",
+      "HybridBlockPasses": "2",
       "CurveMeshing": "Precise (slow)",
       "_BasisNames": "v2"
      },
@@ -318,6 +320,8 @@
     }
    ],
    "coord_systems": [],
+   "optimetrics": [],
+   "parametrics": [],
    "working_cs": "Global",
    "notes": ""
   }
@@ -325,5 +329,5 @@
  "variables": {},
  "materials": [],
  "format": "hertzon-project",
- "version": 1
+ "version": 2
 }

@@ -10,6 +10,7 @@
     "AutoOpenBoundary": "Auto",
     "AutoOpenPadding": "",
     "FilterAirMargin": "12mm",
+    "MaterialOverride": "True",
     "RadiatingStructure": "False"
    },
    "variables": {
@@ -203,7 +204,7 @@
       "RefinementRatio": "0.6",
       "GrowthRate": "1.6",
       "EnforceRefinementPercent": "True",
-      "RefinementMethod": "Local (Delaunay)",
+      "RefinementMethod": "hzAURA (EMerge)",
       "SaveFields": "True",
       "Threads": "0",
       "_BasisNames": "v2"
@@ -246,49 +247,13 @@
    ],
    "field_plots": [
     {
-     "name": "Mag_E1",
+     "name": "Mag_E_Cut",
      "quantity": "Mag_E",
      "solution": "Setup1 : LastAdaptive",
-     "faces": [
-      {
-       "obj": "Waveguide",
-       "face": 3,
-       "sig": [
-        0.01143,
-        0.025,
-        0.01016,
-        0.0,
-        0.0,
-        1.0,
-        0.001135931416529423,
-        0.9999999999999994
-       ]
-      }
-     ],
+     "faces": [],
      "objects": [],
-     "plane": "",
+     "plane": "XY@b/2",
      "props": {
-      "ColorMap": "Rainbow",
-      "Invert": "False",
-      "Colors": "0",
-      "Divisions": "30",
-      "Scale": "Auto",
-      "Min": "0.254384",
-      "Max": "16802.7",
-      "dB": "False",
-      "Units": "V/m",
-      "Log": "False",
-      "LimitPrecision": "False",
-      "Precision": "4",
-      "AnimScale": "False",
-      "Format": "Automatic",
-      "ArrowSize": "1",
-      "MapSize": "False",
-      "ArrowTail": "True",
-      "ArrowCount": "1500",
-      "Transparency": "0",
-      "PlotType": "Smooth Shaded",
-      "ShowGrid": "True",
       "port": "1",
       "freq": "0",
       "phase": "0"
@@ -296,6 +261,8 @@
     }
    ],
    "coord_systems": [],
+   "optimetrics": [],
+   "parametrics": [],
    "working_cs": "Global",
    "notes": ""
   }
@@ -303,5 +270,5 @@
  "variables": {},
  "materials": [],
  "format": "hertzon-project",
- "version": 1
+ "version": 2
 }

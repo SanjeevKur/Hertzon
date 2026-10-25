@@ -88,7 +88,7 @@ Legend: **✔** implemented and tested · **◐** implemented with limitations �
 | Use Matrix Convergence (ΔMag, ΔPhase) | ✔ |
 | Minimum Number of Passes, Minimum Converged Passes | ✔ |
 | Percent Refinement per pass | ✔ (enforced, adaptive error-driven refinement) |
-| Mesh refinement method | ✔ AURA (EMerge, default), Local (Delaunay, hzmesh), Remesh, Remesh (stable, experimental); see [MESHER.md](MESHER.md) |
+| Mesh refinement method | ✔ hzAURA (EMerge, default), Local (Delaunay, hzmesh), Remesh (slow), Remesh (stable, experimental); see [MESHER.md](MESHER.md) |
 | Curved elements on curved surfaces | ✔ (EMerge, default on) |
 | Maximum Refinement (tets) | ✔ |
 | Basis function order | ✔ Zero Order (6), First Order (20, default), Second Order (complete quadratic, 30); no Mixed Order |

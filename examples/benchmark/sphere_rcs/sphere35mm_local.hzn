@@ -10,6 +10,7 @@
     "AutoOpenBoundary": "Auto",
     "AutoOpenPadding": "",
     "FilterAirMargin": "12mm",
+    "MaterialOverride": "True",
     "RadiatingStructure": "False"
    },
    "variables": {},
@@ -91,7 +92,7 @@
       "RefinementRatio": "0.6",
       "GrowthRate": "1.6",
       "EnforceRefinementPercent": "True",
-      "RefinementMethod": "Local (Delaunay, experimental)",
+      "RefinementMethod": "Local (Delaunay)",
       "SaveFields": "True",
       "Threads": "0",
       "_BasisNames": "v2"
@@ -104,6 +105,8 @@
    "reports": [],
    "field_plots": [],
    "coord_systems": [],
+   "optimetrics": [],
+   "parametrics": [],
    "working_cs": "Global",
    "notes": ""
   }
@@ -111,5 +114,5 @@
  "variables": {},
  "materials": [],
  "format": "hertzon-project",
- "version": 1
+ "version": 2
 }
