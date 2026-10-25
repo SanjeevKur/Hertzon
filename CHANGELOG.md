@@ -6,6 +6,9 @@ the GitHub release notes.
 ## Unreleased
 
 ### Added
+- **File > Open Example**: lists the example projects shipped with Hertzon (patch antenna, hairpin filter,
+  waveguide post, RCS models, ...) and opens the chosen one as an untitled copy. The example files stay
+  unchanged; Save asks for a new file name (in the Documents folder) and an analysis asks to save first.
 - **Animations as GIF**: **Export GIF...** in the animation bar (or Fields > Export Animation as GIF...)
   saves all frames of the running animation as a looping GIF. Each frame is the view exactly as shown, in
   its pixel size, and the GIF runs at the speed you see: the bar measures the frames per second actually
