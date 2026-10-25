@@ -96,6 +96,10 @@ the GitHub release notes.
   conductors the line runs across the shorter side of the sheet as before.
 
 ### Fixed
+- **Animate no longer resizes the 3D view**: the player bar under the view asked for about 1100 pixels of
+  width, so starting an animation squeezed the model tree and widened the 3D view to the same size every
+  time (and it stayed so after closing the player). The bar now fits the view as it is; long texts in it
+  are cut instead.
 - **Cut planes no longer show jagged spots at material boundaries and metal sheets**: the field is stored per
   element and jumps at a substrate surface, a patch or a ground plane, but the cut plane merged the points of
   both sides and gave each one the value of just one side. Along a patch antenna this drew red sawtooth streaks

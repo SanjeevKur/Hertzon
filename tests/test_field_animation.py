@@ -89,3 +89,31 @@ def test_phase_animation_defaults_to_35_steps():
     assert dlg.nph.value() == 35
     frames = dlg.frames(fp)
     assert len(frames) == 34 and frames[0][1]["phase"] == 0.0     # 0..360: the last step equals the first
+
+
+def test_animation_bar_keeps_the_view_width():
+    """Showing the player under the 3D view must not squeeze the model tree or change the view's width."""
+    import os
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    from PySide6.QtWidgets import QApplication, QSplitter, QVBoxLayout, QWidget
+    from hertzon.gui.animation import AnimationBar
+    app = QApplication.instance() or QApplication([])
+    split = QSplitter()
+    split.addWidget(QWidget())
+    box = QWidget()
+    lay = QVBoxLayout(box)
+    view = QWidget()
+    lay.addWidget(view, 1)
+    bar = AnimationBar(box)
+    lay.addWidget(bar)
+    split.addWidget(box)
+    split.resize(900, 500)
+    split.setSizes([200, 700])
+    split.show()
+    app.processEvents()
+    before = split.sizes()
+    bar.title.setText("<b>" + "a very long field plot name, " * 10 + "</b>")
+    bar.show()
+    app.processEvents()
+    assert split.sizes() == before
+    split.close()
