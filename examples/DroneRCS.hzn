@@ -10,6 +10,7 @@
     "AutoOpenBoundary": "Radiation",
     "AutoOpenPadding": "",
     "FilterAirMargin": "12mm",
+    "MaterialOverride": "True",
     "RadiatingStructure": "False",
     "Sources": "{\"IncPWave1\": {\"mag\": 1.0, \"phase\": 0.0}}",
     "FieldType": "Total"
@@ -49,8 +50,8 @@
        "props": {
         "Position": "2000,1800,0",
         "Axis": "Z",
-        "Width": "-4000",
-        "Height": "-3800"
+        "XSize": "-4000",
+        "YSize": "-3800"
        },
        "suppressed": false
       }
@@ -119,7 +120,7 @@
       "RefinementRatio": "0.6",
       "GrowthRate": "1.6",
       "EnforceRefinementPercent": "True",
-      "RefinementMethod": "Remesh",
+      "RefinementMethod": "hzAURA (EMerge)",
       "SaveFields": "True",
       "Threads": "0",
       "_BasisNames": "v2"
@@ -217,6 +218,8 @@
     }
    ],
    "coord_systems": [],
+   "optimetrics": [],
+   "parametrics": [],
    "working_cs": "Global",
    "notes": ""
   }
@@ -224,5 +227,5 @@
  "variables": {},
  "materials": [],
  "format": "hertzon-project",
- "version": 1
+ "version": 2
 }

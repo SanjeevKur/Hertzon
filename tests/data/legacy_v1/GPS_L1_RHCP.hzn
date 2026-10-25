@@ -1,0 +1,507 @@
+{
+ "name": "GPS_L1_RHCP",
+ "designs": [
+  {
+   "name": "GPS_L1",
+   "units": "mm",
+   "settings": {
+    "SolutionType": "Modal",
+    "AutoOpen": "Auto Open",
+    "AutoOpenBoundary": "Auto",
+    "AutoOpenPadding": "",
+    "FilterAirMargin": "12mm",
+    "RadiatingStructure": "True"
+   },
+   "variables": {
+    "cs": "25mm",
+    "h": "4mm",
+    "gs": "40mm",
+    "hf": "0.8mm",
+    "L": "20.225mm",
+    "c": "1.4mm",
+    "fx": "4mm",
+    "rp": "0.4mm",
+    "ra": "0.9mm",
+    "wf": "1.5mm",
+    "fy": "2.0mm",
+    "ds": "1.8mm",
+    "ls": "7.4mm",
+    "rv": "0.3mm"
+   },
+   "objects": [
+    {
+     "name": "Ceramic",
+     "history": [
+      {
+       "kind": "CreateBox",
+       "props": {
+        "Position": "-cs/2,-cs/2,0",
+        "XSize": "cs",
+        "YSize": "cs",
+        "ZSize": "h"
+       },
+       "suppressed": false
+      }
+     ],
+     "material": "Ceramic_er20",
+     "solve_inside": true,
+     "model": true,
+     "color": "#bebebe",
+     "transparency": 0.0,
+     "wireframe": false,
+     "visible": true,
+     "consumed_by": null,
+     "group": "",
+     "orientation": "Global"
+    },
+    {
+     "name": "FeedBoard",
+     "history": [
+      {
+       "kind": "CreateBox",
+       "props": {
+        "Position": "-gs/2,-gs/2,-hf",
+        "XSize": "gs",
+        "YSize": "gs",
+        "ZSize": "hf"
+       },
+       "suppressed": false
+      }
+     ],
+     "material": "FR4_epoxy",
+     "solve_inside": true,
+     "model": true,
+     "color": "#5fb3a6",
+     "transparency": 0.0,
+     "wireframe": false,
+     "visible": true,
+     "consumed_by": null,
+     "group": "",
+     "orientation": "Global"
+    },
+    {
+     "name": "Pin",
+     "history": [
+      {
+       "kind": "CreateCylinder",
+       "props": {
+        "CenterPosition": "fx,fy,-hf",
+        "Axis": "Z",
+        "Radius": "rp",
+        "Height": "h+hf",
+        "NumberOfSegments": "0"
+       },
+       "suppressed": false
+      }
+     ],
+     "material": "pec",
+     "solve_inside": true,
+     "model": true,
+     "color": "#d6a45c",
+     "transparency": 0.0,
+     "wireframe": false,
+     "visible": true,
+     "consumed_by": null,
+     "group": "",
+     "orientation": "Global"
+    },
+    {
+     "name": "Patch",
+     "history": [
+      {
+       "kind": "CreatePolyline",
+       "props": {
+        "Points": "-L/2+c,-L/2,h;L/2,-L/2,h;L/2,L/2-c,h;L/2-c,L/2,h;-L/2,L/2,h;-L/2,-L/2+c,h",
+        "SegmentTypes": "",
+        "Closed": "True",
+        "Covered": "True"
+       },
+       "suppressed": false
+      }
+     ],
+     "material": "pec",
+     "solve_inside": true,
+     "model": true,
+     "color": "#8080ff",
+     "transparency": 0.0,
+     "wireframe": false,
+     "visible": true,
+     "consumed_by": null,
+     "group": "",
+     "orientation": "Global"
+    },
+    {
+     "name": "Ground",
+     "history": [
+      {
+       "kind": "CreateRectangle",
+       "props": {
+        "Position": "-gs/2,-gs/2,0",
+        "Axis": "Z",
+        "XSize": "gs",
+        "YSize": "gs"
+       },
+       "suppressed": false
+      },
+      {
+       "kind": "Subtract",
+       "props": {
+        "Tools": "AntiPad",
+        "KeepOriginals": "False"
+       },
+       "suppressed": false
+      }
+     ],
+     "material": "vacuum",
+     "solve_inside": true,
+     "model": true,
+     "color": "#8080ff",
+     "transparency": 0.0,
+     "wireframe": false,
+     "visible": true,
+     "consumed_by": null,
+     "group": "",
+     "orientation": "Global"
+    },
+    {
+     "name": "AntiPad",
+     "history": [
+      {
+       "kind": "CreateCircle",
+       "props": {
+        "CenterPosition": "fx,fy,0",
+        "Axis": "Z",
+        "Radius": "ra",
+        "NumberOfSegments": "0"
+       },
+       "suppressed": false
+      }
+     ],
+     "material": "vacuum",
+     "solve_inside": true,
+     "model": true,
+     "color": "#8080ff",
+     "transparency": 0.0,
+     "wireframe": false,
+     "visible": true,
+     "consumed_by": "Ground",
+     "group": "",
+     "orientation": "Global"
+    },
+    {
+     "name": "FeedLine",
+     "history": [
+      {
+       "kind": "CreateRectangle",
+       "props": {
+        "Position": "fx,fy-wf/2,-hf",
+        "Axis": "Z",
+        "XSize": "gs/2-fx",
+        "YSize": "wf"
+       },
+       "suppressed": false
+      }
+     ],
+     "material": "vacuum",
+     "solve_inside": true,
+     "model": true,
+     "color": "#8080ff",
+     "transparency": 0.0,
+     "wireframe": false,
+     "visible": true,
+     "consumed_by": null,
+     "group": "",
+     "orientation": "Global"
+    },
+    {
+     "name": "Port1",
+     "history": [
+      {
+       "kind": "CreateRectangle",
+       "props": {
+        "Position": "gs/2,fy-wf/2,-hf",
+        "Axis": "X",
+        "YSize": "wf",
+        "ZSize": "hf"
+       },
+       "suppressed": false
+      }
+     ],
+     "material": "vacuum",
+     "solve_inside": true,
+     "model": true,
+     "color": "#8080ff",
+     "transparency": 0.0,
+     "wireframe": false,
+     "visible": true,
+     "consumed_by": null,
+     "group": "",
+     "orientation": "Global"
+    },
+    {
+     "name": "Stub",
+     "history": [
+      {
+       "kind": "CreateRectangle",
+       "props": {
+        "Position": "gs/2-ds-wf/2,fy,-hf",
+        "Axis": "Z",
+        "XSize": "wf",
+        "YSize": "ls+rv+0.2mm"
+       },
+       "suppressed": false
+      }
+     ],
+     "material": "vacuum",
+     "solve_inside": true,
+     "model": true,
+     "color": "#8080ff",
+     "transparency": 0.0,
+     "wireframe": false,
+     "visible": true,
+     "consumed_by": null,
+     "group": "",
+     "orientation": "Global"
+    },
+    {
+     "name": "StubVia",
+     "history": [
+      {
+       "kind": "CreateCylinder",
+       "props": {
+        "CenterPosition": "gs/2-ds,fy+ls,-hf",
+        "Axis": "Z",
+        "Radius": "rv",
+        "Height": "hf",
+        "NumberOfSegments": "0"
+       },
+       "suppressed": false
+      }
+     ],
+     "material": "pec",
+     "solve_inside": true,
+     "model": true,
+     "color": "#d6a45c",
+     "transparency": 0.0,
+     "wireframe": false,
+     "visible": true,
+     "consumed_by": null,
+     "group": "",
+     "orientation": "Global"
+    },
+    {
+     "name": "Rectangle1",
+     "history": [
+      {
+       "kind": "CreateRectangle",
+       "props": {
+        "Position": "0,0,0",
+        "Axis": "X",
+        "YSize": "0.5mm",
+        "ZSize": "20mm"
+       },
+       "suppressed": false
+      }
+     ],
+     "material": "vacuum",
+     "solve_inside": true,
+     "model": true,
+     "color": "#8080ff",
+     "transparency": 0.0,
+     "wireframe": false,
+     "visible": true,
+     "consumed_by": null,
+     "group": "",
+     "orientation": "Global"
+    }
+   ],
+   "boundaries": [
+    {
+     "name": "PEC_Metal",
+     "kind": "Perfect E",
+     "props": {
+      "InfGroundPlane": "False"
+     },
+     "faces": [],
+     "objects": [
+      "Patch",
+      "Ground",
+      "FeedLine",
+      "Stub"
+     ],
+     "edges": [],
+     "enabled": true
+    }
+   ],
+   "excitations": [
+    {
+     "name": "P1",
+     "kind": "Lumped Port",
+     "props": {
+      "PortNumber": "1",
+      "Impedance": "50ohm",
+      "IntegrationLine": "gs/2,fy,-hf;gs/2,fy,0"
+     },
+     "faces": [],
+     "objects": [
+      "Port1"
+     ],
+     "edges": [],
+     "enabled": true
+    }
+   ],
+   "mesh_ops": [],
+   "setups": [
+    {
+     "name": "Setup1",
+     "props": {
+      "Enabled": "True",
+      "SolutionFrequencyMode": "Single",
+      "Frequency": "1.575GHz",
+      "MultiFrequencies": "1.572GHz,1.575GHz,1.578GHz",
+      "LowFrequency": "1GHz",
+      "HighFrequency": "10GHz",
+      "MaximumPasses": "15",
+      "MaximumDeltaS": "0.02",
+      "MaximumDeltaEnergy": "0.001",
+      "UseMatrixConvergence": "False",
+      "MaxDeltaMag": "0.02",
+      "MaxDeltaPhase": "2",
+      "LambdaRefinement": "True",
+      "LambdaTarget": "0.3333",
+      "UseFreeSpaceLambda": "False",
+      "PercentRefinement": "30",
+      "MaximumRefinement": "400000",
+      "MinimumPasses": "2",
+      "MinimumConvergedPasses": "2",
+      "BasisOrder": "First Order",
+      "CurvedElements": "True",
+      "Solver": "Auto",
+      "ErrorInclusion": "50",
+      "RefinementRatio": "0.6",
+      "GrowthRate": "1.6",
+      "EnforceRefinementPercent": "True",
+      "RefinementMethod": "Local (Delaunay)",
+      "SaveFields": "True",
+      "Threads": "0",
+      "_BasisNames": "v2"
+     },
+     "sweeps": [
+      {
+       "name": "FastDiag",
+       "props": {
+        "Enabled": "True",
+        "SweepType": "Fast",
+        "Distribution": "Linear Step",
+        "Start": "1.555GHz",
+        "Stop": "1.595GHz",
+        "Step": "0.001GHz",
+        "Count": "101",
+        "SamplesPerDecade": "20",
+        "Points": "1GHz,2GHz",
+        "SaveFields": "False",
+        "ErrorTolerance": "0.5",
+        "MaxSolutions": "250",
+        "Parallel": "False"
+       }
+      }
+     ],
+     "eigen": false
+    }
+   ],
+   "spheres": [
+    {
+     "name": "FF",
+     "props": {
+      "CoordinateSystem": "Global",
+      "PhiStart": "0deg",
+      "PhiStop": "360deg",
+      "PhiStep": "10deg",
+      "ThetaStart": "0deg",
+      "ThetaStop": "180deg",
+      "ThetaStep": "10deg"
+     }
+    }
+   ],
+   "reports": [
+    {
+     "name": "XY Plot 1",
+     "kind": "Rectangular",
+     "solution": "Setup1 : FastDiag",
+     "traces": [
+      "dB(S(1,1))"
+     ],
+     "props": {}
+    }
+   ],
+   "field_plots": [
+    {
+     "name": "Mag_Jsurf1",
+     "quantity": "Mag_Jsurf",
+     "solution": "Setup1 : LastAdaptive",
+     "faces": [],
+     "objects": [
+      "Patch"
+     ],
+     "plane": "",
+     "props": {
+      "ColorMap": "Rainbow",
+      "Invert": "False",
+      "Colors": "0",
+      "Divisions": "30",
+      "Scale": "Auto",
+      "Min": "8.55603",
+      "Max": "1789.67",
+      "dB": "False",
+      "Units": "A/m",
+      "Log": "True",
+      "LimitPrecision": "False",
+      "Precision": "4",
+      "AnimScale": "False",
+      "Format": "Automatic",
+      "ArrowSize": "1",
+      "MapSize": "False",
+      "ArrowTail": "True",
+      "ArrowCount": "1500",
+      "ArrowSpacing": "0",
+      "Transparency": "0",
+      "PlotType": "Smooth Shaded",
+      "ShowGrid": "False",
+      "port": "1",
+      "freq": "0",
+      "phase": "0"
+     }
+    }
+   ],
+   "coord_systems": [],
+   "working_cs": "Global",
+   "notes": ""
+  }
+ ],
+ "variables": {},
+ "materials": [
+  {
+   "name": "Ceramic_er20",
+   "permittivity": "20",
+   "permeability": "1",
+   "conductivity": "0",
+   "loss_tangent": "0.0005",
+   "magnetic_loss_tangent": "0",
+   "color": "#bebebe",
+   "pec": false,
+   "library": "Project",
+   "description": "",
+   "dispersion": "None",
+   "measured_frequency": "1GHz",
+   "eps_static": "4.6",
+   "eps_infinity": "4.2",
+   "relaxation_frequency": "1GHz",
+   "anisotropic": false,
+   "permittivity_tensor": "",
+   "permeability_tensor": "",
+   "loss_tangent_tensor": ""
+  }
+ ],
+ "format": "hertzon-project",
+ "version": 1
+}

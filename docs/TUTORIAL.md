@@ -1,15 +1,22 @@
 # Hertzon tutorial: from an empty window to S-parameters, gain and RCS
 
-This guide walks through four complete simulations step by step:
+This guide walks through five complete simulations step by step:
 
-1. [A waveguide with wave ports](#1-waveguide-with-wave-ports) (WR-90 with an inductive post)
-2. [A coaxial cable](#2-coaxial-cable-with-wave-ports) (50 Ω line with TEM wave ports)
-3. [A half-wave dipole](#3-half-wave-dipole) (lumped port, open region, far field and gain)
-4. [The radar cross section of a sphere](#4-radar-cross-section-of-a-sphere) (incident plane wave, RCS)
+* [1. A waveguide with wave ports](#1-waveguide-with-wave-ports) (WR-90 with an inductive post, field on a
+  cut plane, animation as GIF)
+* [2. A coaxial cable](#2-coaxial-cable-with-wave-ports) (50 Ω line with TEM wave ports)
+* [3. A half-wave dipole](#3-half-wave-dipole) (lumped port, open region, far field and gain, and the
+  [half model with a symmetry plane](#36-half-model-with-a-symmetry-plane))
+* [4. The radar cross section of a sphere](#4-radar-cross-section-of-a-sphere) (incident plane wave, RCS)
+* [7. A chip capacitor on a microstrip line](#7-a-chip-capacitor-on-a-microstrip-line) (Lumped Elements tab,
+  Lumped RLC, groups)
 
-and then shows how to let an AI assistant do the same work for you through
+and shows how to let an AI assistant do the same work for you through
 [Hertzon's MCP server](#5-let-an-ai-assistant-build-and-run-it-mcp), and how to
 [export a printed circuit board as Gerber files](#6-gerber-export-of-a-printed-circuit-board) for manufacturing.
+
+Every finished model is in `examples/` and opens with **File > Open Example**, with its reports and field
+plots ready: **Analyze All** (F5), then double-click a report or a field plot in the project tree.
 
 > **Fastest start: let an AI assistant do it.** Open **Tools > AI Assistants (MCP)...**, press
 > *Register* next to Claude Code, Claude desktop, Codex or VS Code and tick **Let AI assistants work in
@@ -60,13 +67,30 @@ creation entry (for example *CreateBox*), then edit Position, sizes and so on in
 Clicking the object itself shows its name, material and display attributes. **Draw > Create Primitive by
 Dialog...** asks for all values at once instead.
 
+**Thicken.** **Draw > Thicken Sheet...** turns a sheet into a solid. A positive thickness grows to the
+positive side of the sheet's main axis (+Z for a sheet in the XY plane), a negative one to the other side.
+While the dialog is open, an arrow on each sheet shows the direction; **Reverse direction** flips it.
+
 **Variables.** Every number accepts expressions with units, such as `a/2`, `lambda0/4` or `2.5mm+t`. Define
 variables in **Project > Design Properties...** and change them later: the model, ports and integration
 lines follow.
 
 **Solving.** **Simulation > Validation Check** lists problems before you start. **Simulation > Analyze All**
 (F5) solves every enabled setup. Each adaptive pass appears in the Progress window, and **Results >
-Solution Data...** shows the convergence table, the mesh statistics and the matrix data.
+Solution Data...** shows the convergence table, the mesh statistics and the matrix data. New setups refine
+the mesh with **hzAURA (EMerge)**: after each pass the elements with the largest error are split in place,
+and new nodes on curved faces (cylinders, spheres, free-form surfaces) land exactly on the CAD surface.
+**Curved elements** (on by default) make the tetrahedra at those surfaces follow the true shape. Both
+settings are in the setup (tabs **Advanced** and **Options**); the examples use them throughout.
+
+**Field plots, cut planes and animations.** **Results > Mag E** (or Vector E, Mag H, Mag Jsurf, ...)
+plots the field on the selected faces or objects. With **Plot on** XY, YZ or XZ and a **Cut position**
+(any expression, e.g. `b/2`) it plots on a cut plane through the whole model instead. For a plane of
+any shape and size, draw a sheet as **Non Model** object (Modeler > New Objects > Non Model, or answer
+the question after drawing) and plot on it: the plot is cut from the solver mesh, ends exactly on the
+sheet's outline and follows the sheet when you move or resize it, without solving again. Right-click a
+field plot > **Animate** runs the phase from 0 to 360°. **Export GIF...** in the animation bar saves the
+animation as a looping GIF exactly as the view shows it: same size, colours, scale and speed.
 
 **Overlapping objects.** Hertzon checks overlapping solids exactly. An object completely inside
 another (substrate in an air box, a via in the substrate) is the usual case and needs nothing: the inner
@@ -146,6 +170,8 @@ with a 2D eigenmode solve and feeds the 3D problem with it.
    * Solution frequency **Single**, Frequency `10GHz`, a frequency in the upper part of the band,
      where the mesh needs to be finest.
    * Maximum number of passes `6`, Maximum Delta S `0.02`.
+   * Leave the **Advanced** tab at **Mesh refinement: hzAURA (EMerge)** and the **Options** tab at
+     **Curved elements** on: the round post is then meshed with curved elements on its true surface.
 2. Select `Setup1` in the tree, then **Simulation > Analysis Setup > Add Frequency Sweep...**:
    Sweep type **Interpolating**, Distribution **Linear Count**, Start `8GHz`, Stop `12GHz`, Count `201`.
    An interpolating sweep solves only as many frequencies as it needs and fits the rest.
@@ -157,15 +183,23 @@ with a 2D eigenmode solve and feeds the 3D problem with it.
    between two passes.
 3. **Results > Create Report > Create Modal Solution Data Report > Rectangular Plot**: choose
    `dB(S(1,1))` and `dB(S(2,1))` over frequency. **Smith Chart** shows S11 on the Smith chart.
-4. **Results > Mag E** with the waveguide selected (or a cut plane) shows the field. **Animate** runs
-   the phase so you can see the wave travel and the post reflect it.
-5. **File > Export Touchstone...** writes `WR90_Post.s2p` for other tools.
+4. **Results > Mag E** with nothing selected: set **Plot on** to `XY` and **Cut position** to `b/2`. The
+   field appears on the plane halfway up the guide. **View > Orientation > Top** looks onto it.
+5. Right-click the plot (`Mag_E_Cut` in the example) under **Field Overlays** > **Animate**. The wave runs
+   from port 1 to the post and is partly reflected. **Export GIF...** in the bar under the view saves it.
+6. **File > Export Touchstone...** writes `WR90_Post.s2p` for other tools.
 
 ![S-parameters of the waveguide post](tutorial/wg_sparams.png)
-*S11 and S21 from 8 to 12 GHz. The thin post acts as a shunt inductance and reflects most of the power, less at higher frequencies.*
+*S11 and S21 from 8 to 12 GHz. The thin post acts as a shunt inductance and reflects most of the power, less at higher frequencies (S21 from −15.4 dB at 8 GHz to −7.2 dB at 12 GHz).*
 
 ![Electric field in the waveguide](tutorial/wg_field.png)
-*Mag E on the plane halfway up the guide (z = b/2) at 10 GHz, seen from the top. The wave comes from port 1 at the bottom, forms a standing wave in front of the post and leaks past it.*
+*`Mag_E_Cut`: Mag E on the cut plane halfway up the guide (z = b/2) at 10 GHz, seen from the top. The wave comes from port 1 at the bottom, forms a standing wave in front of the post and leaks past it.*
+
+![Animation of the field in the waveguide](tutorial/wg_animation.gif)
+*The same plot animated over the phase (Animate) and saved with **Export GIF...**: the GIF has the size, colours, scale and speed of the view.*
+
+> **What you should get** (this model solved with Hertzon 0.2.2 and hzAURA: 2 adaptive passes, 1 376
+> tetrahedra, a few seconds): at 10 GHz S11 = −0.41 dB and S21 = −10.5 dB.
 
 ---
 
@@ -217,19 +251,22 @@ Z0 = 60 Ω / √εr · ln(b/a). With εr = 2.1 (Teflon) and *a* = 0.5 mm, 50 Ω 
 3. **Analyze All**.
 4. Plot `dB(S(1,1))`, `dB(S(2,1))` and `ang_deg(S(2,1))`. A deep S11 over the whole band shows that the
    line is matched to the port, which means its impedance is the 50 Ω you designed.
+5. **Results > Vector E**, **Plot on** `XY`, **Cut position** `L/2`: the field across the line. **Results >
+   Mag E**, **Plot on** `XZ`, **Cut position** `0`: the field along it. The example has both
+   (`Vector_E_Cross`, `Mag_E_Along`).
 
 ![S-parameters of the coax](tutorial/coax_sparams.png)
-*S11 stays below −35 dB from 1 to 10 GHz, S21 is at 0 dB.*
+*S11 stays below −33 dB from 1 to 10 GHz, S21 is at 0 dB.*
 
 ![Vector E in the coax cross-section](tutorial/coax_field.png)
 ***Vector E** on the cross-section halfway along the line (plane XY at z = L/2): the radial TEM field between inner and outer conductor, strongest at the inner conductor.*
 
 ![Mag E along the coax](tutorial/coax_field2.png)
-***Mag E** on the plane XZ through the axis: a travelling wave without standing-wave pattern, because the line is matched.*
+***Mag E** on the plane XZ through the axis at phase 0°: the field passes through zero about halfway along the line, half a wavelength at 5 GHz. **Animate** shows it travel from port 1 to port 2 without a standing-wave pattern, because the line is matched.*
 
-> **What you should get** (this model solved with Hertzon 0.1.15: 2 adaptive passes, 8 939 tetrahedra,
-> about half a minute): S11 stays below −35 dB from 1 to 10 GHz, and S21 is better than −0.03 dB.
-> The phase of S21 falls by 34.9° per GHz. The theoretical value for 20 mm of PTFE line is
+> **What you should get** (this model solved with Hertzon 0.2.2 and hzAURA: 2 adaptive passes, 8 854
+> tetrahedra, about 20 seconds): S11 stays below −33 dB from 1 to 10 GHz, and S21 is better than −0.03 dB.
+> The phase of S21 falls by 34.8° per GHz. The theoretical value for 20 mm of PTFE line is
 > 360° · √2.1 · 20 mm / c0 = 34.8° per GHz.
 
 ---
@@ -302,7 +339,7 @@ Results are the input impedance (about 73 Ω at resonance), S11, the radiation p
    leave the antenna.
 
 ![S11 of the dipole](tutorial/dipole_s11.png)
-*S11 against the 73 Ω port: resonance at 0.98 GHz with −41 dB.*
+*S11 against the 73 Ω port: resonance at 0.98 GHz with −46 dB.*
 
 ![Radiation pattern of the dipole](tutorial/dipole_pattern.png)
 ***Radiation Pattern**, dB(GainTotal) over θ at φ = 0°: the figure eight with 2.2 dBi at θ = 90° and deep nulls along the dipole axis.*
@@ -313,10 +350,46 @@ Results are the input impedance (about 73 Ω at resonance), S11, the radiation p
 ![Field of the dipole](tutorial/dipole_field.png)
 ***Mag E** on the XZ plane with a logarithmic scale (Field plot **Attributes**: Log, limits 3 to 3000 V/m). The field is strongest at the rod ends and in the feed gap and falls off with distance, slowest broadside.*
 
-> **What you should get** (this model solved with Hertzon 0.1.15: 3 adaptive passes, 42 152 tetrahedra,
-> about four minutes): the input impedance is 71.7 Ω, almost purely real, at 0.975 GHz. Against the
-> 73 Ω port the deepest S11 is −41 dB at 0.98 GHz. The peak gain is 1.66, that is 2.21 dBi, at θ = 90°.
-> A thin half-wave dipole has 73 Ω and 2.15 dBi in theory.
+> **What you should get** (this model solved with Hertzon 0.2.2 and hzAURA: 4 adaptive passes, 49 782
+> tetrahedra, about three minutes on 4 cores): the input impedance is 71.6 Ω, purely real, at 0.979 GHz.
+> Against the 73 Ω port the deepest S11 is −46 dB at 0.98 GHz. The peak gain is 1.67, that is 2.22 dBi,
+> at θ = 90°. A thin half-wave dipole has 73 Ω and 2.15 dBi in theory.
+
+The example opens with these reports (`S11`, `Input Impedance`, `Gain Pattern`, `Antenna Parameters`), the
+field plot `Mag_E_XZ` and the 3D pattern `Gain3D`, and with the Fast sweep `FastFields` of step 4.
+
+### 3.6 Half model with a symmetry plane
+
+The dipole is mirror symmetric to the plane x = 0: the electric field lies in that plane and the magnetic
+field crosses it at right angles, as on a perfect magnetic conductor. A **Symmetry** boundary of type
+**Perfect H** on that plane lets you solve only the half x ≥ 0, with fewer elements and in less time. The
+far field (gain, pattern, RCS) is computed for the whole dipole: Hertzon adds the mirror image at the
+symmetry plane. The finished design is `HalfWave1GHz_Half` in `examples/Dipole.hzn`.
+
+1. Select the design and choose **Project > Copy Design**, then rename the copy.
+2. **Simulation > Solution Type...**: **Auto open region: Off**. The symmetry plane has to be an outer face
+   of the model, so the air box is drawn by hand instead of by Auto Open.
+3. Select `ArmTop` and `ArmBottom`, **Modeler > Boolean > Split...**: plane **YZ**, keep **Positive**. Only
+   the halves at x ≥ 0 remain.
+4. Set the `Gap` sheet to Position `0,0,-g/2`, XSize `r`: the half of the port sheet.
+5. **Design Properties**: add `pad = 143mm`, a third of the wavelength at the lowest sweep frequency
+   (0.7 GHz), the distance Auto Open used for the full model.
+6. **Draw > Box** `AirBox`: Position `0,-r-pad,-g/2-Larm-pad`, XSize `r+pad`, YSize `2*(r+pad)`,
+   ZSize `g+2*(Larm+pad)`, material **air**. Its face at x = 0 lies exactly on the cut faces of the arms.
+7. Press **F**, select the face of `AirBox` at x = 0 and choose **Simulation > Boundaries > Assign >
+   Symmetry**, type **Perfect H**. Select the other five faces and assign **Radiation**.
+8. Set the **Full port impedance** of the lumped port to `146ohm`. The symmetry plane cuts the port in half:
+   it sees the same voltage and half the current, so twice the impedance of the full port. (The impedance
+   multiplier of the Symmetry boundary is not applied by the solver yet, so set the port itself.)
+9. **Validation Check**, **Analyze All**.
+
+![Half model of the dipole](tutorial/dipole_half.png)
+*The half model: the air box drawn from the plane x = 0, whose face there is the Perfect H symmetry plane (highlighted). The half dipole lies on that face, in its middle.*
+
+> **What you should get** (Hertzon 0.2.2, hzAURA: 4 adaptive passes, 18 515 tetrahedra, 45 seconds on 4
+> cores instead of about three minutes for the full model): resonance at 0.978 GHz with 143.5 Ω against
+> the 146 Ω port, that is 71.8 Ω for the full dipole (full model: 71.6 Ω at 0.979 GHz). The peak gain of
+> the mirrored far field is 2.4 dBi, 0.2 dB above the full model.
 
 Change `Larm` and **Analyze All** again to move the resonance. Or let **Simulation > Optimization > Add
 Optimization...** find the length for S11 < −20 dB at 1 GHz.
@@ -363,12 +436,14 @@ That is the whole model: the air region and its radiation boundary come from Aut
      instead, the relative change of the scattered energy between passes. The default `0.001` fits.
    * **Options** tab: **Order of basis functions: Second Order** and **Curved elements** on (default).
      Curved second-order elements follow the sphere surface exactly and give accurate RCS with
-     few elements.
+     few elements. The refinement (hzAURA) puts every new node of the sphere surface onto the sphere.
 3. **Analyze All**.
 
 ### 4.5 Results
 
-1. **Create Far Fields Report > Radiation Pattern** with **Bistatic RCS**: `dB(BistaticRCSTotal)` in
+The example has the reports of this section (`Bistatic RCS`, `Monostatic RCS`) and the field plot `Mag_E_XZ`.
+
+1. **Create Far Fields Report > Radiation Pattern** with **Bistatic RCS**: `dBsm(BistaticRCSTotal)` in
    dBsm over θ at φ = 0° (the E-plane) and φ = 90° (the H-plane). θ = 180° is the backscatter
    direction, θ = 0° the forward scatter.
 2. **Create Monostatic RCS Report > Data Table** gives the backscatter RCS in m² and dBsm.
@@ -378,17 +453,18 @@ That is the whole model: the air region and its radiation boundary come from Aut
    shows the **Total**, the **Scattered** or the **Incident** field.
 
 ![Field around the sphere](tutorial/sphere_field.png)
-*Total **Mag E** on the XZ plane. The wave comes from below (k = +z, E along x): a standing wave in front of the sphere, the shadow behind it.*
+*Total **Mag E** on the XZ plane at phase 0°. The wave comes from below (k = +z, E along x): its wave fronts are bent around the sphere, with a standing wave in front of it and the shadow behind it. **Animate** shows the wave pass the sphere.*
 
 ![Bistatic RCS of the sphere](tutorial/sphere_bistatic.png)
 *Bistatic RCS in dBsm over θ at φ = 0°. The forward scatter at θ = 0° is strongest. θ = 180° is the backscatter, the monostatic RCS.*
 
 ![Monostatic RCS over the passes](tutorial/sphere_mono.png)
-***Monostatic RCS** over the adaptive passes: it settles at −13.43 dBsm. The Mie series gives −13.48 dBsm.*
+***Monostatic RCS** over the adaptive passes: −13.45 dBsm after the first and −13.74 dBsm after the second pass, when the scattered energy has converged. The Mie series gives −13.48 dBsm.*
 
-> **What you should get** (this model solved with Hertzon 0.1.15: 6 adaptive passes, 7 728 curved
-> second-order tetrahedra, about half a minute): a monostatic RCS of 0.0455 m² (−13.43 dBsm). The Mie
-> series gives 0.0448 m² (−13.48 dBsm), so the difference is 1.3 % or 0.05 dB.
+> **What you should get** (this model solved with Hertzon 0.2.2 and hzAURA: 2 adaptive passes, 5 657 curved
+> second-order tetrahedra, about ten seconds): a monostatic RCS of 0.0423 m² (−13.74 dBsm). The Mie
+> series gives 0.0448 m² (−13.48 dBsm), so the difference is about 0.25 dB. With more passes (Minimum
+> number of passes) the value moves by about ±0.15 dB around −13.7 dBsm.
 > `examples/benchmark/sphere_rcs/mie_pec.py` computes the Mie value for any radius and frequency.
 
 For your own RCS models, import the geometry with **Modeler > Import...** (STEP, IGES, BREP or STL)
@@ -502,13 +578,50 @@ drills are derived is described in [GERBER_EXPORT.md](GERBER_EXPORT.md).
 
 ---
 
+## 7. A chip capacitor on a microstrip line
+
+**Goal:** a DC-block capacitor (2.2 pF, size 0603) in a 50 Ω microstrip line, as it would be mounted:
+pads, the part with its typical series inductance and loss, and the field solution around it. The finished
+design is `Microstrip50_DCBlock` in `examples/Microstrip.hzn`, next to the plain line `Microstrip50`.
+
+1. Open `examples/Microstrip.hzn` (**File > Open Example**), select the design `Microstrip50` and choose
+   **Project > Copy Design**.
+2. **Design Properties**: add `gap = 1mm`. Rename `Trace` to `TraceA` and set its YSize to
+   `Lsub/2-gap/2`. Draw a second trace `TraceB`: **Draw > Rectangle**, Position `-w/2,Lsub/2+gap/2,h`,
+   Axis `Z`, XSize `w`, YSize `Lsub/2-gap/2`. Add it to the boundary `Copper_Trace` (and to the mesh
+   operation), so both halves are the same 35 µm copper.
+3. Press **O**, click `TraceA` and Ctrl+click `TraceB`. On the **Lumped Elements** tab open the menu of
+   **Capacitor** and pick **0603**.
+4. In the dialog enter `2.2pF`, keep **Planar** and **Typical ESL and ESR** (0.45 nH and 0.05 Ω for 0603)
+   and press OK. Hertzon puts the part into the gap: two pads from the trace ends to the land pattern
+   (made of the same copper as `TraceA`), the element sheet `C1` with the **Lumped RLC** boundary
+   `C1_RLC` (Series RLC) and its integration line from pad to pad.
+5. The three parts form the group `C1` (model tree, **Groups**): a click on any of them selects the whole
+   part, so **Edit > Arrange > Move** moves pads, element and integration line together.
+6. **Analyze All** and plot `dB(S(1,1))` and `dB(S(2,1))` (report `S Parameters` in the example).
+
+![The DC-block capacitor in the gap of the line](tutorial/dcblock_model.png)
+*The line with the 0603 capacitor in the middle: the two pads and the element sheet (green) between them form the group `C1`.*
+
+![S-parameters with the DC-block capacitor](tutorial/dcblock_sparams.png)
+*S11 and S21 from 1 to 6 GHz. At 1 GHz the 2.2 pF still block part of the signal (S21 −1.6 dB); at 3.4 GHz the capacitance, the ESL and the inductance of the pads cancel and the line is matched (S11 −54 dB). Near 4.75 GHz a narrow resonance of the mounted part takes up to 1.4 dB (also found with a discrete sweep).*
+
+For a measured part, choose **Touchstone** on the Lumped Elements tab and the vendor's .s2p file; with
+**3D** the part gets a body with metal terminations and its mounted inductance comes from the field
+solution instead of the typical ESL. See [LUMPED_ELEMENTS.md](LUMPED_ELEMENTS.md).
+
+---
+
 ## Where to go next
 
-* `examples/` has thirteen finished projects, from a microstrip line to a Rotman lens. See the table in the
+* `examples/` has thirteen finished projects, from a microstrip line to a Rotman lens, all with hzAURA
+  and curved elements; most open with their reports and field plots. See the table in the
   [README](../README.md#examples).
 * **Tools > Antenna Design > Rectangular Patch...** and **Tools > Filter Design > Tapped Hairpin...** create
   complete, parametrized designs with setup, sweep and optimization from a few specifications.
 * [MESHER.md](MESHER.md) explains how adaptive meshing works. [FEATURE_MATRIX.md](FEATURE_MATRIX.md)
   shows what is implemented.
+* **Tools > Solver Benchmark** times the projects of `examples/benchmark/scaling` on your computer and
+  suggests the number of cores and sweep processes.
 * **File > Export > EMerge Python Script** turns any design into a stand-alone EMerge script.
 * **File > Export > Gerber...** writes Gerber X2 and Excellon files of a board ([section 6](#6-gerber-export-of-a-printed-circuit-board)).

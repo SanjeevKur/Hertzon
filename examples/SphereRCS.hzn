@@ -9,7 +9,8 @@
     "AutoOpen": "Auto Open",
     "AutoOpenBoundary": "Radiation",
     "AutoOpenPadding": "",
-    "FilterAirMargin": "12mm"
+    "FilterAirMargin": "12mm",
+    "MaterialOverride": "True"
    },
    "variables": {
     "R": "100mm"
@@ -92,7 +93,7 @@
       "RefinementRatio": "0.6",
       "GrowthRate": "1.6",
       "EnforceRefinementPercent": "True",
-      "RefinementMethod": "Local (Delaunay)",
+      "RefinementMethod": "hzAURA (EMerge)",
       "SaveFields": "True",
       "Threads": "0",
       "_BasisNames": "v2"
@@ -115,8 +116,45 @@
      }
     }
    ],
-   "reports": [],
-   "field_plots": [],
+   "reports": [
+    {
+     "name": "Bistatic RCS",
+     "kind": "Radiation Pattern",
+     "solution": "Setup1 : LastAdaptive",
+     "traces": [
+      "dBsm(BistaticRCSTotal)"
+     ],
+     "props": {
+      "cut": "Phi",
+      "cut_value": "0",
+      "plot": "Rectangular"
+     }
+    },
+    {
+     "name": "Monostatic RCS",
+     "kind": "Monostatic RCS",
+     "solution": "Setup1 : AdaptivePasses",
+     "traces": [
+      "dBsm(MonostaticRCSTotal)"
+     ],
+     "props": {}
+    }
+   ],
+   "field_plots": [
+    {
+     "name": "Mag_E_XZ",
+     "quantity": "Mag_E",
+     "solution": "Setup1 : LastAdaptive",
+     "faces": [],
+     "objects": [],
+     "plane": "XZ@0",
+     "props": {
+      "port": "1",
+      "freq": "0",
+      "phase": "0"
+     }
+    }
+   ],
    "coord_systems": [],
    "optimetrics": [],
    "parametrics": [],
@@ -127,5 +165,5 @@
  "variables": {},
  "materials": [],
  "format": "hertzon-project",
- "version": 1
+ "version": 2
 }

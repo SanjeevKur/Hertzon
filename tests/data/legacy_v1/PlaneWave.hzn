@@ -1,0 +1,675 @@
+{
+ "name": "PlaneWave",
+ "designs": [
+  {
+   "name": "Design1",
+   "units": "mm",
+   "settings": {
+    "SolutionType": "Modal",
+    "AutoOpen": "Off",
+    "AutoOpenBoundary": "Auto",
+    "AutoOpenPadding": "",
+    "FilterAirMargin": "12mm",
+    "RadiatingStructure": "False"
+   },
+   "variables": {
+    "frequency": "2.45GHz",
+    "c0": "299792458",
+    "lamb0": "c0/frequency",
+    "Boxsize": "3*lamb0"
+   },
+   "objects": [
+    {
+     "name": "Box1",
+     "history": [
+      {
+       "kind": "CreateBox",
+       "props": {
+        "Position": "-Boxsize/2,-Boxsize/2,-Boxsize/2",
+        "XSize": "Boxsize",
+        "YSize": "Boxsize",
+        "ZSize": "Boxsize"
+       },
+       "suppressed": false
+      }
+     ],
+     "material": "vacuum",
+     "solve_inside": true,
+     "model": true,
+     "color": "#e6f2ff",
+     "transparency": 0.8,
+     "wireframe": false,
+     "visible": true,
+     "consumed_by": null,
+     "group": "",
+     "orientation": "Global"
+    },
+    {
+     "name": "Rectangle1",
+     "history": [
+      {
+       "kind": "CreateRectangle",
+       "props": {
+        "Position": "-183.546,0,183.546",
+        "Axis": "Y",
+        "Width": "-367.093",
+        "Height": "367.093"
+       },
+       "suppressed": false
+      }
+     ],
+     "material": "vacuum",
+     "solve_inside": false,
+     "model": false,
+     "color": "#8080ff",
+     "transparency": 0.0,
+     "wireframe": false,
+     "visible": true,
+     "consumed_by": null,
+     "group": "",
+     "orientation": "Global"
+    },
+    {
+     "name": "Sphere1",
+     "history": [
+      {
+       "kind": "CreateSphere",
+       "props": {
+        "CenterPosition": "0.0005,0,-0.0005",
+        "Radius": "50"
+       },
+       "suppressed": false
+      }
+     ],
+     "material": "pec",
+     "solve_inside": false,
+     "model": true,
+     "color": "#d6a45c",
+     "transparency": 0.0,
+     "wireframe": false,
+     "visible": true,
+     "consumed_by": null,
+     "group": "",
+     "orientation": "Global"
+    }
+   ],
+   "boundaries": [
+    {
+     "name": "Rad1",
+     "kind": "Radiation",
+     "props": {
+      "Order": "Second order",
+      "FarFieldReference": "True"
+     },
+     "faces": [
+      {
+       "obj": "Box1",
+       "face": 0,
+       "sig": [
+        -0.18354640285714285,
+        -2.3627859889563877e-18,
+        5.421010862427523e-19,
+        -1.0,
+        0.0,
+        0.0,
+        0.1347571280071863,
+        1.0000000000000002
+       ]
+      },
+      {
+       "obj": "Box1",
+       "face": 2,
+       "sig": [
+        0.0,
+        -0.18354640285714285,
+        5.421010862427523e-19,
+        0.0,
+        -1.0,
+        0.0,
+        0.1347571280071863,
+        1.0
+       ]
+      },
+      {
+       "obj": "Box1",
+       "face": 5,
+       "sig": [
+        5.421010862427523e-19,
+        0.0,
+        0.18354640285714285,
+        0.0,
+        0.0,
+        1.0,
+        0.1347571280071863,
+        1.0
+       ]
+      },
+      {
+       "obj": "Box1",
+       "face": 3,
+       "sig": [
+        0.0,
+        0.18354640285714285,
+        5.421010862427523e-19,
+        0.0,
+        1.0,
+        0.0,
+        0.1347571280071863,
+        1.0
+       ]
+      },
+      {
+       "obj": "Box1",
+       "face": 1,
+       "sig": [
+        0.18354640285714285,
+        -2.3627859889563877e-18,
+        5.421010862427523e-19,
+        1.0,
+        0.0,
+        0.0,
+        0.1347571280071863,
+        1.0000000000000002
+       ]
+      },
+      {
+       "obj": "Box1",
+       "face": 4,
+       "sig": [
+        5.421010862427523e-19,
+        0.0,
+        -0.18354640285714285,
+        0.0,
+        0.0,
+        -1.0,
+        0.1347571280071863,
+        0.9999999999999998
+       ]
+      }
+     ],
+     "objects": [],
+     "edges": [],
+     "enabled": true
+    }
+   ],
+   "excitations": [
+    {
+     "name": "IncPWave1",
+     "kind": "Incident Plane Wave",
+     "props": {
+      "VectorInput": "Cartesian",
+      "E0Vector": "0,-1,0",
+      "KVector": "0,0,1",
+      "Theta": "0deg",
+      "Phi": "0deg",
+      "Polarization": "0deg",
+      "ZeroPhasePosition": "0,0,0",
+      "EMagnitude": "1"
+     },
+     "faces": [
+      {
+       "obj": "Box1",
+       "face": 4,
+       "sig": [
+        5.421010862427523e-19,
+        0.0,
+        -0.18354640285714285,
+        0.0,
+        0.0,
+        -1.0,
+        0.1347571280071863,
+        0.9999999999999998
+       ]
+      }
+     ],
+     "objects": [],
+     "edges": [],
+     "enabled": true
+    }
+   ],
+   "mesh_ops": [],
+   "setups": [
+    {
+     "name": "Setup1",
+     "props": {
+      "Enabled": "True",
+      "SolutionFrequencyMode": "Single",
+      "Frequency": "2.45GHz",
+      "MultiFrequencies": "1GHz,2GHz",
+      "LowFrequency": "1GHz",
+      "HighFrequency": "10GHz",
+      "MaximumPasses": "6",
+      "MaximumDeltaS": "0.01",
+      "MaximumDeltaEnergy": "0.0001",
+      "UseMatrixConvergence": "False",
+      "MaxDeltaMag": "0.02",
+      "MaxDeltaPhase": "2",
+      "LambdaRefinement": "True",
+      "LambdaTarget": "0.3333",
+      "UseFreeSpaceLambda": "False",
+      "PercentRefinement": "30",
+      "MaximumRefinement": "1000000",
+      "MinimumPasses": "2",
+      "MinimumConvergedPasses": "1",
+      "BasisOrder": "First Order",
+      "Solver": "Auto",
+      "ErrorInclusion": "50",
+      "RefinementRatio": "0.6",
+      "GrowthRate": "1.6",
+      "EnforceRefinementPercent": "True",
+      "RefinementMethod": "Remesh",
+      "SaveFields": "True",
+      "Threads": "0",
+      "_BasisNames": "v2"
+     },
+     "sweeps": [],
+     "eigen": false
+    }
+   ],
+   "spheres": [
+    {
+     "name": "Infinite Sphere1",
+     "props": {
+      "CoordinateSystem": "Global",
+      "PhiStart": "0deg",
+      "PhiStop": "360deg",
+      "PhiStep": "1deg",
+      "ThetaStart": "0deg",
+      "ThetaStop": "180deg",
+      "ThetaStep": "1deg"
+     }
+    }
+   ],
+   "reports": [
+    {
+     "name": "3D Polar Plot 1",
+     "kind": "3D Polar Plot",
+     "solution": "Setup1 : LastAdaptive",
+     "traces": [
+      "dB(BistaticRCSTotal)"
+     ],
+     "props": {}
+    }
+   ],
+   "field_plots": [
+    {
+     "name": "Mag_E1",
+     "quantity": "Mag_E",
+     "solution": "Setup1 : LastAdaptive",
+     "faces": [],
+     "objects": [
+      "Rectangle1"
+     ],
+     "plane": "",
+     "props": {
+      "ColorMap": "Rainbow",
+      "Invert": "False",
+      "Colors": "0",
+      "Divisions": "30",
+      "Scale": "Auto",
+      "Min": "0.254384",
+      "Max": "16802.7",
+      "dB": "False",
+      "Units": "V/m",
+      "Log": "False",
+      "LimitPrecision": "False",
+      "Precision": "4",
+      "AnimScale": "False",
+      "Format": "Automatic",
+      "ArrowSize": "1",
+      "MapSize": "False",
+      "ArrowTail": "True",
+      "ArrowCount": "1500",
+      "Transparency": "0",
+      "PlotType": "Smooth Shaded",
+      "ShowGrid": "True",
+      "port": "1",
+      "freq": "0",
+      "phase": "0"
+     }
+    }
+   ],
+   "coord_systems": [],
+   "working_cs": "Global",
+   "notes": ""
+  },
+  {
+   "name": "Design1_copy",
+   "units": "mm",
+   "settings": {
+    "SolutionType": "Modal",
+    "AutoOpen": "Off",
+    "AutoOpenBoundary": "Auto",
+    "AutoOpenPadding": "",
+    "FilterAirMargin": "12mm",
+    "RadiatingStructure": "False"
+   },
+   "variables": {
+    "frequency": "2.45GHz",
+    "c0": "299792458",
+    "lamb0": "c0/frequency",
+    "Boxsize": "3*lamb0"
+   },
+   "objects": [
+    {
+     "name": "Box1",
+     "history": [
+      {
+       "kind": "CreateBox",
+       "props": {
+        "Position": "-Boxsize/2,-Boxsize/2,-Boxsize/2",
+        "XSize": "Boxsize",
+        "YSize": "Boxsize",
+        "ZSize": "Boxsize"
+       },
+       "suppressed": false
+      }
+     ],
+     "material": "vacuum",
+     "solve_inside": true,
+     "model": true,
+     "color": "#e6f2ff",
+     "transparency": 0.8,
+     "wireframe": false,
+     "visible": false,
+     "consumed_by": null,
+     "group": "",
+     "orientation": "Global"
+    },
+    {
+     "name": "Rectangle1",
+     "history": [
+      {
+       "kind": "CreateRectangle",
+       "props": {
+        "Position": "-183.546,0,183.546",
+        "Axis": "Y",
+        "Width": "-367.093",
+        "Height": "367.093"
+       },
+       "suppressed": false
+      }
+     ],
+     "material": "vacuum",
+     "solve_inside": false,
+     "model": false,
+     "color": "#8080ff",
+     "transparency": 0.0,
+     "wireframe": false,
+     "visible": true,
+     "consumed_by": null,
+     "group": "",
+     "orientation": "Global"
+    },
+    {
+     "name": "Polyline1",
+     "history": [
+      {
+       "kind": "CreatePolyline",
+       "props": {
+        "Points": "0.0005,0,-183.547;0.0005,0,183.546",
+        "SegmentTypes": "",
+        "Closed": "False",
+        "Covered": "False"
+       },
+       "suppressed": false
+      }
+     ],
+     "material": "vacuum",
+     "solve_inside": false,
+     "model": false,
+     "color": "#8080ff",
+     "transparency": 0.0,
+     "wireframe": false,
+     "visible": true,
+     "consumed_by": null,
+     "group": "",
+     "orientation": "Global"
+    }
+   ],
+   "boundaries": [
+    {
+     "name": "Rad1",
+     "kind": "Radiation",
+     "props": {
+      "Order": "Second order",
+      "FarFieldReference": "True"
+     },
+     "faces": [
+      {
+       "obj": "Box1",
+       "face": 0,
+       "sig": [
+        -0.18354640285714285,
+        -2.3627859889563877e-18,
+        5.421010862427523e-19,
+        -1.0,
+        0.0,
+        0.0,
+        0.1347571280071863,
+        1.0000000000000002
+       ]
+      },
+      {
+       "obj": "Box1",
+       "face": 2,
+       "sig": [
+        0.0,
+        -0.18354640285714285,
+        5.421010862427523e-19,
+        0.0,
+        -1.0,
+        0.0,
+        0.1347571280071863,
+        1.0
+       ]
+      },
+      {
+       "obj": "Box1",
+       "face": 5,
+       "sig": [
+        5.421010862427523e-19,
+        0.0,
+        0.18354640285714285,
+        0.0,
+        0.0,
+        1.0,
+        0.1347571280071863,
+        1.0
+       ]
+      },
+      {
+       "obj": "Box1",
+       "face": 3,
+       "sig": [
+        0.0,
+        0.18354640285714285,
+        5.421010862427523e-19,
+        0.0,
+        1.0,
+        0.0,
+        0.1347571280071863,
+        1.0
+       ]
+      },
+      {
+       "obj": "Box1",
+       "face": 1,
+       "sig": [
+        0.18354640285714285,
+        -2.3627859889563877e-18,
+        5.421010862427523e-19,
+        1.0,
+        0.0,
+        0.0,
+        0.1347571280071863,
+        1.0000000000000002
+       ]
+      },
+      {
+       "obj": "Box1",
+       "face": 4,
+       "sig": [
+        5.421010862427523e-19,
+        0.0,
+        -0.18354640285714285,
+        0.0,
+        0.0,
+        -1.0,
+        0.1347571280071863,
+        0.9999999999999998
+       ]
+      }
+     ],
+     "objects": [],
+     "edges": [],
+     "enabled": true
+    }
+   ],
+   "excitations": [
+    {
+     "name": "IncPWave1",
+     "kind": "Incident Plane Wave",
+     "props": {
+      "VectorInput": "Cartesian",
+      "E0Vector": "0,-1,0",
+      "KVector": "0,0,1",
+      "Theta": "0deg",
+      "Phi": "0deg",
+      "Polarization": "0deg",
+      "ZeroPhasePosition": "0,0,0",
+      "EMagnitude": "1"
+     },
+     "faces": [
+      {
+       "obj": "Box1",
+       "face": 4,
+       "sig": [
+        5.421010862427523e-19,
+        0.0,
+        -0.18354640285714285,
+        0.0,
+        0.0,
+        -1.0,
+        0.1347571280071863,
+        0.9999999999999998
+       ]
+      }
+     ],
+     "objects": [],
+     "edges": [],
+     "enabled": true
+    }
+   ],
+   "mesh_ops": [],
+   "setups": [
+    {
+     "name": "Setup1",
+     "props": {
+      "Enabled": "True",
+      "SolutionFrequencyMode": "Single",
+      "Frequency": "2.45GHz",
+      "MultiFrequencies": "1GHz,2GHz",
+      "LowFrequency": "1GHz",
+      "HighFrequency": "10GHz",
+      "MaximumPasses": "6",
+      "MaximumDeltaS": "0.01",
+      "MaximumDeltaEnergy": "0.0001",
+      "UseMatrixConvergence": "False",
+      "MaxDeltaMag": "0.02",
+      "MaxDeltaPhase": "2",
+      "LambdaRefinement": "True",
+      "LambdaTarget": "0.3333",
+      "UseFreeSpaceLambda": "False",
+      "PercentRefinement": "30",
+      "MaximumRefinement": "1000000",
+      "MinimumPasses": "2",
+      "MinimumConvergedPasses": "1",
+      "BasisOrder": "First Order",
+      "Solver": "Auto",
+      "ErrorInclusion": "50",
+      "RefinementRatio": "0.6",
+      "GrowthRate": "1.6",
+      "EnforceRefinementPercent": "True",
+      "RefinementMethod": "Remesh",
+      "SaveFields": "True",
+      "Threads": "0",
+      "_BasisNames": "v2"
+     },
+     "sweeps": [],
+     "eigen": false
+    }
+   ],
+   "spheres": [
+    {
+     "name": "Infinite Sphere1",
+     "props": {
+      "CoordinateSystem": "Global",
+      "PhiStart": "0deg",
+      "PhiStop": "360deg",
+      "PhiStep": "1deg",
+      "ThetaStart": "0deg",
+      "ThetaStop": "180deg",
+      "ThetaStep": "1deg"
+     }
+    }
+   ],
+   "reports": [
+    {
+     "name": "3D Polar Plot 1",
+     "kind": "3D Polar Plot",
+     "solution": "Setup1 : LastAdaptive",
+     "traces": [
+      "dB(BistaticRCSTotal)"
+     ],
+     "props": {}
+    }
+   ],
+   "field_plots": [
+    {
+     "name": "Mag_E1",
+     "quantity": "Mag_E",
+     "solution": "Setup1 : LastAdaptive",
+     "faces": [],
+     "objects": [
+      "Rectangle1"
+     ],
+     "plane": "",
+     "props": {
+      "ColorMap": "Rainbow",
+      "Invert": "False",
+      "Colors": "0",
+      "Divisions": "30",
+      "Scale": "Auto",
+      "Min": "0.254384",
+      "Max": "16802.7",
+      "dB": "False",
+      "Units": "V/m",
+      "Log": "False",
+      "LimitPrecision": "False",
+      "Precision": "4",
+      "AnimScale": "False",
+      "Format": "Automatic",
+      "ArrowSize": "1",
+      "MapSize": "False",
+      "ArrowTail": "True",
+      "ArrowCount": "1500",
+      "Transparency": "0",
+      "PlotType": "Smooth Shaded",
+      "ShowGrid": "True",
+      "port": "1",
+      "freq": "0",
+      "phase": "0"
+     }
+    }
+   ],
+   "coord_systems": [],
+   "working_cs": "Global",
+   "notes": ""
+  }
+ ],
+ "variables": {},
+ "materials": [],
+ "format": "hertzon-project",
+ "version": 1
+}

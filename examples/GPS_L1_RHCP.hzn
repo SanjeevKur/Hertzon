@@ -10,6 +10,7 @@
     "AutoOpenBoundary": "Auto",
     "AutoOpenPadding": "",
     "FilterAirMargin": "12mm",
+    "MaterialOverride": "True",
     "RadiatingStructure": "True"
    },
    "variables": {
@@ -288,31 +289,6 @@
      "consumed_by": null,
      "group": "",
      "orientation": "Global"
-    },
-    {
-     "name": "Rectangle1",
-     "history": [
-      {
-       "kind": "CreateRectangle",
-       "props": {
-        "Position": "0,0,0",
-        "Axis": "X",
-        "YSize": "0.5mm",
-        "ZSize": "20mm"
-       },
-       "suppressed": false
-      }
-     ],
-     "material": "vacuum",
-     "solve_inside": true,
-     "model": true,
-     "color": "#8080ff",
-     "transparency": 0.0,
-     "wireframe": false,
-     "visible": true,
-     "consumed_by": null,
-     "group": "",
-     "orientation": "Global"
     }
    ],
    "boundaries": [
@@ -381,7 +357,7 @@
       "RefinementRatio": "0.6",
       "GrowthRate": "1.6",
       "EnforceRefinementPercent": "True",
-      "RefinementMethod": "Local (Delaunay)",
+      "RefinementMethod": "hzAURA (EMerge)",
       "SaveFields": "True",
       "Threads": "0",
       "_BasisNames": "v2"
@@ -474,6 +450,8 @@
     }
    ],
    "coord_systems": [],
+   "optimetrics": [],
+   "parametrics": [],
    "working_cs": "Global",
    "notes": ""
   }
@@ -499,9 +477,10 @@
    "anisotropic": false,
    "permittivity_tensor": "",
    "permeability_tensor": "",
-   "loss_tangent_tensor": ""
+   "loss_tangent_tensor": "",
+   "emsutil_key": ""
   }
  ],
  "format": "hertzon-project",
- "version": 1
+ "version": 2
 }

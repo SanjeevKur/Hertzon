@@ -10,6 +10,7 @@
     "AutoOpenBoundary": "Auto",
     "AutoOpenPadding": "",
     "FilterAirMargin": "12mm",
+    "MaterialOverride": "True",
     "RadiatingStructure": "False"
    },
    "variables": {
@@ -52,8 +53,8 @@
        "props": {
         "Position": "-183.546,0,183.546",
         "Axis": "Y",
-        "Width": "-367.093",
-        "Height": "367.093"
+        "ZSize": "-367.093",
+        "XSize": "367.093"
        },
        "suppressed": false
       }
@@ -252,12 +253,13 @@
       "MinimumPasses": "2",
       "MinimumConvergedPasses": "1",
       "BasisOrder": "First Order",
+      "CurvedElements": "True",
       "Solver": "Auto",
       "ErrorInclusion": "50",
       "RefinementRatio": "0.6",
       "GrowthRate": "1.6",
       "EnforceRefinementPercent": "True",
-      "RefinementMethod": "Remesh",
+      "RefinementMethod": "hzAURA (EMerge)",
       "SaveFields": "True",
       "Threads": "0",
       "_BasisNames": "v2"
@@ -330,6 +332,8 @@
     }
    ],
    "coord_systems": [],
+   "optimetrics": [],
+   "parametrics": [],
    "working_cs": "Global",
    "notes": ""
   },
@@ -342,6 +346,7 @@
     "AutoOpenBoundary": "Auto",
     "AutoOpenPadding": "",
     "FilterAirMargin": "12mm",
+    "MaterialOverride": "True",
     "RadiatingStructure": "False"
    },
    "variables": {
@@ -384,8 +389,8 @@
        "props": {
         "Position": "-183.546,0,183.546",
         "Axis": "Y",
-        "Width": "-367.093",
-        "Height": "367.093"
+        "ZSize": "-367.093",
+        "XSize": "367.093"
        },
        "suppressed": false
       }
@@ -586,12 +591,13 @@
       "MinimumPasses": "2",
       "MinimumConvergedPasses": "1",
       "BasisOrder": "First Order",
+      "CurvedElements": "True",
       "Solver": "Auto",
       "ErrorInclusion": "50",
       "RefinementRatio": "0.6",
       "GrowthRate": "1.6",
       "EnforceRefinementPercent": "True",
-      "RefinementMethod": "Remesh",
+      "RefinementMethod": "hzAURA (EMerge)",
       "SaveFields": "True",
       "Threads": "0",
       "_BasisNames": "v2"
@@ -664,6 +670,8 @@
     }
    ],
    "coord_systems": [],
+   "optimetrics": [],
+   "parametrics": [],
    "working_cs": "Global",
    "notes": ""
   }
@@ -671,5 +679,5 @@
  "variables": {},
  "materials": [],
  "format": "hertzon-project",
- "version": 1
+ "version": 2
 }

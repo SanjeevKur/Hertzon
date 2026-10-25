@@ -33,7 +33,7 @@ Legend: **✔** implemented and tested · **◐** implemented with limitations �
 | Move, Rotate, Mirror, Scale, Duplicate along line / around axis / mirror | Edit > Arrange / Duplicate | ✔ | |
 | Object groups (also of solids, sheets and lines together), ungroup, rename | Edit > Group (Ctrl+G) / Ungroup (Ctrl+Shift+G), model tree > Groups | ✔ | A group is selected and transformed as one unit; SMD components are groups; saved in the project |
 | Thicken sheet, Sweep along vector / around axis / along path, Cover lines | Draw / Modeler | ✔ | |
-| Fillet, Chamfer | Modeler > Fillet / Chamfer | ◐ | Edges of solids |
+| Fillet, Chamfer | Modeler > Fillet / Chamfer | ◐ | Edges of solids; fillet also rounds corners of flat sheets |
 | Import STEP / IGES / BREP, Export STEP | File / Modeler | ✔ | |
 | History tree with editable commands, suppress | Model tree + Properties | ✔ | Every command parameter accepts expressions |
 | Object attributes: material, solve inside, model, color, transparency, wireframe | Properties > Attribute | ✔ | |
@@ -88,7 +88,7 @@ Legend: **✔** implemented and tested · **◐** implemented with limitations �
 | Use Matrix Convergence (ΔMag, ΔPhase) | ✔ |
 | Minimum Number of Passes, Minimum Converged Passes | ✔ |
 | Percent Refinement per pass | ✔ (enforced, adaptive error-driven refinement) |
-| Mesh refinement method | ✔ AURA (EMerge, default), Local (Delaunay, hzmesh), Remesh, Remesh (stable, experimental); see [MESHER.md](MESHER.md) |
+| Mesh refinement method | ✔ hzAURA (EMerge, default), Local (Delaunay, hzmesh), Remesh (slow), Remesh (stable, experimental); see [MESHER.md](MESHER.md) |
 | Curved elements on curved surfaces | ✔ (EMerge, default on) |
 | Maximum Refinement (tets) | ✔ |
 | Basis function order | ✔ Zero Order (6), First Order (20, default), Second Order (complete quadratic, 30); no Mixed Order |

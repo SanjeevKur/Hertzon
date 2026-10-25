@@ -1090,9 +1090,97 @@ def _apply(cmd: Command, dt: list[tuple[int, int]], ctx: BuildContext, owner: st
         curves = [edges[i] for i in ids if 0 <= i < len(edges)]
         if not curves:
             raise GeometryError("No valid edges selected for fillet")
-        out = o.fillet([t for d, t in dt if d == 3], curves, [ev.length(p["Radius"])])
+        r = ev.length(p["Radius"])
+        if r <= 0:
+            raise GeometryError("Fillet radius must be positive")
+        if not any(d == 3 for d, _ in dt):
+            return _fillet_sheet(dt, curves, r)
+        try:
+            out = o.fillet([t for d, t in dt if d == 3], curves, [r])
+        except Exception as e:  # noqa: BLE001
+            raise GeometryError(f"Fillet failed, the radius is probably too large for the selected edges ({e})")
+        if not out:
+            raise GeometryError("Fillet failed, the radius is probably too large for the selected edges")
         return out
     raise GeometryError(f"Unknown operation {k}")
+
+
+def _fillet_sheet(dt: list[tuple[int, int]], curves: list[int], r: float) -> list[tuple[int, int]]:
+    """Fillet of a planar sheet: rounds the corners at the end points of the selected edges. Each face is
+    extruded to a temporary solid, its edges through those corners are filleted and the face in the
+    original plane is kept."""
+    o = _occ()
+    corners = set()
+    for c in curves:
+        for _, v in gmsh.model.getBoundary([(1, c)], oriented=False):
+            corners.add(abs(v))
+    faces = [t for d, t in dt if d == 2]
+    if not faces:
+        raise GeometryError("Fillet needs a solid or a sheet")
+    xmin, ymin, zmin, xmax, ymax, zmax = _bbox(dt)
+    diag = max(math.dist((xmin, ymin, zmin), (xmax, ymax, zmax)), 1e-12)
+    tol = 1e-6 * diag
+    h = 0.1 * diag
+    out: list[tuple[int, int]] = []
+    done = []
+    for f in faces:
+        verts = {abs(v) for _, v in gmsh.model.getBoundary([(2, f)], oriented=False, recursive=True)}
+        sel = [v for v in verts if v in corners]
+        if not sel:
+            out.append((2, f))
+            continue
+        lo, hi = gmsh.model.getParametrizationBounds(2, f)
+        uv = [(lo[0] + (hi[0] - lo[0]) * s, lo[1] + (hi[1] - lo[1]) * t)
+              for s in (0.25, 0.5, 0.75) for t in (0.25, 0.5, 0.75)]
+        nrms = np.asarray(gmsh.model.getNormal(f, [x for p in uv for x in p]), float).reshape(-1, 3)
+        n = nrms[4] / np.linalg.norm(nrms[4])
+        if np.any(np.abs(nrms @ n) < 1 - 1e-6):
+            raise GeometryError("Fillet of a sheet works only on flat sheets")
+        tops = {v: np.asarray(gmsh.model.getValue(0, v, [])) for v in sel}
+        cp = o.copy([(2, f)])
+        ex = o.extrude(cp, *(n * h))
+        vols = [d for d in ex if d[0] == 3]
+        o.synchronize()
+        edges = []
+        vcurves = {abs(t) for fc in gmsh.model.getBoundary(vols, oriented=False)
+                   for _, t in gmsh.model.getBoundary([fc], oriented=False)}
+        for c in sorted(vcurves):
+            ends = [np.asarray(gmsh.model.getValue(0, abs(v), []))
+                    for _, v in gmsh.model.getBoundary([(1, c)], oriented=False)]
+            if len(ends) != 2:
+                continue
+            for p0 in tops.values():
+                if any(np.linalg.norm(a - p0) < tol and np.linalg.norm(b - p0 - n * h) < tol
+                       for a, b in (ends, ends[::-1])):
+                    edges.append(c)
+        if len(edges) != len(sel):
+            o.remove(vols, recursive=True)
+            raise GeometryError("Fillet of a sheet: the corners of the selected edges were not found")
+        try:
+            filleted = o.fillet([t for _, t in vols], edges, [r])
+        except Exception as e:  # noqa: BLE001
+            o.remove(vols, recursive=True)
+            raise GeometryError(f"Fillet failed, the radius is probably too large for the selected corners ({e})")
+        o.synchronize()
+        p0 = np.asarray(o.getCenterOfMass(2, f))
+        keep = []
+        for _, s_ in gmsh.model.getBoundary(filleted, oriented=False):
+            s_ = abs(s_)
+            c = np.asarray(o.getCenterOfMass(2, s_))
+            lo, hi = gmsh.model.getParametrizationBounds(2, s_)
+            ns = np.asarray(gmsh.model.getNormal(s_, [(lo[0] + hi[0]) / 2, (lo[1] + hi[1]) / 2]), float)
+            if abs((c - p0) @ n) < tol and abs(ns @ n) > 1 - 1e-6:
+                keep.append(s_)
+        if len(keep) != 1:
+            o.remove(filleted, recursive=True)
+            raise GeometryError("Fillet of a sheet failed")
+        new = o.copy([(2, keep[0])])
+        o.remove(filleted, recursive=True)
+        done.append((2, f))
+        out += new
+    if done:
+        o.remove(done, recursive=True)
+    return out
 
 
 def _tools(p: dict, ctx: BuildContext) -> list[tuple[int, int]]:
