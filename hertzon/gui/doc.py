@@ -100,6 +100,11 @@ class Document(QObject):
             self.redo_stack.append(self.project.to_dict())
             self._restore(self.undo_stack.pop())
 
+    def discard_last(self) -> None:
+        """Drops the last change without a redo entry (an operation that could not be applied)."""
+        if self.undo_stack:
+            self._restore(self.undo_stack.pop())
+
     def redo(self) -> None:
         if self.redo_stack:
             self.undo_stack.append(self.project.to_dict())
