@@ -91,6 +91,9 @@ the GitHub release notes.
   both sides and gave each one the value of just one side. Along a patch antenna this drew red sawtooth streaks
   on the patch and at the ground plane. The cut now keeps the elements apart, and the smooth plot averages
   only within one material. The peaks at metal edges and corners stay: they are real.
+  A field plot on a drawn plane (a sheet that is not part of the model) is now cut from the solver mesh the
+  same way and cropped to the sheet. Before, the field was interpolated onto the sheet's own triangles, which
+  cross the material boundaries and drew the same sawtooth there.
 - **Thicken sheet direction**: a positive thickness now always thickens to the positive side of the
   sheet's main axis (+Z for a sheet in XY), a negative one to the other side. Before, the direction followed
   the winding of the outline, so a rectangle dragged to -X or -Y, or a polyline drawn clockwise and covered,
