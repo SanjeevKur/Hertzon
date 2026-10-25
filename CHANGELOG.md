@@ -3,6 +3,15 @@
 All notable changes of each release. The release workflow copies the section of the released version into
 the GitHub release notes.
 
+## Unreleased
+
+### Fixed
+- **Report tabs push the window off screen**: opening a report (for example an XY plot) raised the main
+  window's minimum height to the full height of the trace editor, so on a 1080p screen with display scaling
+  a maximized window reached below the screen and the status bar with the coordinates was cut off; after
+  maximizing again the panels could be squeezed. The trace editor on the left of a report now scrolls when
+  the window is low.
+
 ## 0.2.3 (2026-10-25)
 
 ### Changed
