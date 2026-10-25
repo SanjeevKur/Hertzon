@@ -130,6 +130,7 @@ class MainWindow(QMainWindow):
         self.doc.rebuild()
         self.msgs.add("info", f"Hertzon {__version__} - 3D full-wave FEM (EMerge solver)")
         self._first_start_note()
+        self._start_update_check()
         from .ai_link import AiLink
         self.ai_link = AiLink(self)
         if self.settings.value("ai/live_link", False, type=bool):
@@ -3419,6 +3420,23 @@ class MainWindow(QMainWindow):
                           "solve, once. It takes a few minutes longer than usual.")
             self.statusBar().showMessage("First start detected: the first solve compiles the solver kernels "
                                          "(once, a few minutes)", 30000)
+
+    def _start_update_check(self) -> None:
+        """Ask GitHub for a newer release in the background (Tools > Options > General can switch it off)."""
+        from .update_check import SETTING, UpdateChecker, disabled_by_env
+        if disabled_by_env() or not self.settings.value(SETTING, True, type=bool):
+            return
+        self._update_checker = UpdateChecker(__version__, self)
+        self._update_checker.available.connect(self._update_available)
+        QTimer.singleShot(2000, self._update_checker.start)
+
+    def _update_available(self, version: str, url: str) -> None:
+        self.msgs.add("info", f"Hertzon {version} is available (this is {__version__}). Download: {url}")
+        lab = QLabel(f"<a href='{url}'>Hertzon {version} is available</a>")
+        lab.setOpenExternalLinks(True)
+        lab.setToolTip("Opens the release page with the release notes and the installers.\n"
+                       "The check at start can be switched off in Tools > Options > General.")
+        self.statusBar().addPermanentWidget(lab)
 
     def goto_message(self, text: str) -> None:
         """Select what a message is about: object, boundary/excitation/mesh operation, setup, report."""

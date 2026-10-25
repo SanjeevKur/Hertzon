@@ -3,6 +3,14 @@
 All notable changes of each release. The release workflow copies the section of the released version into
 the GitHub release notes.
 
+## Unreleased
+
+### Added
+- **Update hint**: at start Hertzon asks GitHub in the background for the newest release. When it is newer
+  than the running version, the Message Manager and the status bar say "Hertzon X is available" with a link
+  to the release page. The start does not wait for it, and without network nothing is shown. Switch it off in
+  Tools > Options > General (or with the environment variable `HERTZON_NO_UPDATE_CHECK=1`).
+
 ## 0.2.0 (2026-10-25)
 
 ### Added

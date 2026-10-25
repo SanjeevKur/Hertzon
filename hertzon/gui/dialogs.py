@@ -845,6 +845,12 @@ class OptionsDialog(QDialog):
         self.emlog = QCheckBox("Show EMerge solver log in the Message Manager")
         self.emlog.setChecked(win.solver.show_emerge_log)
         f.addRow("", self.emlog)
+        from .update_check import SETTING as UPDATE_SETTING
+        self.update_check = QCheckBox("Check for a new Hertzon version at start")
+        self.update_check.setToolTip("Asks GitHub for the newest release and shows a hint when one is available.\n"
+                                     "Nothing is sent but the request itself; without network nothing happens.")
+        self.update_check.setChecked(s.value(UPDATE_SETTING, True, type=bool))
+        f.addRow("", self.update_check)
         tabs.addTab(gen, "General")
 
         bb = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
@@ -863,6 +869,8 @@ class OptionsDialog(QDialog):
         if self.quality.currentText() != w.doc.display_quality:
             w.set_quality(self.quality.currentText())
         w.a_emlog.setChecked(self.emlog.isChecked())
+        from .update_check import SETTING as UPDATE_SETTING
+        s.setValue(UPDATE_SETTING, self.update_check.isChecked())
         w.apply_hpc_settings()
 
 
