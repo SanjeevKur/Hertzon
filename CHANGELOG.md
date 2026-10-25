@@ -6,6 +6,12 @@ the GitHub release notes.
 ## Unreleased
 
 ### Changed
+- **AURA refinement keeps curved surfaces exact (hzAURA)**: EMerge `55ebd4d`. Where a new node on a curved
+  face or edge cannot be moved onto the CAD geometry by bisection, it is put there anyway and the elements
+  around it are re-meshed as a constrained Delaunay cavity, instead of leaving the node closer to the chord
+  (a dent). Faces that are neither spheres, cylinders nor planes are followed by a bicubic interpolation of
+  their CAD parametrisation: on a lofted free-form body new surface nodes stay within 0.14 mm of the face
+  (was 1.4 mm). AURA's refinement time is unchanged.
 - **More accurate RCS of scattering problems**: with an incident plane wave, Auto Open now leaves one
   wavelength of air around the objects (was half a wavelength), and the far field is integrated with Gauss
   points over a box λ/8 around the scatterers instead of over mesh faces halfway to the boundary. For the

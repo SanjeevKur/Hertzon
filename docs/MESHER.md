@@ -120,6 +120,14 @@ AURA works differently: EMerge bisects the marked tetrahedra along their longest
 elements with flips and smoothing, inside EMerge's own mesh, without a gmsh run per pass. Its meshes are
 nested as well.
 
+New nodes on curved faces and edges are moved from the chord onto the CAD geometry. Where the elements
+around the split edge are too thin for that move, Hertzon runs AURA with EMerge's cavity option (hzAURA):
+the node is put on the surface anyway, and the elements around it are cut out and re-meshed as a
+constrained Delaunay cavity, the same idea as a point insertion of hzmesh. Nodes and elements outside the
+cavity stay as they are. Plain bisection would leave such a node closer to the chord, a dent in the
+refined surface. Faces that are not spheres, cylinders or planes are followed by a bicubic interpolation
+of their CAD parametrisation.
+
 ## Robustness
 
 - Shewchuk's exact predicates (`orient3d`, `insphere`, `predicates.c`), compiled with
