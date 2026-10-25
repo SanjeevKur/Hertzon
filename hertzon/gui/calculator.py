@@ -758,7 +758,7 @@ class CalculatorWindow(QMainWindow):
         self.live.setToolTip("Show the field in the 3D view while you type")
         self.live.toggled.connect(lambda on: self._preview() if on else self._remove_preview())
         self.target = QComboBox()
-        self.target.addItems(["Cut XY", "Cut YZ", "Cut XZ", "3D selection"])
+        self.target.addItems(["Cut XY", "Cut YZ", "Cut XZ", "3D selection", "Inside selected solids"])
         self.target.currentIndexChanged.connect(lambda *_: self._preview())
         pr.addWidget(self.live)
         pr.addWidget(self.target, 1)
@@ -1389,7 +1389,8 @@ class CalculatorWindow(QMainWindow):
                 return
         try:
             meshes, info = F.make_overlay(self.doc, view, "=" + self.edit.toPlainText(), sol, fi, port, phase,
-                                          faces, objs, plane, attrs={"PlotType": "Smooth Shaded"})
+                                          faces, objs, plane, attrs={"PlotType": "Smooth Shaded",
+                                                                     "Volume": t.startswith("Inside")})
         except Exception as e:  # noqa: BLE001
             self.result_note.setText(f"<span style='color:{ERR}'>Preview: {e}</span>")
             return

@@ -23,6 +23,10 @@ the GitHub release notes.
   are saved with the design; a library has power, loss, energy, Q, voltage and current. A named field can be
   plotted like E or H (Plot Fields > Quantity), and a named value can be shown over frequency in a report
   (category Fields).
+- **Volume field plots**: Plot on "(selection, inside solids)" (or "Inside the selected solids" in the plot
+  attributes) shows a scalar field through a solid such as a substrate as coloured dots instead of on its
+  surface; vectors keep their arrows inside solids. Works for the built-in quantities and for named
+  expressions of the Fields Calculator (also its live preview).
 
 ### Changed
 - **Examples on the current features**: all examples use hzAURA refinement and curved elements and are

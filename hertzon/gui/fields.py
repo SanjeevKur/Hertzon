@@ -812,6 +812,7 @@ ATTR_DEFAULTS = {
     "LineArrows": 0,                # arrows on a polyline plot (0: auto); ArrowCount is for surfaces / volumes
     # Plots
     "Transparency": 0.0, "PlotType": "Smooth Shaded", "ShowGrid": False,
+    "Volume": False,                # selected solids: the field inside them (scalars as coloured dots), not on their surface
 }
 COLOR_MAPS = {"Rainbow": "jet", "Temperature": "hot", "Magenta": "RdPu", "Gray": "gray", "Turbo": "turbo",
               "Viridis": "viridis", "Cool-Warm": "coolwarm", "Uniform": None}
@@ -1052,8 +1053,10 @@ def prepare_overlay(doc, view, quantity: str, solution: str, freq_index: int = 0
             targets.append(_line_points(a.edge_mesh, h))
             continue
         if a is not None and a.mesh is not None:
-            if vector and not jsurf and doc.design.obj(o).dim == 3:
-                targets.append(_volume_points(work, a.mesh, nmax=max(10, int(at["ArrowCount"])), h=spacing_m))
+            if (vector or at["Volume"]) and not jsurf and doc.design.obj(o).dim == 3:
+                # inside the solid: arrows, or for a scalar dots coloured by the value (more of them)
+                n = max(10, int(at["ArrowCount"])) * (1 if vector else 8)
+                targets.append(_volume_points(work, a.mesh, nmax=n, h=spacing_m))
             else:
                 targets.append(on_solver_mesh(o, a.mesh))
     if plane:
@@ -1083,7 +1086,7 @@ def prepare_overlay(doc, view, quantity: str, solution: str, freq_index: int = 0
                 if nme in s.point_data:
                     s.point_data.remove(nme)
         inv = None
-        if at["PlotType"] != "Flat Shaded" and s.n_points:
+        if at["PlotType"] != "Flat Shaded" and s.n_points and "regular" not in s.field_data:
             # local smooth plot: the per-element values are averaged at shared nodes (overlay_at)
             key = np.round(np.asarray(s.points) / (1e-9 + 1e-7 * float(np.ptp(s.points, axis=0).max())))
             if "_obj" in s.cell_data and s.n_cells:
@@ -1244,6 +1247,14 @@ def overlay_at(prep: dict, phase_deg: float = 0.0, log_scale: bool = False, vmin
             else:
                 glyphs = sub.glyph(orient="vec", scale=False, factor=size, geom=geom)
             meshes.append((glyphs, common))
+        elif "regular" in s.field_data:
+            # a scalar inside a solid: one dot per sample point, sized by the point spacing like the arrows
+            hh = float(s.field_data["regular"][0])
+            dots = pv.PolyData(np.asarray(s.points))
+            dots.point_data[quantity] = np.asarray(s.point_data[quantity])
+            ball = pv.Sphere(radius=0.5, theta_resolution=10, phi_resolution=8)
+            meshes.append((dots.glyph(scale=False, orient=False, factor=0.4 * hh * at["ArrowSize"], geom=ball),
+                           dict(common, smooth_shading=True)))
         elif s.n_cells and getattr(s, "n_lines", 0) == s.n_cells:
             # field along a polyline: a thick coloured line
             meshes.append((s, dict(common, line_width=6, render_lines_as_tubes=True)))

@@ -64,7 +64,9 @@ class FieldPlotDialog(QDialog):
             self.port.addItem(str(i))
         f.addRow("Excited port", self.port)
         self.where = QComboBox()
-        self.where.addItems(["(selection)", "XY", "YZ", "XZ"])
+        self.where.addItems(["(selection)", "(selection, inside solids)", "XY", "YZ", "XZ"])
+        self.where.setItemData(1, "Selected solids: the field inside them, as coloured dots (scalars) or arrows",
+                               Qt.ToolTipRole)
         self.pval = QLineEdit("")
         self.pval.setPlaceholderText("cut position (empty = model centre)")
         self.keep = QCheckBox("Keep the plotted objects / faces")
@@ -77,6 +79,8 @@ class FieldPlotDialog(QDialog):
                 ax, _, val = fp.plane.partition("@")
                 self.where.setCurrentText(ax)
                 self.pval.setText(val)
+            elif F.attributes(fp.props)["Volume"]:
+                self.where.setCurrentIndex(1)
             targets = [*(fp.objects or []), *[f"{r.obj}:face{r.face}" for r in (fp.faces or [])]]
             self.keep.setText(f"Keep: {', '.join(targets)[:60] or '(cut plane)'}")
             self.keep.setChecked(not has_selection)
@@ -108,11 +112,12 @@ class FieldPlotDialog(QDialog):
             self.freq.addItem("(first)")
 
     def values(self) -> dict:
-        pl = "" if self.where.currentText() == "(selection)" else f"{self.where.currentText()}@{self.pval.text()}"
+        sel = self.where.currentIndex() <= 1
+        pl = "" if sel else f"{self.where.currentText()}@{self.pval.text()}"
         return {"name": self.name.text().strip(), "quantity": self.qty.currentText(),
                 "solution": self.sol.currentText(), "plane": pl, "keep": self.keep.isChecked(),
                 "props": {"port": self.port.currentText(), "freq": str(max(0, self.freq.currentIndex())),
-                          "phase": f"{self.phase.value():g}"}}
+                          "phase": f"{self.phase.value():g}", "Volume": str(self.where.currentIndex() == 1)}}
 
 
 # ================================================================================================
@@ -316,6 +321,10 @@ class PlotAttributesDialog(QDialog):
         f.addRow("Plot type", pt)
         self.w["ShowGrid"] = QCheckBox("Show grid (solver mesh lines)")
         f.addRow("", self.w["ShowGrid"])
+        self.w["Volume"] = QCheckBox("Inside the selected solids (volume plot)")
+        self.w["Volume"].setToolTip("Scalars as coloured dots through the volume, vectors as arrows; "
+                                    "off: on the surface of the solids")
+        f.addRow("", self.w["Volume"])
         self.tabs.addTab(t, "Plots")
 
     # ---- load / store ------------------------------------------------------------------------
