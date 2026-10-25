@@ -35,6 +35,11 @@ vertices). Click to select, Ctrl+click to add. Drag a box with the left mouse bu
 that lies completely inside it (objects, or faces, edges and vertices in those modes); Ctrl + drag adds to
 the selection. **Edit > Select by Name** finds an object in a large model.
 
+**Groups.** **Edit > Group** (Ctrl+G) joins the selected objects into one group: a click on a member then
+selects the whole group, and Move, Rotate, Mirror, Copy or Delete act on all of it. **Edit > Ungroup**
+(Ctrl+Shift+G) dissolves it again. The model tree lists the groups under **Groups**. SMD components from
+the **Lumped Elements** tab are inserted as a group, and the integration line of a port moves with its sheet.
+
 **Navigating.**
 
 | | Mouse | Alternatives |
@@ -86,7 +91,7 @@ Select an overlap and click **Resolve Overlap**, or **Resolve All Overlaps**: He
 whose material applies (the conductor, otherwise the smaller object) from the other one (**Subtract** with *Clone tool objects before operation*, so both stay). The
 model then shows exactly what is solved, and the geometry is free of overlaps (for example before an export). Undo (Ctrl+Z) takes it back.
 
-> The very first analysis after installing or updating compiles EMerge's solver kernels and takes a few
+> The very first analysis after installing or updating compiles Hertzon's solver kernels and takes a few
 > minutes longer. The installer already does this once, so normally you do not notice it.
 
 ---

@@ -95,9 +95,12 @@ HELP: dict[str, str] = {
     "Exponent": "Grading exponent of the PML conductivity profile.",
     "MaxAttenuation": "Attenuation at the outer PML layer.",
     "Type": "Symmetry type: Perfect E (tangential E = 0) or Perfect H (tangential H = 0).",
-    "ImpedanceMultiplier": "Factor for port impedances when a symmetry plane cuts a port (2 for one plane).",
-    "UVector": "In-plane U direction of the periodic boundary.",
-    "Primary": "Primary (master) boundary this secondary (slave) boundary is linked to.",
+    "ImpedanceMultiplier": "Factor for port impedances when a symmetry plane cuts a port (2 for one plane). "
+                           "Not applied by the solver yet: a port cut by the plane is referred to the half port.",
+    "UVector": "In-plane U direction of the periodic boundary. Primary / Secondary boundaries are not passed "
+               "to the solver yet; it skips them with a warning.",
+    "Primary": "Primary boundary this secondary boundary is linked to. Primary / Secondary boundaries are not "
+               "passed to the solver yet; it skips them with a warning.",
     "PhaseDelay": "Phase difference between primary and secondary boundary (scan angle).",
     # ---- excitations --------------------------------------------------------------------------
     "PortNumber": "Port index used in S(i,j).",
