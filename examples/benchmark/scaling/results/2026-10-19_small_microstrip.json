@@ -1,0 +1,193 @@
+{
+ "project": "examples/benchmark/scaling/small_microstrip.hzn",
+ "design": "Microstrip50",
+ "setup": "Setup1",
+ "machine": {
+  "cpu": "AMD64 Family 23 Model 49 Stepping 0, AuthenticAMD",
+  "logical_cores": 64,
+  "system": "Windows 10",
+  "python": "3.13.15",
+  "physical_cores": 32,
+  "memory_gb": 255.9
+ },
+ "started": 1792350018.4561763,
+ "runs": [
+  {
+   "kind": "cores",
+   "cores": 64,
+   "workers": 1,
+   "total": 29.093703985214233,
+   "mesh": 0.2864515781402588,
+   "adaptive": 12.285263061523438,
+   "sweep": 13.057459354400635,
+   "passes": 4,
+   "tets": 11608,
+   "pass_times": [
+    1.7637107372283936,
+    2.20017147064209,
+    4.423667669296265,
+    3.5047643184661865
+   ],
+   "memory_mb": 2014.83203125,
+   "converged": true
+  },
+  {
+   "kind": "cores",
+   "cores": 32,
+   "workers": 1,
+   "total": 29.27481198310852,
+   "mesh": 0.28652048110961914,
+   "adaptive": 12.4078848361969,
+   "sweep": 13.104685306549072,
+   "passes": 4,
+   "tets": 11608,
+   "pass_times": [
+    1.735438585281372,
+    2.223123788833618,
+    4.450599908828735,
+    3.605564594268799
+   ],
+   "memory_mb": 2006.02734375,
+   "converged": true
+  },
+  {
+   "kind": "cores",
+   "cores": 16,
+   "workers": 1,
+   "total": 29.50906777381897,
+   "mesh": 0.2883751392364502,
+   "adaptive": 12.587557315826416,
+   "sweep": 13.181243419647217,
+   "passes": 4,
+   "tets": 11608,
+   "pass_times": [
+    1.7242276668548584,
+    2.247257947921753,
+    4.4935081005096436,
+    3.7116429805755615
+   ],
+   "memory_mb": 1917.01953125,
+   "converged": true
+  },
+  {
+   "kind": "cores",
+   "cores": 8,
+   "workers": 1,
+   "total": 32.049848794937134,
+   "mesh": 0.2873513698577881,
+   "adaptive": 12.9543776512146,
+   "sweep": 15.31404972076416,
+   "passes": 4,
+   "tets": 11608,
+   "pass_times": [
+    1.7593436241149902,
+    2.311128854751587,
+    4.586928367614746,
+    3.904202461242676
+   ],
+   "memory_mb": 1894.265625,
+   "converged": true
+  },
+  {
+   "kind": "cores",
+   "cores": 4,
+   "workers": 1,
+   "total": 39.25092911720276,
+   "mesh": 0.28637123107910156,
+   "adaptive": 14.003330945968628,
+   "sweep": 21.46524953842163,
+   "passes": 4,
+   "tets": 11608,
+   "pass_times": [
+    1.8637166023254395,
+    2.479299545288086,
+    4.891848087310791,
+    4.376013517379761
+   ],
+   "memory_mb": 1872.52734375,
+   "converged": true
+  },
+  {
+   "kind": "cores",
+   "cores": 2,
+   "workers": 1,
+   "total": 53.4590699672699,
+   "mesh": 0.2877156734466553,
+   "adaptive": 16.32500195503235,
+   "sweep": 33.38258671760559,
+   "passes": 4,
+   "tets": 11608,
+   "pass_times": [
+    2.1165242195129395,
+    2.791818857192993,
+    5.591682434082031,
+    5.4379050731658936
+   ],
+   "memory_mb": 1862.3125,
+   "converged": true
+  },
+  {
+   "kind": "cores",
+   "cores": 1,
+   "workers": 1,
+   "total": 77.5651593208313,
+   "mesh": 0.28654003143310547,
+   "adaptive": 19.828083038330078,
+   "sweep": 53.97702431678772,
+   "passes": 4,
+   "tets": 11608,
+   "pass_times": [
+    2.5258359909057617,
+    3.577733039855957,
+    6.410358905792236,
+    6.92441201210022
+   ],
+   "memory_mb": 1858.41015625,
+   "converged": true
+  },
+  {
+   "kind": "sweep",
+   "cores": 64,
+   "workers": 1,
+   "sweep": 14.752812623977661
+  },
+  {
+   "kind": "sweep",
+   "cores": 64,
+   "workers": 2,
+   "sweep": 13.442283153533936
+  },
+  {
+   "kind": "sweep",
+   "cores": 64,
+   "workers": 4,
+   "sweep": 11.082412958145142
+  },
+  {
+   "kind": "sweep",
+   "cores": 64,
+   "workers": 8,
+   "sweep": 10.538578987121582
+  },
+  {
+   "kind": "sweep",
+   "cores": 64,
+   "workers": 16,
+   "sweep": 10.763761043548584
+  },
+  {
+   "kind": "sweep",
+   "cores": 64,
+   "workers": 32,
+   "sweep": 10.607499361038208
+  },
+  {
+   "kind": "sweep",
+   "cores": 64,
+   "workers": 64,
+   "sweep": 10.660839796066284
+  }
+ ],
+ "finished": 1792350439.1453848,
+ "version": "before the rename, earlier refinement"
+}
