@@ -93,6 +93,26 @@ def _heavy_imports():
     from . import main_window  # noqa: F401   (VTK, solver interface, dialogs)
 
 
+def _web_engine_setup() -> None:
+    """The formula editor of the Fields Calculator is a web view in the main window, next to the 3D view.
+    Qt WebEngine has to be loaded before the application object exists. The main window can draw with one
+    graphics interface only: the web view uses OpenGL like the 3D view (with its default, Direct3D on
+    Windows, it stayed black), and its page is drawn without the GPU (a formula needs none, and some drivers
+    left it black)."""
+    import os
+    from PySide6.QtCore import QCoreApplication, Qt
+    QCoreApplication.setAttribute(Qt.AA_ShareOpenGLContexts)
+    flags = os.environ.get("QTWEBENGINE_CHROMIUM_FLAGS", "")
+    if "--disable-gpu" not in flags:
+        os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = (flags + " --disable-gpu").strip()
+    try:
+        from PySide6.QtQuick import QQuickWindow, QSGRendererInterface
+        QQuickWindow.setGraphicsApi(QSGRendererInterface.GraphicsApi.OpenGL)
+        import PySide6.QtWebEngineWidgets  # noqa: F401
+    except Exception:  # noqa: BLE001   (without it the calculator has the text line only)
+        pass
+
+
 def main(argv: list[str] | None = None) -> int:
     argv = sys.argv if argv is None else argv
     _keep = _crash_log()  # noqa: F841
@@ -105,14 +125,7 @@ def main(argv: list[str] | None = None) -> int:
             ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("Hertzon.Hertzon")
         except Exception:  # noqa: BLE001
             pass
-    # the formula editor of the Fields Calculator is a web view: Qt WebEngine has to be loaded before the
-    # application object exists, and shares OpenGL contexts with the 3D view
-    from PySide6.QtCore import QCoreApplication, Qt
-    QCoreApplication.setAttribute(Qt.AA_ShareOpenGLContexts)
-    try:
-        import PySide6.QtWebEngineWidgets  # noqa: F401
-    except Exception:  # noqa: BLE001   (without it the calculator has the text line only)
-        pass
+    _web_engine_setup()
     app = QApplication.instance() or QApplication(argv)
     app.setApplicationName("Hertzon")
     app.setOrganizationName("Hertzon")
@@ -128,6 +141,7 @@ def main(argv: list[str] | None = None) -> int:
     _status(sp, app, "Opening the main window ...")
     from .main_window import MainWindow
     win = MainWindow()
+    win.prepare_equations()   # before the window is shown: opening the Equations tab later does not rebuild it
     files = [a for a in argv[1:] if a.lower().endswith(".hzn")]
     # always maximized: a restored maximized geometry (or a resize on top of it) left the window a bit wider
     # than the screen on Windows, so its right edge was cut off until it was restored and maximized again

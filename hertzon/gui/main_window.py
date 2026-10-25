@@ -4001,15 +4001,33 @@ class MainWindow(QMainWindow):
             self.tabs.removeTab(1)
         self.report_tabs.clear()
 
-    def fields_calculator(self, name: str | None = None, for_plot: bool = False) -> None:
-        """Results > Fields > Calculator: the Equations tab next to the 3D Modeler for equations of E, H and J,
-        with the Equation page of the ribbon."""
+    def prepare_equations(self) -> None:
+        """Make the Equations tab (hidden) before the window is shown. Its formula editor is a web view, drawn
+        by the graphics card like the 3D view: a window gets that way of drawing when it is made, so adding
+        the first such view later rebuilt the whole window (it flickered closed and open) and the start of the
+        web engine held the GUI on the first click."""
+        try:
+            from PySide6.QtOpenGLWidgets import QOpenGLWidget
+            self._gl_marker = QOpenGLWidget(self)        # the window draws with the graphics card from the start
+            self._gl_marker.setFixedSize(0, 0)
+            self._gl_marker.hide()
+        except Exception:  # noqa: BLE001
+            pass
+        self._make_equations()
+
+    def _make_equations(self) -> None:
         if self.calc_window is None:
             from .calculator import EquationsTab
             self.calc_window = EquationsTab(self)
+            self.calc_window.hide()
             self.calc_window.build_ribbon(self.ribbon.page("Equation"))
             self._eq_page = self.ribbon.count() - 1
             self.ribbon.setTabVisible(self._eq_page, False)
+
+    def fields_calculator(self, name: str | None = None, for_plot: bool = False) -> None:
+        """Results > Fields > Calculator: the Equations tab next to the 3D Modeler for equations of E, H and J,
+        with the Equation page of the ribbon."""
+        self._make_equations()
         w = self.calc_window
         if self.tabs.indexOf(w) < 0:
             self.tabs.insertTab(1, w, "Equations")
