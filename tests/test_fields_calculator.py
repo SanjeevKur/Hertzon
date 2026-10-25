@@ -253,9 +253,11 @@ def test_report_traces_follow_a_rename():
     assert CB.field_names_in(d, d.reports[-1].traces[1]) == ["P_in"]
 
 
-def test_calculator_window_picks_the_geometry_in_the_3d_view():
-    """An integral button hides the calculator, the face or object picked in the 3D view goes into the
-    expression around the field typed so far, and the calculator comes back."""
+def test_equations_tab_picks_the_geometry_in_the_3d_view():
+    """The calculator is a tab next to the 3D Modeler with its own ribbon page: an integral switches to the
+    modeler, the face or object picked there goes into the equation around the field typed so far, and the
+    Equations tab comes back. Saved equations are listed in the project tree."""
+    from PySide6.QtCore import Qt
     from PySide6.QtWidgets import QApplication
     app = QApplication.instance() or QApplication([])
     from hertzon.gui.doc import Pick
@@ -266,16 +268,31 @@ def test_calculator_window_picks_the_geometry_in_the_3d_view():
     win.doc.rebuild()
     win.fields_calculator()
     calc = win.calc_window
+    rb, page = win.ribbon, win._eq_page
+    assert win.tabs.currentWidget() is calc and win.tabs.indexOf(calc) == 1
+    assert rb.isTabVisible(page) and rb.currentIndex() == page
     calc.set_mode("lin")                                 # the text line (the formula editor is a web view)
     calc.edit.setPlainText("0.25*eps0*eps_r*|E|^2")
     calc.pick("int_vol", 3)
-    assert not calc.isVisible() and win.doc.selection_mode == "object"
+    assert win.tabs.currentIndex() == 0 and win.doc.selection_mode == "object"
+    assert not rb.isTabVisible(page) and rb.tabText(rb.currentIndex()) == "Results"
     win.doc.select([Pick("Box")])
     calc._bar._use()
     app.processEvents()
-    assert calc.isVisible()
+    assert win.tabs.currentWidget() is calc and rb.isTabVisible(page)
     assert calc.edit.toPlainText() == "int_vol(Box, 0.25*eps0*eps_r*|E|^2)"
     assert calc.info is not None and not calc.info.field
+    calc.name.setText("We")
+    assert calc.save()
+    assert "Equations: We" in win.tabs.tabText(1)
+
+    def tree_items(it):
+        yield it
+        for i in range(it.childCount()):
+            yield from tree_items(it.child(i))
+    data = [it.data(0, Qt.UserRole + 1) for i in range(win.project_tree.topLevelItemCount())
+            for it in tree_items(win.project_tree.topLevelItem(i))]
+    assert ("group", "Equations") in data and ("equation", "We") in data
     calc.new()
     calc.edit.setPlainText("re(S)")
     calc.pick("flux", 2)
@@ -285,6 +302,7 @@ def test_calculator_window_picks_the_geometry_in_the_3d_view():
     calc._bar._use()
     assert calc.edit.toPlainText() == "flux(flip(face(Box, 2)), re(S))"
     assert win.doc.selection_mode == "object"           # the selection mode is restored
-    calc.close()
+    win._close_tab(win.tabs.indexOf(calc))
+    assert win.tabs.indexOf(calc) < 0 and not rb.isTabVisible(page)
     win.doc.dirty = False
     win.close()

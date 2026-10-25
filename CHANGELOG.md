@@ -6,21 +6,23 @@ the GitHub release notes.
 ## Unreleased
 
 ### Added
-- **Fields Calculator** (Results > Fields > Fields Calculator, or Calculator in the Results ribbon): its own
-  window with its own ribbon for expressions of the stored fields. The formula is typed into a typeset formula
-  editor as in a desktop office program: a command after a backslash turns into its symbol with Space
-  (`\times` gives ×, `\curl` gives ∇×, `\iint` a surface integral), and fields, symbols, fractions, roots,
-  integrals, large operators, brackets and functions are on the Equation tab. The Linear view shows the same
-  formula as one line of text with units, which is also what is saved. An integral or another operation over
-  a geometry hides the window and asks for the face, object or line in the 3D view, then comes back with it
+- **Fields Calculator** (Calculator in the Results ribbon): an Equations tab next to the 3D Modeler for
+  equations of the stored fields, with the result on the chosen solution, frequency, port and phase beside
+  them. While the tab is open the ribbon has an Equation page with fields, symbols, fractions, roots,
+  integrals, large operators, brackets, functions and the library. The formula is typed into a typeset
+  formula editor as in a desktop office program: a command after a backslash turns into its symbol with
+  Space (`\times` gives ×, `\curl` gives ∇×, `\iint` a surface integral). Text shows the same formula as one
+  line of text with units, which is also what is saved. An integral or another operation over a geometry
+  switches to the 3D Modeler and asks for the face, object or line, then comes back with it
   below the sign. Examples:
   `flux(Port1, re(S))`, `int_line(Radial, E)`, `max(Dielectric, |E|)` or
   `int_vol(Dielectric, 0.5*omega*eps0*eps_r*tand*|E|^2)`. Each expression shows its kind (field or value),
   unit and a typeset formula while you type; errors are underlined where they are. Integrals over lines,
   faces and volumes of model and non-model objects, cut planes (`cut_xy(10mm)`), points, components in
   cylindrical and spherical coordinate systems, curl, divergence and gradient. Values are computed on the
-  solver's elements with their quadrature, curved elements included. Named expressions and user functions
-  are saved with the design; a library has power, loss, energy, Q, voltage and current. A named field can be
+  solver's elements with their quadrature, curved elements included. Equations and user functions are saved
+  with the design and listed in the project tree under Equations (open, plot, add to a report, rename,
+  delete); a library has power, loss, energy, Q, voltage and current. A named field can be
   plotted like E or H (Plot Fields > Quantity), and a named value can be shown over frequency in a report
   (category Fields).
 - **Volume field plots**: Plot on "(selection, inside solids)" (or "Inside the selected solids" in the plot

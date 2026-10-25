@@ -1,26 +1,23 @@
-r"""Fields Calculator (Results > Fields > Fields Calculator): its own window next to the modeler.
+r"""Fields Calculator (Results > Fields > Calculator): the Equations tab next to the 3D Modeler.
 
-A ribbon on top (Home: expression, evaluate, use, context; Equation: fields, symbols and structures as in a
-desktop formula editor). Left the expressions of the design, the functions and a library; in the middle the
-formula, typed into the typeset formula editor (Professional view: \times + Space gives ×, \iint + Space a
-surface integral) or as one line of text (Linear view, the same function names as the report expressions);
-right the result on the solution, frequency, excitation and phase chosen in the ribbon. An operation over a
-geometry (integral, maximum, ...) hides the window and asks for the face, object or line in the 3D view; the
-pick goes below the sign. Named expressions are saved with the design (always as text) and appear in Plot
-Fields (fields) and in reports (values)."""
+In the middle the equation with its name, typed into the typeset formula editor (Formula: \times + Space gives
+×, \iint + Space a surface integral) or as one line of text (Text: the same function names as the report
+expressions); right the solution, frequency, excitation and phase it is evaluated on, and the result. The
+building blocks (fields, symbols, structures) are on the Equation page of the main ribbon, shown while the tab
+is open. An operation over a geometry (integral, maximum, ...) switches to the 3D Modeler and asks for the face,
+object or line; the pick goes below the sign. Equations are saved with the design (always as text), are listed
+in the project tree under Equations, and appear in Plot Fields (fields) and in reports (values)."""
 from __future__ import annotations
 
 import io
 import re
 
 from PySide6.QtCore import QRectF, QSize, QStringListModel, Qt, QTimer, Signal
-from PySide6.QtGui import (QColor, QFont, QIcon, QKeySequence, QPainter, QPixmap, QShortcut, QTextCharFormat,
-                           QTextCursor)
+from PySide6.QtGui import QColor, QFont, QIcon, QPainter, QPixmap, QTextCharFormat, QTextCursor
 from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox, QCompleter, QDialog, QDialogButtonBox,
-                               QDoubleSpinBox, QFormLayout, QFrame, QGridLayout, QGroupBox, QHBoxLayout, QLabel,
-                               QLineEdit, QListWidget, QMainWindow, QMenu, QMessageBox, QPlainTextEdit,
-                               QPushButton, QSizePolicy, QSplitter, QStackedWidget, QTextEdit, QToolButton,
-                               QTreeWidget, QTreeWidgetItem, QVBoxLayout, QWidget)
+                               QDoubleSpinBox, QFormLayout, QGridLayout, QHBoxLayout, QLabel, QLineEdit,
+                               QListWidget, QMenu, QMessageBox, QPlainTextEdit, QPushButton, QSizePolicy,
+                               QSplitter, QStackedWidget, QTextEdit, QToolButton, QVBoxLayout, QWidget)
 
 from ..post.calc import lang as L
 from ..post.calc import latex as TX
@@ -29,7 +26,6 @@ from ..post.calc import units as UN
 from . import calc_bridge as CB
 from . import fields as F
 from . import formula_editor as FE
-from .ribbon import Ribbon
 
 PREVIEW = "Fields Calculator"         # name of the live preview overlay in the 3D view
 _IDENT = re.compile(r"^[A-Za-z_][A-Za-z_0-9]*$")
@@ -159,8 +155,7 @@ class ExprEdit(QPlainTextEdit):
 
 
 STYLE = """
-QMainWindow#FieldsCalculator { background:#f6f7f9; }
-QWidget#Side, QWidget#Right { background:#fbfbfc; }
+QWidget#Right { background:#fbfbfc; }
 QLabel[role="h"] { color:#5a6476; font-size:11px; font-weight:600; letter-spacing:0.5px; }
 QLabel[role="muted"] { color:#6b7280; }
 QLineEdit#Name { font-size:20px; font-weight:600; border:none; border-bottom:1px solid #c3c8d2;
@@ -169,20 +164,22 @@ QLineEdit#Desc { border:none; border-bottom:1px dashed #c3c8d2; background:trans
                  padding:2px; }
 QFrame#Group { background:#ffffff; border:1px solid #d6dae1; border-radius:4px; }
 QFrame#Group QLabel { color:#7a8496; font-size:10px; font-weight:600; border:none; }
-QToolButton[role="sym"] { font-family:"Cambria Math","STIX Two Math","Times New Roman",serif; font-size:15px;
-                          min-width:28px; min-height:24px; border:1px solid #e1e4ea; border-radius:3px;
-                          background:#fafbfc; padding:1px 4px; }
-QToolButton[role="sym"]:hover { background:#e8eefc; border-color:#9fb4ee; }
 QLabel#Formula { background:#ffffff; border:1px solid #c3c8d2; border-radius:4px; }
 QLabel#Value { font-size:30px; font-weight:600; }
 QPushButton#Primary { background:#2f5bd3; color:white; border:1px solid #2a50bb; border-radius:4px;
                       padding:5px 14px; font-weight:600; }
 QPushButton#Primary:hover { background:#2a50bb; }
 QLabel#Banner { background:#fff7e0; border:1px solid #e6c766; border-radius:4px; padding:6px; }
-QToolButton[role="sym"] { min-width:26px; max-width:46px; min-height:24px; }
+QLabel#AsText { color:#4b5563; font-family:Consolas,monospace; }
+"""
+# the keys of the Equation page of the main ribbon
+KEY_STYLE = """
+QToolButton[role="sym"] { font-family:"Cambria Math","STIX Two Math","Times New Roman",serif; font-size:15px;
+                          min-width:26px; max-width:46px; min-height:24px; border:1px solid #e1e4ea;
+                          border-radius:3px; background:#fafbfc; padding:1px 4px; }
+QToolButton[role="sym"]:hover { background:#e8eefc; border-color:#9fb4ee; }
 QToolButton[role="sym"][field="1"] { font-weight:bold; }
 QToolButton[role="sym"]::menu-indicator { width:0px; }
-QLabel#AsText { color:#4b5563; font-family:Consolas,monospace; }
 """
 MATH_FONT = ("Cambria Math", "STIX Two Math", "Latin Modern Math", "DejaVu Serif", "Times New Roman")
 
@@ -204,7 +201,7 @@ def glyph_icon(text: str, px: int = 22) -> QIcon:
     return QIcon(pm)
 
 
-# Equation tab: (label, LaTeX for the formula editor, text for the Linear view, tooltip). In the LaTeX #@ is the
+# Equation page: (label, LaTeX for the formula editor, text for the Text view, tooltip). In the LaTeX #@ is the
 # selection (or an empty box) and #? an empty box.
 FIELD_KEYS = [("E", "E", "E", "electric field (V/m)"), ("H", "H", "H", "magnetic field (A/m)"),
               ("J", "J", "J", "volume current density (A/m²)"),
@@ -302,10 +299,10 @@ def _h(text: str) -> QLabel:
 
 
 class PickBar(QDialog):
-    """Shown while the calculator is hidden: asks for the geometry of an integral (or any name) to be picked in
-    the 3D view; Use puts it into the expression and brings the calculator back."""
+    """Shown over the 3D Modeler: asks for the geometry of an integral (or any name) to be picked in the 3D
+    view; Use puts it into the equation and goes back to the Equations tab."""
 
-    def __init__(self, calc: "CalculatorWindow", fn: str | None, dim: int):
+    def __init__(self, calc: "EquationsTab", fn: str | None, dim: int):
         super().__init__(calc.win, Qt.Tool | Qt.WindowStaysOnTopHint)
         self.calc, self.fn, self.dim = calc, fn, dim
         self.doc = calc.doc
@@ -395,23 +392,23 @@ class PickBar(QDialog):
             pass
         if self.doc.selection_mode != self.mode0:
             self.calc.win.set_mode(self.mode0)
-        self.calc.show()
-        self.calc.raise_()
-        self.calc.activateWindow()
+        tabs = self.calc.win.tabs
+        if tabs.indexOf(self.calc) >= 0:
+            tabs.setCurrentWidget(self.calc)
         self.calc.focus_editor()
 
 
-class CalculatorWindow(QMainWindow):
-    """The Fields Calculator: its own window next to the modeler. Left the expressions of the project, the
-    functions and the library; in the middle the expression with building blocks, typeset formula and text;
-    right the result."""
+class EquationsTab(QWidget):
+    """The Fields Calculator as the Equations tab next to the 3D Modeler: in the middle the formula with its
+    name, right the result on the chosen solution, frequency, excitation and phase. The building blocks are on
+    the Equation page of the main ribbon (build_ribbon), shown while this tab is open; the saved equations
+    are in the project tree."""
 
     def __init__(self, win):
-        super().__init__(win, Qt.Window)
+        super().__init__(win)
         self.win = win
         self.doc = win.doc
         self.setObjectName("FieldsCalculator")
-        self.setWindowTitle("Fields Calculator")
         self.setStyleSheet(STYLE)
         self.current: str | None = None        # name of the loaded project expression
         self.saved_text = ""
@@ -425,110 +422,60 @@ class CalculatorWindow(QMainWindow):
         self.mode = "lin"                     # "pro": typeset formula editor, "lin": one line of text
         self.tex_error: str | None = None     # why the formula of the editor is not an expression yet
         self._from_tex = False
+        self.b_formula: QToolButton | None = None     # Formula | Text on the Equation page of the ribbon
+        self.b_text: QToolButton | None = None
         self.fe: FE.FormulaEditor | None = None
         if FE.available():
             try:
                 self.fe = FE.FormulaEditor()
-            except Exception:  # noqa: BLE001   (no web engine on this system: Linear view only)
+            except Exception:  # noqa: BLE001   (no web engine on this system: the text line only)
                 self.fe = None
-        central = QWidget()
-        cl = QVBoxLayout(central)
-        cl.setContentsMargins(0, 0, 0, 0)
-        cl.setSpacing(0)
-        cl.addWidget(self._ribbon())
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(0, 0, 0, 0)
         split = QSplitter(Qt.Horizontal)
-        split.addWidget(self._side())
         split.addWidget(self._work())
         split.addWidget(self._right())
-        split.setStretchFactor(1, 1)
-        split.setSizes([250, 700, 300])
-        cl.addWidget(split, 1)
-        self.setCentralWidget(central)
-        self.status = QLabel()
-        self.statusBar().addWidget(self.status, 1)
-        keys = QLabel("\\ and a name, then Space: symbol or structure · Tab: next box · Enter: evaluate · "
-                      "Ctrl+S: save")
-        keys.setProperty("role", "muted")
-        self.statusBar().addPermanentWidget(keys)
-        QShortcut(QKeySequence.Save, self, self.save)
-        QShortcut(QKeySequence.New, self, self.new)
-        QShortcut(QKeySequence("F5"), self, self.evaluate)
+        split.setStretchFactor(0, 1)
+        split.setSizes([900, 330])
+        lay.addWidget(split, 1)
         self.doc.changed.connect(self._doc_changed)
-        self.resize(1380, 780)
         st = getattr(win, "settings", None)
-        if st is not None and st.value("calc/geometry"):
-            self.restoreGeometry(st.value("calc/geometry"))
-        scr = self.screen().availableGeometry() if self.screen() is not None else None
-        if scr is not None and self.width() < 1380:          # room for the whole Equation ribbon
-            self.resize(min(1380, scr.width()), self.height())
         mode = st.value("calc/mode", "pro") if st is not None else "pro"
         self.refresh()
         self.set_mode(mode if self.fe is not None else "lin")
         self.new()
 
-    # ---- layout ----------------------------------------------------------------------------------
-    def _ribbon(self) -> Ribbon:
-        rb = Ribbon()
-        rb.setFixedHeight(122)
-        # ---- Home
-        home = rb.page("Home")
-        g = home.group("Expression")
-        g.large("New", "new", self.new, tip="A new expression (Ctrl+N)")
-        g.small("Save", "save", self.save, tip="Save the expression in the design (Ctrl+S)")
-        self.a_del = g.small("Delete", "delete", self.delete, tip="Delete the saved expression")
-        g = home.group("Evaluate")
-        g.large("Evaluate", "analyze", self.evaluate, tip="Evaluate on the solution of the context (Enter)")
-        g = home.group("Use")
-        g.large("Plot Field", "field", self.plot_field, tip="Plot this field in the 3D view")
-        g.large("Add to Report", "rect_plot", self.add_to_report, tip="Show this value over frequency in a report")
-        g = home.group("Context")
-        self.sol = QComboBox()
-        self.sol.setMinimumWidth(210)
-        self.freq = QComboBox()
-        self.port = QComboBox()
-        self.phase = QDoubleSpinBox()
-        self.phase.setRange(-360, 360)
-        self.phase.setSuffix("°")
-        self.phase.setToolTip("Phase for inst() and for the preview in the 3D view")
-        for lab, w in (("Solution", self.sol), ("Frequency", self.freq)):
-            g.widget(self._labeled(lab, w))
-        pp = QWidget()
-        h = QHBoxLayout(pp)
-        h.setContentsMargins(0, 0, 0, 0)
-        h.addWidget(self._labeled("Port", self.port))
-        h.addWidget(self._labeled("Phase", self.phase))
-        g.widget(pp)
-        self.sol.currentTextChanged.connect(self._solution_changed)
-        self.freq.currentIndexChanged.connect(lambda *_: self._context_changed())
-        self.port.currentIndexChanged.connect(lambda *_: self._context_changed())
-        self.phase.valueChanged.connect(lambda *_: self._context_changed())
-        g = home.group("Functions")
-        g.large("Functions", "calculator", self.functions_dialog, tip="Your own functions: name(a, b) = ...")
-        # ---- Equation
-        eq = rb.page("Equation")
-        g = eq.group("Tools")
-        lib = [(f"{desc.split(' (')[0]}", (lambda _=False, k=name: self._load_library(k)))
-               for name, _text, desc in LIB.EXPRESSIONS]
-        b = self._big(g, "Equation", "π", None, "Start from a formula of the library")
+    # ---- the Equation page of the main ribbon ----------------------------------------------------
+    def build_ribbon(self, page) -> None:
+        g = page.group("Tools")
+        b = self._big(g, "Equation", "π", None, "A new equation, or one from the library")
         m = QMenu(b)
-        for lab, fn in lib:
-            m.addAction(lab, fn)
+        m.addAction("New Equation", self.new)
+        m.addSeparator()
+        m.addSection("Library")
+        for name, _text, desc in LIB.EXPRESSIONS:
+            m.addAction(desc.split(" (")[0], lambda _=False, k=name: self._load_library(k))
+        m.addSeparator()
+        m.addAction("Functions...", self.functions_dialog)
         b.setMenu(m)
         b.setPopupMode(QToolButton.InstantPopup)
-        self.b_pro = g.small("Professional", None, lambda: self.set_mode("pro"),
-                             tip="The formula typeset, edited like in a formula editor", checkable=True)
-        self.b_lin = g.small("Linear", None, lambda: self.set_mode("lin"),
-                             tip="The formula as one line of text: flux(Port1, re(S))", checkable=True)
+        self.b_formula = g.small("Formula", None, lambda: self.set_mode("pro"),
+                                 tip="Type the formula typeset, as in a formula editor (\\iint + Space: ∬)",
+                                 checkable=True)
+        self.b_text = g.small("Text", None, lambda: self.set_mode("lin"),
+                              tip="Type the formula as one line of text: flux(Port1, re(S))", checkable=True)
         g.small("Pick from 3D", None, lambda: self.pick(None, -1),
-                tip="Hide the calculator, click an object or face in the 3D view, and insert its name")
+                tip="Click an object or face in the 3D Modeler and insert its name")
         if self.fe is None:
-            self.b_pro.setEnabled(False)
-            self.b_pro.setToolTip("The formula editor needs Qt WebEngine (part of PySide6)")
-        g = eq.group("Fields")
+            self.b_formula.setEnabled(False)
+            self.b_formula.setToolTip("The formula editor needs Qt WebEngine (part of PySide6)")
+        self.b_formula.setChecked(self.mode == "pro")
+        self.b_text.setChecked(self.mode == "lin")
+        g = page.group("Fields")
         g.row.addWidget(self._keys(FIELD_KEYS, 4, field=True))
-        g = eq.group("Symbols")
+        g = page.group("Symbols")
         g.row.addWidget(self._keys(SYMBOL_KEYS, 8))
-        g = eq.group("Structures")
+        g = page.group("Structures")
         for name, glyph, items in STRUCTURES[:3]:
             self._struct(g, name, glyph, items)
         self._geo_menu(g, "Integral", "∬", INTEGRAL_MENU)
@@ -537,22 +484,9 @@ class CalculatorWindow(QMainWindow):
             self._struct(g, name, glyph, items)
         self._big(g, "Component", "F_φ", self.component_dialog,
                   "a component of a vector in a coordinate system (x, ρ, φ, r, θ, …)")
-        rb.setCurrentIndex(1)
-        return rb
+        page.setStyleSheet(KEY_STYLE)
 
-    @staticmethod
-    def _labeled(text: str, w: QWidget) -> QWidget:
-        box = QWidget()
-        h = QHBoxLayout(box)
-        h.setContentsMargins(0, 0, 0, 0)
-        h.setSpacing(4)
-        lab = QLabel(text)
-        lab.setProperty("role", "muted")
-        lab.setMinimumWidth(lab.fontMetrics().horizontalAdvance("Frequency") + 4 if text != "Phase" else 0)
-        h.addWidget(lab)
-        h.addWidget(w, 1)
-        return box
-
+    # ---- layout ----------------------------------------------------------------------------------
     def _big(self, g, text: str, glyph: str, slot, tip: str) -> QToolButton:
         g.end_column()
         b = QToolButton()
@@ -610,32 +544,6 @@ class CalculatorWindow(QMainWindow):
         b.setMenu(m)
         b.setPopupMode(QToolButton.InstantPopup)
 
-    def _side(self) -> QWidget:
-        w = QWidget()
-        w.setObjectName("Side")
-        w.setMinimumWidth(250)
-        lay = QVBoxLayout(w)
-        lay.setContentsMargins(8, 8, 4, 8)
-        self.search = QLineEdit()
-        self.search.setPlaceholderText("Search expressions")
-        self.search.setClearButtonEnabled(True)
-        self.search.textChanged.connect(self._filter_tree)
-        lay.addWidget(self.search)
-        self.tree = QTreeWidget()
-        self.tree.setHeaderHidden(True)
-        self.tree.setColumnCount(2)
-        self.tree.setRootIsDecorated(False)
-        self.tree.setIndentation(8)
-        self.tree.setFrameShape(QFrame.NoFrame)
-        self.tree.setStyleSheet("QTreeWidget{background:transparent} QTreeWidget::item{padding:3px 0}")
-        self.tree.itemClicked.connect(self._item_clicked)
-        self.tree.itemDoubleClicked.connect(self._item_double_clicked)
-        lay.addWidget(self.tree, 1)
-        leg = QLabel("∫ value   ◧ field   ƒ function")
-        leg.setProperty("role", "muted")
-        lay.addWidget(leg)
-        return w
-
     def _work(self) -> QWidget:
         w = QWidget()
         lay = QVBoxLayout(w)
@@ -663,9 +571,17 @@ class CalculatorWindow(QMainWindow):
         nrow.addSpacing(10)
         nrow.addWidget(self.desc, 1)
         nrow.addWidget(self.unsaved)
+        b = QPushButton("Save")
+        b.setToolTip("Save the equation in the design: it appears in the project tree under Equations")
+        b.clicked.connect(self.save)
+        nrow.addWidget(b)
+        self.a_del = QPushButton("Delete")
+        self.a_del.setToolTip("Delete the saved equation")
+        self.a_del.clicked.connect(self.delete)
+        nrow.addWidget(self.a_del)
         lay.addLayout(nrow)
 
-        # Professional: the formula editor; Linear: the typeset preview and the text line
+        # Formula: the formula editor; Text: the typeset preview and the text line
         self.stack = QStackedWidget()
         if self.fe is not None:
             self.fe.setMinimumHeight(220)
@@ -708,6 +624,13 @@ class CalculatorWindow(QMainWindow):
         self.chips.setTextFormat(Qt.RichText)
         lay.addWidget(self.chips)
         lay.addStretch(0)
+        srow = QHBoxLayout()
+        self.status = QLabel()
+        srow.addWidget(self.status, 1)
+        keys = QLabel("\\ and a name, then Space: symbol or structure · Tab: next box · Enter: evaluate")
+        keys.setProperty("role", "muted")
+        srow.addWidget(keys)
+        lay.addLayout(srow)
         return w
 
     def _right(self) -> QWidget:
@@ -717,6 +640,45 @@ class CalculatorWindow(QMainWindow):
         lay = QVBoxLayout(w)
         lay.setContentsMargins(14, 12, 14, 10)
         lay.setSpacing(8)
+        lay.addWidget(_h("EVALUATE ON"))
+        self.sol = QComboBox()
+        self.sol.setMinimumWidth(200)
+        self.freq = QComboBox()
+        self.port = QComboBox()
+        self.phase = QDoubleSpinBox()
+        self.phase.setRange(-360, 360)
+        self.phase.setSuffix("°")
+        self.phase.setToolTip("Phase for inst() and for the preview in the 3D view")
+        form = QFormLayout()
+        form.setContentsMargins(0, 0, 0, 0)
+        form.addRow("Solution", self.sol)
+        form.addRow("Frequency", self.freq)
+        pp = QHBoxLayout()
+        pp.addWidget(self.port, 1)
+        pp.addWidget(QLabel("Phase"))
+        pp.addWidget(self.phase, 1)
+        form.addRow("Port", pp)
+        lay.addLayout(form)
+        self.sol.currentTextChanged.connect(self._solution_changed)
+        self.freq.currentIndexChanged.connect(lambda *_: self._context_changed())
+        self.port.currentIndexChanged.connect(lambda *_: self._context_changed())
+        self.phase.valueChanged.connect(lambda *_: self._context_changed())
+        act = QHBoxLayout()
+        ev = QPushButton("Evaluate")
+        ev.setObjectName("Primary")
+        ev.setToolTip("Evaluate on the solution above (Enter)")
+        ev.clicked.connect(self.evaluate)
+        act.addWidget(ev)
+        pf = QPushButton("Plot Field")
+        pf.setToolTip("Plot this field in the 3D Modeler")
+        pf.clicked.connect(self.plot_field)
+        act.addWidget(pf)
+        ar = QPushButton("Add to Report")
+        ar.setToolTip("Show this value over frequency in a report")
+        ar.clicked.connect(self.add_to_report)
+        act.addWidget(ar)
+        lay.addLayout(act)
+        lay.addSpacing(6)
         lay.addWidget(_h("RESULT"))
         self.result = QLabel("—")
         self.result.setObjectName("Value")
@@ -802,8 +764,7 @@ class CalculatorWindow(QMainWindow):
 
     # ---- context ---------------------------------------------------------------------------------
     def refresh(self) -> None:
-        """Expressions list, geometry names for completion, solutions."""
-        self._fill_tree()
+        """Geometry names for completion, solutions."""
         self._fill_solutions()
         env = CB.make_env(self.doc)
         words = list(L.SYMBOLS) + list(L.SIGNATURES) + list(env.named) + list(env.functions) + \
@@ -817,7 +778,6 @@ class CalculatorWindow(QMainWindow):
     def _doc_changed(self, what: str) -> None:
         if what in ("results", "analysis", "fields", "model", "all", "design"):
             cur = self.current
-            self._fill_tree()
             if what in ("results", "analysis", "all", "design"):
                 self._fill_solutions()
             if cur and not any(e.name == cur for e in self.doc.design.field_exprs):
@@ -862,6 +822,10 @@ class CalculatorWindow(QMainWindow):
                 self.phase.value())
 
     def _context_changed(self) -> None:
+        ctx = self.context()
+        if ctx == getattr(self, "_ctx", None):      # the lists were filled again (save, refresh): same result
+            return
+        self._ctx = ctx
         if self.result.text() not in ("—", "", "Field"):
             self.result.setText("—")
             self.result_note.setText("Context changed: Evaluate again")
@@ -870,96 +834,13 @@ class CalculatorWindow(QMainWindow):
         self.freq_note.setText("")
         self._preview()
 
-    # ---- expressions list ------------------------------------------------------------------------
-    def _fill_tree(self) -> None:
-        self.tree.clear()
-        env = CB.make_env(self.doc)
-        des = self.doc.design
-
-        def head(text):
-            it = QTreeWidgetItem(self.tree, [text, ""])
-            f = it.font(0)
-            f.setBold(True)
-            f.setPointSizeF(f.pointSizeF() * 0.85)
-            it.setFont(0, f)
-            it.setForeground(0, QColor("#5a6476"))
-            it.setFlags(Qt.ItemIsEnabled)
-            it.setFirstColumnSpanned(True)
-            return it
-
-        def row(name, text, desc, kind, unit, data):
-            icon = {"Value": "∫", "Vector": "∫", "function": "ƒ"}.get(kind, "◧" if kind else "·")
-            it = QTreeWidgetItem(self.tree, [f"{icon}  {name}", unit])
-            it.setToolTip(0, f"{name} = {text}" + (f"\n{desc}" if desc else ""))
-            it.setData(0, Qt.UserRole, data)
-            it.setForeground(1, QColor("#7a8496"))
-            it.setTextAlignment(1, Qt.AlignRight | Qt.AlignVCenter)
-            if self.current and data == ("expr", self.current):
-                self.tree.setCurrentItem(it)
-            return it
-
-        def kind_of(text):
-            try:
-                i = L.analyze(text, env)
-                return ("Value" if not i.field and not i.vec else "Vector" if not i.field else "field",
-                        UN.label(i.unit))
-            except L.CalcError:
-                return "error", "⚠"
-        head("PROJECT")
-        for e in des.field_exprs:
-            k, u = kind_of(e.expr)
-            row(e.name, e.expr, e.description, k, u, ("expr", e.name))
-        if not des.field_exprs:
-            it = QTreeWidgetItem(self.tree, ["   (none yet)", ""])
-            it.setForeground(0, QColor("#98a0ae"))
-            it.setFlags(Qt.NoItemFlags)
-        if des.field_funcs:
-            head("MY FUNCTIONS")
-            for text in des.field_funcs:
-                name = text.split("(", 1)[0].strip()
-                row(text.split("=", 1)[0].strip(), text, "", "function", "", ("func", name))
-        head("LIBRARY")
-        for name, text, desc in LIB.EXPRESSIONS:
-            k, u = kind_of(text)
-            row(desc.split(" (")[0].split(",")[0], text, desc, k, u, ("lib", name))
-        for text, desc in LIB.FUNCTIONS:
-            row(desc.split(" (")[0].split(",")[0], text, desc, "function", "", ("libfn", text))
-        self.tree.resizeColumnToContents(1)
-        self.tree.header().setStretchLastSection(False)
-        self.tree.header().setSectionResizeMode(0, self.tree.header().ResizeMode.Stretch)
-        self._filter_tree(self.search.text())
-
-    def _filter_tree(self, text: str) -> None:
-        t = text.strip().lower()
-        for i in range(self.tree.topLevelItemCount()):
-            it = self.tree.topLevelItem(i)
-            if it.data(0, Qt.UserRole):
-                it.setHidden(bool(t) and t not in it.text(0).lower() and t not in it.toolTip(0).lower())
-
-    def _item_clicked(self, it: QTreeWidgetItem, _col: int) -> None:
-        data = it.data(0, Qt.UserRole)
-        if not data:
-            return
-        kind, key = data
-        if kind == "expr":
-            self.load(key)
-        elif kind == "lib":
-            self._load_library(key)
-        elif kind in ("func", "libfn"):
-            self.functions_dialog(select=key)
-
+    # ---- equations -----------------------------------------------------------------------------
     def _load_library(self, key: str) -> None:
         name, text, desc = next(x for x in LIB.EXPRESSIONS if x[0] == key)
         self.new()
         self.name.setText(name if not any(e.name == name for e in self.doc.design.field_exprs) else "")
         self.desc.setText(desc)
         self.edit.setPlainText(text)
-
-    def _item_double_clicked(self, it: QTreeWidgetItem, _col: int) -> None:
-        """A double click on a project expression inserts its name at the cursor."""
-        data = it.data(0, Qt.UserRole)
-        if data and data[0] == "expr" and data[1] != self.current:
-            self.insert_text(data[1])
 
     def load(self, name: str) -> None:
         e = next((x for x in self.doc.design.field_exprs if x.name == name), None)
@@ -984,7 +865,6 @@ class CalculatorWindow(QMainWindow):
         self.result_note.setText("Type an expression, use the building blocks, or start from the Library.")
         self._dirty_changed()
         self._used_by()
-        self.tree.clearSelection()
         self.focus_editor()
 
     def _clear_result(self) -> None:
@@ -1001,8 +881,9 @@ class CalculatorWindow(QMainWindow):
         dirty = self._state() != self.saved_text and bool(self.edit.toPlainText().strip())
         self.unsaved.setText("unsaved" if dirty else ("saved" if self.current else ""))
         self.a_del.setEnabled(self.current is not None)
-        self.setWindowTitle(f"Fields Calculator — {self.name.text() or 'new expression'}"
-                            f"{' *' if dirty else ''}  ({self.doc.design.name})")
+        tabs = getattr(self.win, "tabs", None)
+        if tabs is not None and tabs.indexOf(self) >= 0:
+            tabs.setTabText(tabs.indexOf(self), f"Equations: {self.name.text() or 'new'}{' *' if dirty else ''}")
 
     def _used_by(self) -> None:
         if not self.current:
@@ -1024,7 +905,7 @@ class CalculatorWindow(QMainWindow):
         self._dirty_changed()
         self._timer.start()
 
-    # ---- the two views: typeset formula (Professional) and text (Linear) ---------------------------
+    # ---- the two views: typeset formula (Formula) and one line of text (Text) ----------------------
     def set_mode(self, mode: str) -> None:
         if mode == "pro" and self.fe is None:
             mode = "lin"
@@ -1036,8 +917,9 @@ class CalculatorWindow(QMainWindow):
             self.status.setText(f"<span style='color:{ERR}'>The formula was not complete: {self.tex_error}</span>")
         self.mode = mode
         self.stack.setCurrentIndex(0 if mode == "pro" and self.fe is not None else self.stack.count() - 1)
-        self.b_pro.setChecked(mode == "pro")
-        self.b_lin.setChecked(mode == "lin")
+        if self.b_formula is not None:
+            self.b_formula.setChecked(mode == "pro")
+            self.b_text.setChecked(mode == "lin")
         self.astext.setVisible(mode == "pro")
         st = getattr(self.win, "settings", None)
         if st is not None:
@@ -1083,7 +965,7 @@ class CalculatorWindow(QMainWindow):
             self.edit.setFocus()
 
     def put(self, tex: str, text: str) -> None:
-        """A key of the Equation tab: LaTeX into the formula editor, text into the text line."""
+        """A key of the Equation page: LaTeX into the formula editor, text into the text line."""
         if self.mode == "pro" and self.fe is not None:
             self.fe.insert(tex)
         else:
@@ -1200,9 +1082,10 @@ class CalculatorWindow(QMainWindow):
 
     # ---- geometry from the 3D view ---------------------------------------------------------------
     def pick(self, fn: str | None, dim: int) -> None:
-        """Hide the calculator and ask for the geometry in the 3D view (PickBar); it comes back afterwards."""
+        """Switch to the 3D Modeler and ask for the geometry there (PickBar); the Equations tab comes back
+        afterwards."""
         self._pick_sel = self.edit.textCursor().selectedText() if self.mode == "lin" else ""
-        self.hide()
+        self.win.tabs.setCurrentIndex(0)
         bar = PickBar(self, fn, dim)
         bar.show()
         self._bar = bar
@@ -1403,12 +1286,9 @@ class CalculatorWindow(QMainWindow):
         except Exception:  # noqa: BLE001
             pass
 
-    def closeEvent(self, e):
+    def closing(self) -> None:
+        """The tab is closed: no preview stays in the 3D view."""
         self.live.setChecked(False)
-        st = getattr(self.win, "settings", None)
-        if st is not None:
-            st.setValue("calc/geometry", self.saveGeometry())
-        super().closeEvent(e)
 
     # ---- lifecycle -------------------------------------------------------------------------------
     def _check_name(self, name: str) -> str | None:
@@ -1464,6 +1344,7 @@ class CalculatorWindow(QMainWindow):
             for fp in des.field_plots:
                 if fp.quantity == self.current:
                     fp.quantity = name
+            self.current = name                  # the expression itself has the new name now
         e = next((x for x in des.field_exprs if x.name == (self.current or name)), None)
         if e is None:
             from ..model.design import FieldExpression
@@ -1568,7 +1449,7 @@ class ComponentDialog(QDialog):
              "Cylindrical": [("ρ (rho)", "rho"), ("φ (phi)", "phi"), ("z", "z")],
              "Spherical": [("r", "r"), ("θ (theta)", "theta"), ("φ (phi)", "phi")]}
 
-    def __init__(self, panel: CalculatorWindow):
+    def __init__(self, panel: EquationsTab):
         super().__init__(panel)
         self.panel = panel
         self.setWindowTitle("Insert Component")
@@ -1625,7 +1506,7 @@ class FunctionsDialog(QDialog):
     """Your own functions name(a, b) = expression: expanded where they are used; the parameters may also
     be geometries."""
 
-    def __init__(self, panel: CalculatorWindow, select: str | None = None):
+    def __init__(self, panel: EquationsTab, select: str | None = None):
         super().__init__(panel)
         self.panel = panel
         self.doc = panel.doc

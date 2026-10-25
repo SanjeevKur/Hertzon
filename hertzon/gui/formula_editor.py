@@ -1,14 +1,15 @@
-"""The typeset formula editor of the Fields Calculator (Professional view).
+"""The typeset formula editor of the Fields Calculator (the Formula view).
 
 A MathLive math field (MIT licence, bundled in gui/formula, no network) in a QWebEngineView. Python sets the
 formula as LaTeX and gets every change back as LaTeX; post.calc.latex turns it into the expression text.
-Without Qt WebEngine the calculator keeps its text line (Linear view) only: FormulaEditor.available()."""
+Without Qt WebEngine the calculator keeps its text line (the Text view) only: FormulaEditor.available()."""
 from __future__ import annotations
 
 import json
 from pathlib import Path
 
-from PySide6.QtCore import QObject, Qt, QUrl, Signal, Slot
+from PySide6.QtCore import QEvent, QObject, Qt, QUrl, Signal, Slot
+from PySide6.QtGui import QKeySequence
 from PySide6.QtWidgets import QVBoxLayout, QWidget
 
 HTML = Path(__file__).with_name("formula") / "editor.html"
@@ -75,8 +76,31 @@ class FormulaEditor(QWidget):
         self.channel.registerObject("py", self.bridge)
         self.view.page().setWebChannel(self.channel)
         self.view.load(QUrl.fromLocalFile(str(HTML)))
+        self.view.loadFinished.connect(self._keep_keys)
         lay.addWidget(self.view)
         self.setFocusProxy(self.view)
+        self._keep_keys()
+
+    # ---- keys ------------------------------------------------------------------------------------
+    EDIT_KEYS = (QKeySequence.Copy, QKeySequence.Cut, QKeySequence.Paste, QKeySequence.Undo, QKeySequence.Redo,
+                 QKeySequence.SelectAll, QKeySequence.Delete)
+
+    def _keep_keys(self, *_):
+        """Typed letters and the editing keys go to the formula, not to shortcuts of the main window (E selects
+        edges there, Ctrl+Z undoes a model change)."""
+        for w in (self.view, self.view.focusProxy()):
+            if w is not None and not w.property("hzKeys"):
+                w.setProperty("hzKeys", True)
+                w.installEventFilter(self)
+
+    def eventFilter(self, obj, ev):
+        if ev.type() == QEvent.ShortcutOverride:
+            mods = ev.modifiers() & ~(Qt.ShiftModifier | Qt.KeypadModifier)
+            if mods in (Qt.NoModifier, Qt.ControlModifier | Qt.AltModifier) or \
+                    any(ev.matches(k) for k in self.EDIT_KEYS):
+                ev.accept()
+                return True
+        return super().eventFilter(obj, ev)
 
     # ---- page -> Python --------------------------------------------------------------------------
     def _ready(self) -> None:

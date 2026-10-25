@@ -117,6 +117,19 @@ def value_names(doc) -> list[str]:
     return out
 
 
+def expression_kinds(doc) -> dict[str, str]:
+    """name -> 'field', 'value', 'vector' (a vector value) or 'error' for the named expressions of the design."""
+    env, out = make_env(doc), {}
+    for e in doc.design.field_exprs:
+        try:
+            i = L.analyze(e.name, env)
+        except L.CalcError:
+            out[e.name] = "error"
+            continue
+        out[e.name] = "field" if i.field else "vector" if i.vec else "value"
+    return out
+
+
 def field_names_in(design, expr: str) -> list[str]:
     """The named expressions of the Fields Calculator a report trace uses."""
     names = {e.name for e in design.field_exprs}
