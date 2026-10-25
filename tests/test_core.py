@@ -152,6 +152,36 @@ def test_thicken_goes_to_positive_side():
     assert (lo[2], hi[2]) == pytest.approx((-1, 0), abs=1e-9)
 
 
+
+def test_thicken_old_files_keep_direction():
+    """Files of version 1 thickened along the face normal, which follows how the sheet was drawn: loading them
+    sets Reverse direction where that normal pointed to the negative side, so the sheets keep their shape."""
+    from hertzon.model.design import project_from_dict
+    pr = Project()
+    d = pr.designs[0]
+    cases = {"plain": ("CreateRectangle", dict(Position="0,0,0", Axis="Z", XSize="2", YSize="3"), 2, (0, 1)),
+             "negx": ("CreateRectangle", dict(Position="0,0,0", Axis="Z", XSize="-2", YSize="3"), 2, (-1, 0)),
+             "negxy": ("CreateRectangle", dict(Position="0,0,0", Axis="Z", XSize="-2", YSize="-3"), 2, (0, 1)),
+             "yz": ("CreateRectangle", dict(Position="0,0,0", Axis="X", YSize="-2", ZSize="3"), 0, (-1, 0)),
+             "cw": ("CreatePolyline", dict(Points="0,0,0;0,1,0;1,1,0;1,0,0", Closed="True"), 2, (-1, 0)),
+             "ccw": ("CreatePolyline", dict(Points="0,0,0;1,0,0;1,1,0;0,1,0", Closed="True"), 2, (0, 1))}
+    for name, (kind, props, _, _) in cases.items():
+        d.add_object(kind, name=name, **props)
+        if kind == "CreatePolyline":
+            d.obj(name).history.append(Command("Cover", {}))
+        d.obj(name).history.append(Command("ThickenSheet", {"Thickness": "1", "BothSides": "False"}))
+    old = pr.to_dict()
+    old["version"] = 1
+    pr = project_from_dict(old)
+    d = pr.designs[0]
+    tess = K.tessellate(K.build_design(d, d.evaluator(pr)))
+    for name, (_, _, axis, span) in cases.items():
+        P = np.asarray(tess[name].points) * 1e3
+        assert (P[:, axis].min(), P[:, axis].max()) == pytest.approx(span, abs=1e-9), name
+    # files of the current version are left as they are
+    assert project_from_dict(pr.to_dict()).designs[0].obj("negx").history[-1].props["ReverseDirection"] == "True"
+    assert project_from_dict(pr.to_dict()).designs[0].obj("plain").history[-1].props["ReverseDirection"] == "False"
+
 def test_thicken_preview_arrow():
     """The Thicken sheet dialog draws an arrow on each sheet in the direction the kernel thickens to."""
     import types

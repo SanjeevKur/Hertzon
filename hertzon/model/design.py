@@ -446,6 +446,8 @@ def project_from_dict(d: dict) -> Project:
     p.designs = [design_from_dict(x) for x in d.get("designs", [])] or [Design()]
     if int(d.get("version", 1) or 1) < 2:
         from .objframe import migrate_global_points
+        from ..kernel.occ import migrate_thicken_direction
         for des in p.designs:
             migrate_global_points(des, des.evaluator(p))
+            migrate_thicken_direction(des, des.evaluator(p))
     return p

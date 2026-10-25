@@ -859,6 +859,33 @@ def thicken_direction(normal, reverse: bool = False) -> np.ndarray:
     return -n if reverse else n
 
 
+def migrate_thicken_direction(design: Design, ev: Evaluator) -> list[str]:
+    """Older files thickened along the face normal, whose sign follows how the sheet was drawn. Set Reverse
+    direction where that normal pointed to the negative side, so these sheets keep their old shape. The
+    sheets are built up to each Thicken sheet step in a separate gmsh model. Returns messages for steps that
+    could not be checked (they keep the new default direction)."""
+    from dataclasses import replace
+    steps = [(obj, i) for obj in design.objects for i, c in enumerate(obj.history)
+             if c.kind == "ThickenSheet" and c.props.get("BothSides") != "True"]
+    if not steps:
+        return []
+    prev = gmsh.model.getCurrent() if gmsh.isInitialized() else None
+    msgs = []
+    for obj, i in steps:
+        ensure_gmsh("hertzon-migrate")
+        try:
+            dt = _build_object(replace(obj, history=obj.history[:i]), BuildContext(design, ev))
+            n = _face_normal(dt)
+            obj.history[i].props["ReverseDirection"] = str(bool(thicken_direction(n) @ n < 0))
+        except Exception as e:  # noqa: BLE001
+            msgs.append(f"{obj.name}: Thicken sheet direction not checked ({e})")
+        finally:
+            gmsh.model.remove()
+    if prev:
+        gmsh.model.setCurrent(prev)
+    return msgs
+
+
 def _apply(cmd: Command, dt: list[tuple[int, int]], ctx: BuildContext, owner: str) -> list[tuple[int, int]]:
     ev, p, o = ctx.ev, cmd.props, _occ()
     k = cmd.kind
