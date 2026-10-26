@@ -42,6 +42,9 @@ the GitHub release notes.
   examples/benchmark/scaling/results.
 
 ### Fixed
+- **Selection rectangle left in the 3D view**: when the mouse release of a box selection did not reach the
+  3D view (for example after switching tabs), the rectangle stayed on screen. It now goes with the next move
+  or click in the view.
 - **Report tabs push the window off screen**: opening a report (for example an XY plot) raised the main
   window's minimum height to the full height of the trace editor, so on a 1080p screen with display scaling
   a maximized window reached below the screen and the status bar with the coordinates was cut off; after

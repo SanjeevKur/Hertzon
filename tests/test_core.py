@@ -1136,3 +1136,22 @@ def test_failed_fillet_leaves_object_unchanged(monkeypatch):
     win._edge_op("Fillet", {"Radius": "0.5", "Vertices": "0"}, "Patch")
     assert [c.kind for c in doc.design.obj("Patch").history] == ["CreateRectangle", "Fillet"]
     assert "Patch" in doc.tess and len(shown) == 1
+
+
+def test_box_selection_rectangle_does_not_stay():
+    """A selection rectangle whose mouse release went elsewhere (another tab or window) goes with the next
+    move or press in the 3D view instead of staying on screen."""
+    from PySide6.QtWidgets import QApplication
+    app = QApplication.instance() or QApplication([])  # noqa: F841
+    from hertzon.gui.main_window import MainWindow
+    from hertzon.model.design import Project
+    win = MainWindow(Project())
+    v, ren = win.view, win.view.plotter.renderer
+    n0 = ren.GetViewProps().GetNumberOfItems()
+    v._band, v._press_pos = ((10, 10), None, None), (10, 10)
+    v._show_band((80, 60))
+    assert ren.GetViewProps().GetNumberOfItems() == n0 + 2
+    v._on_move(None, None)                       # no button is down: the release was lost
+    assert v._band is None and ren.GetViewProps().GetNumberOfItems() == n0
+    win.doc.dirty = False
+    win.close()
