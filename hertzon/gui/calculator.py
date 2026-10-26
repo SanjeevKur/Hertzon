@@ -891,8 +891,11 @@ class EquationsTab(QWidget):
             self.details.setText("—")
             return
         self.kind.setText(f"{'Vector' if i.vec else 'Scalar'} {'field' if i.field else 'value'}")
-        self.kind_note.setText("A value at every point: plot it with Plot Fields (Quantity)." if i.field else
-                               "One number per frequency: show it in a report (category Fields).")
+        self.kind_note.setText(
+            "A value at every point: plot it with Plot Fields (Quantity)." if i.field else
+            "One number per frequency: show it in a Fields report (Results > Create Fields Report)."
+            if "fields" in i.uses else
+            "One number per frequency: show it in a solution data report (category Equations).")
         self.unit.setText(UN.label(i.unit) or "1")
         det = ["complex" if i.cx else "real"] + list(L.conventions_text(i))
         if i.normals:

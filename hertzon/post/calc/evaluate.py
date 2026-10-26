@@ -46,6 +46,10 @@ class FieldSource:
         """'eps_r', 'mu_r', 'sigma' or 'tand' of every element (M,)."""
         raise NotImplementedError
 
+    def network(self, kind: str, ports: list[int]) -> complex:
+        """S(i,j), Y(i,j), Z(i,j) or VSWR(i) of the solution at this frequency."""
+        raise CalcError(f"{kind}() needs the network data of a solution (S parameters)")
+
     def cs_frame(self, name: str) -> tuple[np.ndarray, np.ndarray]:
         """Origin (m) and axes (columns) of a coordinate system in global coordinates."""
         if name in ("", "Global"):
@@ -352,6 +356,8 @@ class Evaluator:
             if key not in self._trees:      # kept: reductions inside are cached by node identity
                 self._trees[key] = L.substitute(L.parse(uf.body), uf.params, A)
             return self._eval(self._trees[key], S)
+        if fn in L.NET_FN:
+            return complex(self.src.network(fn, L.port_numbers(node, self.env)))
         if fn in L.GEOM_FN:
             key = (id(node), "geo")
             if key not in self._values:

@@ -104,17 +104,31 @@ def make_env(doc) -> L.Env:
                  variable=variable, model_unit=LENGTH_UNITS.get(des.units, 1e-3))
 
 
-def value_names(doc) -> list[str]:
-    """Named expressions that are scalar values (integrals, maxima, point values): report quantities."""
+def value_names(doc, fields: bool | None = None) -> list[str]:
+    """Named expressions that are scalar values (integrals, maxima, point values): report quantities.
+    fields True: only the values computed from the fields (Fields reports), False: only those without
+    fields, e.g. of S parameters (the Equations of the solution data reports), None: all."""
     env, out = make_env(doc), []
     for e in doc.design.field_exprs:
         try:
             i = L.analyze(e.name, env)
         except L.CalcError:
             continue
-        if not i.field and not i.vec:
+        if not i.field and not i.vec and (fields is None or fields == ("fields" in i.uses)):
             out.append(e.name)
     return out
+
+
+def uses_fields(doc, names) -> bool:
+    """Any of the named expressions needs the fields (else it is computed from the network data alone)."""
+    env = make_env(doc)
+    for n in names:
+        try:
+            if "fields" in L.analyze(n, env).uses:
+                return True
+        except L.CalcError:
+            pass
+    return False
 
 
 def expression_kinds(doc) -> dict[str, str]:
@@ -252,6 +266,14 @@ class DocFieldSource(FieldSource):
         self.names = [str(n) for n in self.m["obj_names"]] if "obj_names" in self.m else []
         self._mat = None
         self._cad: dict = {}
+
+    def network(self, kind: str, ports: list[int]) -> complex:
+        if not hasattr(self, "_net"):
+            self._net = self.st.sparams(self.solution.partition(":")[2].strip())
+        if self._net is None:
+            raise L.CalcError(f"No S parameters for '{self.solution}'")
+        k = int(np.argmin(np.abs(np.asarray(self._net["freq"], float) - self.freq)))
+        return network_value(self._net, kind, ports, k)
 
     def nodal(self, which: str) -> np.ndarray:
         if f"{which}_{self.fi}_{self.port}" not in self.fields:
@@ -446,8 +468,42 @@ def evaluate(doc, src: str, solution: str, fi: int = 0, port: int = 1, phase_deg
     return Evaluator(env or make_env(doc), DocFieldSource(doc, solution, fi, port), phase_deg).value(src)
 
 
+def network_value(data: dict, kind: str, ports: list[int], k: int) -> complex:
+    """S(i,j), Y(i,j), Z(i,j) or VSWR(i) of solution data at frequency index k."""
+    from ..solver.expressions import network
+    S = data["S"]
+    if any(not 1 <= p <= S.shape[1] for p in ports):
+        raise L.CalcError(f"{kind}({', '.join(map(str, ports))}): the solution has {S.shape[1]} port(s)")
+    i = ports[0] - 1
+    if kind == "VSWR":
+        g = abs(S[k, i, i])
+        return complex((1 + g) / max(1 - g, 1e-12))
+    cat = {"S": "S Parameter", "Y": "Y Parameter", "Z": "Z Parameter"}[kind]
+    one = {**data, "S": S[k:k + 1]}
+    return complex(network(one, cat)[0, i, ports[1] - 1])
+
+
+class NetSource(FieldSource):
+    """The network data (S parameters) of a solution at frequency index k, without fields: for equations
+    of S, Y, Z and VSWR."""
+
+    def __init__(self, data: dict, k: int):
+        super().__init__()
+        self.data, self.k = data, k
+        self.freq = float(data["freq"][k])
+
+    def network(self, kind: str, ports: list[int]) -> complex:
+        return network_value(self.data, kind, ports, self.k)
+
+    def nodal(self, *_) -> np.ndarray:
+        raise L.CalcError("This equation needs the fields: report it in a Fields report")
+
+    material = samples = nodal
+
+
 def over_frequency(doc, src: str, solution: str, port: int = 1, store=None, progress=None):
-    """(frequencies (Hz), complex values) of a value expression at every frequency with saved fields."""
+    """(frequencies (Hz), complex values) of a value expression at every frequency with saved fields; one
+    without fields (S parameters) at every frequency of the solution."""
     env = make_env(doc)
     info = L.analyze(src, env)
     if info.field:
@@ -455,6 +511,12 @@ def over_frequency(doc, src: str, solution: str, port: int = 1, store=None, prog
     if info.vec:
         raise L.CalcError(f"'{src}' is a vector; report one component, e.g. x({src})")
     st, sol = (store, solution.partition(":")[2].strip()) if store is not None else F.store_for(doc, solution)
+    if "fields" not in info.uses:
+        data = st.sparams(sol)
+        if data is None:
+            raise L.CalcError(f"No S parameters for '{solution}'")
+        vals = [complex(Evaluator(env, NetSource(data, k)).value(src).value) for k in range(len(data["freq"]))]
+        return np.asarray(data["freq"], float), np.asarray(vals, complex)
     from ..solver.lazy_fields import frequencies as freqs
     fr = freqs(st, sol)
     if not fr:

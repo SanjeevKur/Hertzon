@@ -121,10 +121,16 @@ SIGNATURES: dict[str, tuple[list[str], str]] = {
     "cut_yz": (["x"], "cut plane x = const through the whole solution"),
     "cut_xz": (["y"], "cut plane y = const through the whole solution"),
     "point": (["x", "y", "z"], "a point (numbers without unit are in model units)"),
+    "S": (["i: port", "j: port"], "S parameter S_ij of the solution (S alone is the Poynting vector)"),
+    "Y": (["i: port", "j: port"], "Y parameter Y_ij in S"),
+    "Z": (["i: port", "j: port"], "Z parameter Z_ij in ohm"),
+    "VSWR": (["i: port"], "voltage standing wave ratio at port i"),
 }
 GEOM_FN = {"int_vol": {3}, "int_surf": {2}, "flux": {2}, "int_line": {1}, "circ": {1}, "max": {0, 1, 2, 3},
            "min": {0, 1, 2, 3}, "avg": {1, 2, 3}, "at": {0}}
 GEOM_CTOR = {"face", "cut_xy", "cut_yz", "cut_xz", "point", "flip"}
+# network parameters of the solution: (number of port arguments, unit, complex)
+NET_FN = {"S": (2, ONE, True), "Y": (2, U(A=1, V=-1), True), "Z": (2, U(V=1, A=-1), True), "VSWR": (1, ONE, False)}
 COMP_FN = ("x", "y", "z", "rho", "phi", "r", "theta")
 DIM_NAME = ["point", "line", "face", "volume"]
 CONVENTIONS = {"peak": "peak phasor", "rms": "RMS", "inst": "instantaneous at the context phase",
@@ -461,6 +467,7 @@ class Info:
     inner: str = ""                 # tex without the outer parentheses
     geo: tuple = ()                 # GeoItems of a geometry reduction
     userfns: tuple = ()
+    uses: frozenset = frozenset()   # the data it needs: "fields" (E, H, the mesh) and/or "net" (S, Y, Z)
 
     @property
     def kind(self) -> str:
@@ -475,7 +482,7 @@ def _wrap(r: Info, p: int) -> Info:
 
 def _merge(a: Info, b: Info) -> dict:
     return dict(surf=a.surf or b.surf, deps=a.deps + b.deps, conv=a.conv | b.conv, normals=a.normals + b.normals,
-                userfns=a.userfns + b.userfns)
+                userfns=a.userfns + b.userfns, uses=a.uses | b.uses)
 
 
 def _tex_name(n: str) -> str:
@@ -524,7 +531,8 @@ def _an_id(node: Node, env: Env) -> Info:
     s = SYMBOLS.get(name)
     if s is not None:
         conv = frozenset({"peak"}) if name in PEAK_FIELDS else frozenset({"tavg"}) if name == "S" else frozenset()
-        return Info(s.vec, s.field, s.unit, s.cx, s.tex, surf=s.surf, conv=conv, num=s.value)
+        return Info(s.vec, s.field, s.unit, s.cx, s.tex, surf=s.surf, conv=conv, num=s.value,
+                    uses=frozenset({"fields"}) if s.field else frozenset())
     src = env.lookup_named(name)
     if src is not None:
         if name in env.stack:
@@ -684,6 +692,8 @@ def _an_call(node: Node, env: Env) -> Info:
         raise CalcError(f"{fn}() is a geometry, use it as the first argument, e.g. max({fn}(...), |E|)")
     if fn in GEOM_FN:
         return _an_geom(node, env)
+    if fn in NET_FN:
+        return _an_net(node, env)
     if fn not in SIGNATURES:
         raise CalcError(f"Unknown function '{fn}()'")
 
@@ -813,6 +823,27 @@ def _an_call(node: Node, env: Env) -> Info:
     raise CalcError(f"Unknown function '{fn}()'")
 
 
+def port_numbers(node: Node, env: Env) -> list[int]:
+    """The port numbers of S(i, j), Y(i, j), Z(i, j) or VSWR(i)."""
+    n = NET_FN[node.fn][0]
+    _need(node.args, n, n, node.fn)
+    out = []
+    for a in node.args:
+        r = _an(a, env)
+        if r.num is None or r.field or not UN.same(r.unit, ONE) or r.num < 1 or not float(r.num).is_integer():
+            raise CalcError("Give the port as a number, e.g. " + ("S(2, 1)" if n == 2 else "VSWR(1)"), a.pos, a.end)
+        out.append(int(r.num))
+    return out
+
+
+def _an_net(node: Node, env: Env) -> Info:
+    ports = port_numbers(node, env)
+    _, unit, cx = NET_FN[node.fn]
+    sub = "".join(map(str, ports)) if all(p < 10 for p in ports) else ",".join(map(str, ports))
+    name = r"\mathrm{VSWR}" if node.fn == "VSWR" else node.fn
+    return Info(False, False, unit, cx, name + "_{" + sub + "}", uses=frozenset({"net"}))
+
+
 def _an_geom(node: Node, env: Env) -> Info:
     fn, A = node.fn, node.args
     _need(A, 2, 2, fn)
@@ -832,6 +863,7 @@ def _an_geom(node: Node, env: Env) -> Info:
     gtex = r",\,".join(("-" if g.flip else "") + _tex_name(replace(g, flip=False).label()) for g in items)
     dir_dep = fn == "flux" or (fn in ("int_line", "circ") and f.vec)
     base = dict(deps=f.deps, conv=f.conv, userfns=f.userfns, geo=tuple(items), cx=f.cx, p=9, field=False,
+                uses=f.uses | {"fields"},
                 normals=f.normals + (tuple(items) if dir_dep or f.surf else ()))
     if fn == "int_vol":
         return Info(f.vec, unit=UN.mul(f.unit, U(m=3)), tex=r"\int\int\int_{" + gtex + "} " + _wrap(f, 2).tex + r"\,dV",
