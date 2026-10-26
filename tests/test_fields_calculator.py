@@ -456,3 +456,53 @@ def test_s_parameter_equation_in_a_report(tmp_path):
     x, y = w._trace_xy("RL")
     assert list(x) == [1, 2, 3] and y == pytest.approx(-20 * np.log10([0.5, 0.1, 0.5]))
     assert w._trace_xy("RL + dB(S(1,1))")[1] == pytest.approx([0, 0, 0], abs=1e-9)
+
+
+def test_plot_on_selection_picks_in_the_3d_view(monkeypatch):
+    """Plot on (selection) or (selection, inside solids) with nothing selected: after OK a box over the 3D view
+    says what to pick, and Plot makes the plot on what was picked. Plot Mesh without a selection likewise."""
+    from PySide6.QtWidgets import QApplication, QDialog
+    app = QApplication.instance() or QApplication([])  # noqa: F841
+    from hertzon.gui import fields as Fm
+    from hertzon.gui import fieldplot_dialogs as FD
+    from hertzon.gui.doc import Pick
+    from hertzon.gui.main_window import MainWindow
+    from hertzon.model.design import Project, Setup
+    win = MainWindow(Project())
+    d = win.des
+    d.add_object("CreateBox", "Box", Position="0,0,0", XSize="1", YSize="1", ZSize="1")
+    win.doc.rebuild()
+    monkeypatch.setattr(Fm, "field_solutions", lambda doc: ["Setup1 : LastAdaptive"])
+    drawn = []
+    monkeypatch.setattr(win, "show_field_plot", lambda name, focus=True: drawn.append(name))
+    win.doc.select([])
+    seen = {}
+
+    def run(self):
+        self.where.setCurrentIndex(seen["where"])
+        seen["hint"] = self.pick_hint.text()
+        return QDialog.Accepted
+    monkeypatch.setattr(FD.FieldPlotDialog, "exec", run)
+    for where, what in ((1, "Pick solids"), (0, "Pick faces or objects")):
+        seen["where"] = where
+        win.doc.select([])
+        n = len(d.field_plots)
+        win.plot_fields("Mag_E")
+        assert "After OK you pick" in seen["hint"]
+        bar = win._pick_bar
+        assert bar.windowTitle() == what and len(d.field_plots) == n   # nothing plotted yet
+        bar._use()
+        assert bar.isVisible() and "first" in bar.sel.text()              # nothing picked: stays open
+        win.doc.select([Pick("Box")])
+        bar._use()
+        assert d.field_plots[-1].objects == ["Box"] and drawn[-1] == d.field_plots[-1].name
+    assert d.field_plots[-2].props["Volume"] == "True"
+    d.setups.append(Setup("Setup1"))
+    win.doc.select([])
+    win.plot_mesh()
+    assert win._pick_bar.windowTitle() == "Pick objects"
+    win.doc.select([Pick("Box")])
+    win._pick_bar._use()
+    assert d.field_plots[-1].quantity == "Mesh" and d.field_plots[-1].objects == ["Box"]
+    win.doc.dirty = False
+    win.close()

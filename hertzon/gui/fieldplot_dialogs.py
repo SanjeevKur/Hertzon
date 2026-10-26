@@ -70,6 +70,8 @@ class FieldPlotDialog(QDialog):
         self.pval = QLineEdit("")
         self.pval.setPlaceholderText("cut position (empty = model centre)")
         self.keep = QCheckBox("Keep the plotted objects / faces")
+        self.has_selection = has_selection
+        self.had_targets = bool(fp is not None and (fp.faces or fp.objects))
         if fp is not None:
             p = fp.props
             self.freq.setCurrentIndex(min(int(p.get("freq", 0)), self.freq.count() - 1))
@@ -88,12 +90,37 @@ class FieldPlotDialog(QDialog):
             self.where.setCurrentText("XY")
         f.addRow("Plot on", self.where)
         f.addRow("Cut position", self.pval)
+        self.pval_label = f.labelForField(self.pval)
         if fp is not None:
             f.addRow("", self.keep)
+        self.pick_hint = QLabel()
+        self.pick_hint.setWordWrap(True)
+        self.pick_hint.setStyleSheet("color:#2a5db0")
+        f.addRow("", self.pick_hint)
+        self.where.currentIndexChanged.connect(self._where_changed)
+        self.keep.toggled.connect(self._where_changed)
+        self._where_changed()
         bb = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         bb.accepted.connect(self.accept)
         bb.rejected.connect(self.reject)
         f.addRow(bb)
+
+    def needs_pick(self) -> bool:
+        """Plot on a selection with nothing selected (and nothing kept): the targets are picked after OK."""
+        if self.where.currentIndex() > 1 or self.has_selection:
+            return False
+        return not (self.had_targets and self.keep.isChecked())
+
+    def _where_changed(self, *_) -> None:
+        sel = self.where.currentIndex() <= 1
+        self.pval.setVisible(not sel)
+        if self.pval_label is not None:
+            self.pval_label.setVisible(not sel)
+        self.keep.setVisible(sel and self.had_targets)
+        what = "the solids" if self.where.currentIndex() == 1 else "the faces or objects"
+        self.pick_hint.setText(f"After OK you pick {what} in the 3D view." if self.needs_pick() else "")
+        self.pick_hint.setVisible(self.needs_pick())
+        self.adjustSize()
 
     def _calculator(self) -> None:
         """Leave this dialog for the calculator; saving the new expression there opens it again."""
@@ -118,6 +145,79 @@ class FieldPlotDialog(QDialog):
                 "solution": self.sol.currentText(), "plane": pl, "keep": self.keep.isChecked(),
                 "props": {"port": self.port.currentText(), "freq": str(max(0, self.freq.currentIndex())),
                           "phase": f"{self.phase.value():g}", "Volume": str(self.where.currentIndex() == 1)}}
+
+
+class PickTargets(QDialog):
+    """Shown over the 3D Modeler while the faces or objects of a plot are picked there: what to pick, what is
+    selected, and Plot / Cancel."""
+
+    def __init__(self, win, what: str, on_use):
+        super().__init__(win, Qt.Tool | Qt.WindowStaysOnTopHint)
+        self.win, self.doc, self.on_use, self.what = win, win.doc, on_use, what
+        title, how = PICK_HOW[what]
+        self.setWindowTitle(title)
+        self.setAttribute(Qt.WA_DeleteOnClose)
+        lay = QVBoxLayout(self)
+        lay.addWidget(QLabel(f"<b>{title}</b>"))
+        lay.addWidget(QLabel(how))
+        self.sel = QLabel()
+        self.sel.setStyleSheet("font-family:Consolas,monospace")
+        self.sel.setWordWrap(True)
+        lay.addWidget(self.sel)
+        bb = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        bb.button(QDialogButtonBox.Ok).setText("Plot")
+        bb.accepted.connect(self._use)
+        bb.rejected.connect(self.reject)
+        lay.addWidget(bb)
+        self.mode0 = self.doc.selection_mode
+        mode = "object" if what != "faces" else self.mode0 if self.mode0 in ("face", "object", "edge") else "face"
+        if mode != self.mode0:
+            win.set_mode(mode)
+        win.tabs.setCurrentIndex(0)
+        self.doc.selectionChanged.connect(self._show)
+        self.finished.connect(self._done)
+        self._show()
+        g = win.geometry()
+        self.setMinimumWidth(360)
+        self.adjustSize()
+        self.move(g.x() + (g.width() - self.width()) // 2, g.y() + 90)
+
+    def targets(self) -> tuple[list, list]:
+        if self.what == "solids":
+            return [], [o for o in self.doc.selected_objects() if getattr(self.doc.tess.get(o), "dim", 3) == 3]
+        if self.what == "objects":
+            return [], self.doc.selected_objects()
+        return self.win._plot_selection()
+
+    def _show(self, *_) -> None:
+        faces, objs = self.targets()
+        names = [*objs, *[f"{r.obj}:face{r.face}" for r in faces]]
+        self.sel.setText("Selected: " + (", ".join(names)[:80] or "—"))
+
+    def _use(self) -> None:
+        faces, objs = self.targets()
+        if not faces and not objs:
+            self.sel.setText("<span style='color:#b00020'>Select " +
+                             {"solids": "a solid", "objects": "an object"}.get(self.what, "a face or an object") + " first</span>")
+            return
+        self.accept()
+        self.on_use(faces, objs)
+
+    def _done(self, *_) -> None:
+        if self.mode0 is None:
+            return
+        self.doc.selectionChanged.disconnect(self._show)
+        if self.doc.selection_mode != self.mode0:
+            self.win.set_mode(self.mode0)
+        self.mode0 = None
+
+
+PICK_HOW = {
+    "faces": ("Pick faces or objects", "Click a face, a sheet or an object in the 3D view (Ctrl+click: "
+              "several). F: face mode, O: object mode."),
+    "solids": ("Pick solids", "Click the solids to plot inside in the 3D view (Ctrl+click: several)."),
+    "objects": ("Pick objects", "Click the objects in the 3D view (Ctrl+click: several)."),
+}
 
 
 # ================================================================================================

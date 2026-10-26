@@ -39,6 +39,10 @@ the GitHub release notes.
   the field is plotted on a cut plane.
 
 ### Changed
+- **Field plots on a selection: pick in the 3D view**: Plot on "(selection)" or "(selection, inside solids)"
+  with nothing selected no longer makes an empty plot. After OK a box over the 3D view says what to pick
+  (faces or objects, or the solids), shows what is selected and plots it with Plot. The same for Modify Plot
+  and for Plot Mesh without a selection. The cut position is only shown for cut planes.
 - **Fillet of a sheet at its vertices**: a sheet (for example a patch) is now filleted by selecting its corner
   vertices (press V) instead of edges; each selected vertex gets one fillet with the radius. Projects that
   filleted a sheet by its edges in 0.2.3 build as before.

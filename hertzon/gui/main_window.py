@@ -4232,17 +4232,37 @@ class MainWindow(QMainWindow):
             return
         v = dlg.values()
         quantity, pl = v["quantity"], v["plane"]
-        names = {p.name for p in self.des.field_plots}
-        i = 1
-        while f"{quantity}{i}" in names:
-            i += 1
-        props = {**default_attributes(), **v["props"]}
-        fp = FieldPlot(f"{quantity}{i}", quantity, v["solution"], faces=faces if not pl else [],
-                       objects=objs if not pl else [], plane=pl, props=props)
-        self.des.field_plots.append(fp)
-        self.doc.dirty = True
-        self.doc.changed.emit("fields")
-        self.show_field_plot(fp.name)
+
+        def create(faces, objs):
+            names = {p.name for p in self.des.field_plots}
+            i = 1
+            while f"{quantity}{i}" in names:
+                i += 1
+            props = {**default_attributes(), **v["props"]}
+            fp = FieldPlot(f"{quantity}{i}", quantity, v["solution"], faces=faces if not pl else [],
+                           objects=objs if not pl else [], plane=pl, props=props)
+            self.des.field_plots.append(fp)
+            self.doc.dirty = True
+            self.doc.changed.emit("fields")
+            self.show_field_plot(fp.name)
+        if dlg.needs_pick():
+            self.pick_plot_targets("solids" if v["props"]["Volume"] == "True" else "faces", create)
+        else:
+            create(faces, objs)
+
+    def pick_plot_targets(self, what: str, on_use) -> None:
+        """Plot on a selection with nothing selected: the faces, objects or solids are picked in the 3D view,
+        with a box that says what to pick; Plot calls on_use(faces, objects)."""
+        from .fieldplot_dialogs import PickTargets
+        old = getattr(self, "_pick_bar", None)
+        if old is not None:
+            try:
+                if old.isVisible():
+                    old.reject()
+            except RuntimeError:            # closed and deleted
+                pass
+        self._pick_bar = PickTargets(self, what, on_use)
+        self._pick_bar.show()
 
     def _on_current_plot(self, fn) -> None:
         """Ribbon buttons act on the plot selected in the project tree, else the one on screen."""
@@ -4282,25 +4302,32 @@ class MainWindow(QMainWindow):
         if dlg.exec() != QDialog.Accepted:
             return
         v = dlg.values()
-        new = v["name"] or fp.name
-        if new != fp.name and any(p.name == new for p in self.des.field_plots):
-            QMessageBox.warning(self, "Modify Field Plot", f"A plot named '{new}' already exists.")
-            new = fp.name
-        if self.anim_plot == fp.name:
-            self.anim_plot = new
-        fp.name = new
-        fp.quantity, fp.solution = v["quantity"], v["solution"]
-        fp.props.update(v["props"])
-        if v["plane"]:
-            fp.plane, fp.faces, fp.objects = v["plane"], [], []
-        elif not v["keep"] and (faces or objs):
-            fp.plane, fp.faces, fp.objects = "", faces, objs
-        elif fp.plane and not v["keep"]:
-            fp.plane = ""
-        self.doc.dirty = True
-        self.doc.changed.emit("fields")
-        self.project_tree.rebuild()
-        self.show_field_plot(fp.name)
+
+        def apply(faces, objs):
+            new = v["name"] or fp.name
+            if new != fp.name and any(p.name == new for p in self.des.field_plots):
+                QMessageBox.warning(self, "Modify Field Plot", f"A plot named '{new}' already exists.")
+                new = fp.name
+            if self.anim_plot == fp.name:
+                self.anim_plot = new
+            fp.name = new
+            fp.quantity, fp.solution = v["quantity"], v["solution"]
+            fp.props.update(v["props"])
+            if v["plane"]:
+                fp.plane, fp.faces, fp.objects = v["plane"], [], []
+            elif not v["keep"] and (faces or objs):
+                fp.plane, fp.faces, fp.objects = "", faces, objs
+            elif fp.plane and not v["keep"]:
+                fp.plane = ""
+            self.doc.dirty = True
+            self.doc.changed.emit("fields")
+            self.project_tree.rebuild()
+            self.show_field_plot(fp.name)
+        if dlg.needs_pick():
+            v["keep"] = False
+            self.pick_plot_targets("solids" if v["props"]["Volume"] == "True" else "faces", apply)
+        else:
+            apply(faces, objs)
 
     def field_plot_attributes(self, name: str) -> None:
         mp = next((p for p in self.des.field_plots if p.name == name and p.quantity == "Mesh"), None)
@@ -4560,8 +4587,11 @@ class MainWindow(QMainWindow):
     def plot_mesh(self, objs: list[str] | None = None) -> None:
         """Plot Mesh: listed under Field Overlays; Modify sets the element quality colouring."""
         objs = objs or self.doc.selected_objects()
-        if not objs or not self.des.setups:
-            QMessageBox.information(self, "Plot Mesh", "Select objects and analyze first.")
+        if not self.des.setups:
+            QMessageBox.information(self, "Plot Mesh", "Analyze first.")
+            return
+        if not objs:
+            self.pick_plot_targets("objects", lambda _faces, picked: self.plot_mesh(picked))
             return
         names = {p.name for p in self.des.field_plots}
         i = 1
