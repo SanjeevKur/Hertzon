@@ -27,7 +27,7 @@ Hertzon is by **Dominik Mair**, built on EMerge, the FEM solver by **Robert Fenn
 
 > 📘 **New to Hertzon? Start with the [step-by-step tutorial](docs/TUTORIAL.md):** a waveguide with wave
 > ports, a coaxial cable, a half-wave dipole and the RCS of a sphere, each from the empty window to the
-> result, plus how to let an AI assistant (Claude Code, Codex, VS Code) build and run simulations for you
+> result, your own result quantities with equations, plus how to let an AI assistant (Claude Code, Codex, VS Code) build and run simulations for you
 > through Hertzon's **MCP server**.
 
 > **Built on EMerge.** The finite-element core of Hertzon (Nédélec formulation, element matrices, ports,
@@ -55,6 +55,12 @@ Download the installers from the [Releases page](https://github.com/c8501024/Her
 (no administrator rights) into `%LOCALAPPDATA%\Programs\Hertzon`, adds it to the start menu, the
 desktop and Settings > Apps (uninstall there), opens `.hzn` projects with Hertzon and sets up the
 Python environment (about 1 GB download) before it finishes.
+
+**Updates:** when a new version is out, Hertzon shows its release notes in a small dialog after the start
+(at most once every 7 days) with **Install**, **Skip this version** and **Later**; **Help > Check for
+Updates...** checks at any time. Install downloads the installer, checks it and keeps your settings and the
+Python environment. The check can be switched off in Tools > Options > General, or with
+`HERTZON_NO_UPDATE_CHECK=1`.
 
 **Linux:** unpack `Hertzon-<version>-linux.tar.gz` and run `./install.sh`. It installs for your user
 into `~/.local/share/hertzon`, adds Hertzon to the application menu, the command `hertzon` and the
@@ -94,7 +100,8 @@ solves start immediately. On Linux without a desktop, run under `xvfb-run`.
    polygons, polylines and arcs (3 point, center point), region. Click on the grid (snaps to grid and vertices) or type coordinates
    in the status bar; every parameter accepts expressions with **variables** and units. Relative, face and
    object coordinate systems set the working plane; grid and axes stay at its origin.
-   **Modeler > Boolean** unite / subtract / intersect / split, arrange, duplicate, thicken, sweep, import STEP.
+   **Modeler > Boolean** unite / subtract / intersect / split, arrange, duplicate, thicken, sweep, import STEP;
+   **Fillet** and **Chamfer** on the edges of solids or the corner vertices of sheets.
    A left drag in the 3D view selects everything inside the rectangle; **Edit > Group** (Ctrl+G) makes
    objects move, rotate and mirror as one unit, and integration lines follow their objects.
 3. Select faces (**F**) or objects (**O**) and assign **Boundaries** (Perfect E/H, Finite
@@ -119,6 +126,10 @@ solves start immediately. On Linux without a desktop, run under `xvfb-run`.
    **Fields**: magnitude, complex magnitude and vector plots of E, H and surface current on faces,
    objects, cut planes or drawn planes, with phase animation and **Export GIF** of the animation as
    shown. Export Touchstone, CSV, images.
+   **Calculator** (Fields Calculator): your own quantities as equations, from the S-parameters
+   (`RL = -dB(S(1,1))`) or the fields (`P_in = flux(Port1, re(S))`, losses, energies, Q), typed in a
+   typeset formula editor, shown in reports, **Fields reports** and field plots
+   ([tutorial](docs/TUTORIAL.md#8-your-own-quantities-with-equations)).
    **Optimization** (conjugate gradient on report goals) and **Parametric** sweeps of design variables.
 
 See [docs/FEATURE_MATRIX.md](docs/FEATURE_MATRIX.md) for an overview of what is implemented and
@@ -142,7 +153,7 @@ reports and field plots ready: after **Analyze All** (F5) double-click a report,
 
 | File | What it shows |
 |---|---|
-| `examples/WaveguidePost.hzn` | WR-90 waveguide with an inductive PEC post, wave ports, interpolating sweep 8-12 GHz, Mag E on a cut plane halfway up the guide ([tutorial](docs/TUTORIAL.md#1-waveguide-with-wave-ports)) |
+| `examples/WaveguidePost.hzn` | WR-90 waveguide with an inductive PEC post, wave ports, interpolating sweep 8-12 GHz, Mag E on a cut plane halfway up the guide ([tutorial](docs/TUTORIAL.md#1-waveguide-with-wave-ports)); equations for the return loss, the power through both ports and the power flow along the guide ([tutorial](docs/TUTORIAL.md#8-your-own-quantities-with-equations)) |
 | `examples/Microstrip.hzn` | 50 Ω microstrip on FR4, lumped ports, thin-conductor trace, **Auto Open - Filter**, sweep 1-6 GHz; second design with a **2.2 pF 0603 DC-block capacitor** (Lumped RLC from the Lumped Elements tab, inserted as a group) ([tutorial](docs/TUTORIAL.md#7-a-chip-capacitor-on-a-microstrip-line)) |
 | `examples/PatchAntenna.hzn` | 2.45 GHz inset-fed patch on FR4, **Auto Open** (radiation boundary), far field, gain pattern and 3D gain, surface current on the patch and Mag E on a cut plane through the feed |
 | `examples/HairpinFilter.hzn` | Third-order hairpin band-pass filter at 2.45 GHz on RO4350B, copper losses, sweep 2-2.9 GHz, an optimization and the surface current on the hairpins |

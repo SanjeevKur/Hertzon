@@ -253,6 +253,20 @@ def test_expressions_are_saved_with_the_design():
     assert back.field_funcs == d.field_funcs
 
 
+def test_equations_keep_the_solution_current():
+    """Equations are post-processing: saving one does not mark the solution outdated or restart the adaptive
+    passes (the model key is the one of a design without them, as in 0.2.3)."""
+    from hertzon.model.design import FieldExpression, Project, Setup
+    from hertzon.solver.keys import model_key
+    p = Project()
+    d = p.designs[0]
+    d.setups = [Setup("Setup1")]
+    k = model_key(p, d, d.setups[0])
+    d.field_exprs.append(FieldExpression("RL", "-dB(S(1,1))"))
+    d.field_funcs.append("power(A) = flux(A, re(S))")
+    assert model_key(p, d, d.setups[0]) == k
+
+
 def test_report_traces_follow_a_rename():
     from PySide6.QtWidgets import QApplication
     QApplication.instance() or QApplication([])

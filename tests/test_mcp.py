@@ -117,3 +117,69 @@ def test_auto_register(tmp_path, monkeypatch):
     (tmp_path / "codex").mkdir()
     assert clients.auto_register(skip=("codex",)) == []
     assert clients.auto_register() == ["codex"]
+
+
+def test_edges_vertices_and_fillet(server, tmp_path):
+    call(server, "create_project", path=str(tmp_path / "f.hzn"))
+    call(server, "add_object", kind="CreateRectangle", name="Patch", props={"XSize": "10", "YSize": "6"})
+    g = call(server, "get_geometry", objects=["Patch"], include_edges=True)["objects"]["Patch"]
+    assert len(g["edges"]) == 4 and len(g["vertices"]) == 4
+    assert "faces" in g and "edges" not in call(server, "get_geometry")["objects"]["Patch"]
+    corner = next(v["vertex"] for v in g["vertices"] if v["position"][:2] == [10, 6])
+    r = call(server, "add_operation", object="Patch", kind="Fillet",
+             props={"Radius": "2", "Vertices": str(corner)})
+    assert r["geometry"]["Patch"]["faces"][0]["area"] < 60 - 0.8      # 4 - pi of the corner cut away
+
+
+def test_equations_reports_plots_and_studies(server, tmp_path):
+    call(server, "create_project", path=str(tmp_path / "s.hzn"))
+    call(server, "set_design", variables={"w": "2mm"})
+    call(server, "add_object", kind="CreateBox", name="Sub", props={"XSize": "w", "YSize": "5", "ZSize": "1"})
+    call(server, "set_setup", props={"Frequency": "5GHz"}, sweeps=[{"name": "Sweep"}])
+    # coordinate system: a new one is the working CS of the next objects
+    cs = call(server, "set_coordinate_system", props={"Origin": "0,0,1mm"})
+    assert cs["working_cs"] == cs["name"] == "RelativeCS1"
+    call(server, "add_object", kind="CreateBox", name="Top", props={"XSize": "1", "YSize": "1", "ZSize": "1"})
+    call(server, "set_coordinate_system", name="Global", set_working=True)
+    # equations, with import and export
+    e = call(server, "set_equation", name="RL", expr="-dB(S(1,1))", functions=["sq(x) = x*x"])
+    assert e["changed"] == ["RL", "sq()"]
+    call(server, "set_equation", equations=[{"expr": "P_in = flux(Port1, re(S))"}],
+         export_file=str(tmp_path / "eq.json"))
+    bad = server.handle({"jsonrpc": "2.0", "id": 4, "method": "tools/call",
+                         "params": {"name": "set_equation", "arguments": {"name": "X", "expr": "1 +* 2"}}})
+    assert bad["result"]["isError"]
+    # reports and field plots
+    r = call(server, "set_report", traces=["dB(S(1,1))", "RL"])
+    assert r["name"] == "XY Plot 1" and r["solution"] == "Setup1 : Sweep"
+    f = call(server, "set_report", fields=True, kind="Data Table", traces=["P_in"], port=1)
+    assert f["name"] == "Fields Table 1" and f["props"]["fields"] == "1"
+    fp = call(server, "set_field_plot", quantity="Mag_E", objects=["Sub"], attributes={"dB": True})
+    assert fp["name"] == "Mag_E1" and fp["solution"] == "Setup1 : LastAdaptive" and fp["props"]["dB"] == "True"
+    pl = call(server, "set_field_plot", name="Mag_E1", plane="xy@0.5mm")
+    assert pl["plane"] == "XY@0.5mm"
+    # parametric sweep and optimization
+    ps = call(server, "set_parametric", sweeps=[{"variable": "w", "type": "Linear step", "start": "1mm",
+                                                 "stop": "3mm", "step": "1mm"}])
+    assert ps["variations"] == 3 and ps["setups"] == ["Setup1"]
+    op = call(server, "set_optimization", variables=[{"name": "w", "min": "1mm", "max": "3mm"}],
+              goals=[{"calc": "dB(S(1,1))", "start": "4GHz", "stop": "6GHz", "cond": "<=", "value": "-10"}])
+    assert op["name"] == "Optimization1" and op["goals"][0]["weight"] == "1"
+    assert call(server, "get_status", parametric="ParametricSetup1")["state"] == "not solved"
+    assert call(server, "get_schema", section="parametric")["sweep_types"][0] == "Single value"
+    s = call(server, "get_project")
+    assert [x["name"] for x in s["equations"]] == ["RL", "P_in"] and s["functions"] == ["sq(x) = x*x"]
+    assert {x["name"] for x in s["reports"]} == {"XY Plot 1", "Fields Table 1"}
+    assert s["field_plots"][0]["plane"] == "XY@0.5mm"
+    assert s["objects"][1]["orientation"] == "RelativeCS1" and "orientation" not in s["objects"][0]
+    assert s["parametrics"][0]["name"] == "ParametricSetup1"
+    # import into another design; delete everything again
+    call(server, "set_design", new_design="D2")
+    assert call(server, "set_equation", design="D2", import_file=str(tmp_path / "eq.json"))["changed"] == \
+        ["RL", "P_in", "sq()"]
+    d = call(server, "delete", design="Design1", names=["RL", "sq", "XY Plot 1", "Mag_E1", "ParametricSetup1",
+                                                         "Optimization1"])
+    assert not d.get("not_found")
+    s = call(server, "get_project", design="Design1")
+    assert [x["name"] for x in s["equations"]] == ["P_in"] and s["functions"] == []
+    assert "parametrics" not in s and "optimizations" not in s and "field_plots" not in s

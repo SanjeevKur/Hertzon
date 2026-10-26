@@ -93,7 +93,9 @@ touch the EMerge core should go upstream to EMerge, so that Hertzon does not dep
 - [ ] **1.3 Dispersive and anisotropic materials (M).** Debye, Djordjevic-Sarkar, Drude/Lorentz,
   tensors. *Used by steps 2 and 6.*
 - [ ] **1.4 Field post-processing (M–L).** Fields calculator, losses, quality factor Q, field export,
-  antenna parameter table, near field. *Used by step 5 (thermal).*
+  antenna parameter table, near field. Done so far: the Fields Calculator with equations of the fields and
+  S-parameters, Fields reports, losses, energies and Q from its library, the antenna parameter table and
+  near-field lines. *Used by step 5 (thermal).*
 - [ ] **1.5 Modeler and usability (M).** Interactive move/rotate, measure tools, clickable messages,
   report axes, more modeler operations. Done so far: arcs and splines in polylines, report markers,
   object groups, box selection.
