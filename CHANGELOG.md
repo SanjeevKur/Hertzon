@@ -94,6 +94,11 @@ the GitHub release notes.
 ### Fixed
 - Validation Check no longer reports a **Length Based On Edges** mesh operation as "has no assignment" (an
   error that blocked the analysis): its edges count as its assignment.
+- **Wave port on a metal face found no modes**: a wave port on a face of a PEC solid, for example the
+  bottom of a coax bore in a metal body, failed with "ModalPort could find no modes" (and "k=-2 must be
+  greater than 0"), because the metal also zeroed the field on the port face. Such a solid now backs the
+  port: no field inside and PEC on its surface, with the port face left free. The log says which object
+  backs which port.
 - **Solutions shown as outdated**: the solutions of projects solved with 0.2.3 or earlier were shown as
   outdated (and an analysis started the adaptive passes again from the initial mesh), and saving an equation
   of the Fields Calculator did the same to a current solution. Equations are post-processing and no longer
