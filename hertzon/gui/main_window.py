@@ -469,6 +469,8 @@ class MainWindow(QMainWindow):
         m.addAction(self.a_help)
         m.addAction("About Hertzon", self.about)
         m.addAction("Feature Overview", self.show_feature_matrix)
+        m.addSeparator()
+        m.addAction("Check for Updates...", self.check_for_updates)
 
     def _toolbars(self) -> None:
         """Ribbon like the reference tool: Desktop / View / Draw / Model / Simulation / Results."""
@@ -3487,13 +3489,127 @@ class MainWindow(QMainWindow):
         self._update_checker.available.connect(self._update_available)
         QTimer.singleShot(2000, self._update_checker.start)
 
-    def _update_available(self, version: str, url: str) -> None:
-        self.msgs.add("info", f"Hertzon {version} is available (this is {__version__}). Download: {url}")
-        lab = QLabel(f"<a href='{url}'>Hertzon {version} is available</a>")
-        lab.setOpenExternalLinks(True)
-        lab.setToolTip("Opens the release page with the release notes and the installers.\n"
-                       "The check at start can be switched off in Tools > Options > General.")
-        self.statusBar().addPermanentWidget(lab)
+    def _update_available(self, release: dict) -> None:
+        """Hint in the Message Manager and the status bar; the dialog unless this version was skipped."""
+        from .update_check import SKIP_SETTING, is_skipped
+        version, url = release["version"], release["url"]
+        if getattr(self, "_update_label", None) is None:
+            self.msgs.add("info", f"Hertzon {version} is available (this is {__version__}). Download: {url}")
+            lab = self._update_label = QLabel(f"<a href='#'>Hertzon {version} is available</a>")
+            lab.setToolTip("Shows the release notes and installs the new version.\n"
+                           "The check at start can be switched off in Tools > Options > General.")
+            lab.linkActivated.connect(lambda _=None, r=release: self._show_update_dialog(r))
+            self.statusBar().addPermanentWidget(lab)
+        if not is_skipped(version, self.settings.value(SKIP_SETTING, "", type=str)):
+            self._show_update_dialog(release)
+
+    def check_for_updates(self) -> None:
+        """Help > Check for Updates: the same check on request, with an answer also when there is nothing new."""
+        from .update_check import UpdateChecker, disabled_by_env
+        if disabled_by_env():
+            QMessageBox.information(self, "Check for Updates", "Update checks are switched off on this computer "
+                                    "(environment variable HERTZON_NO_UPDATE_CHECK).")
+            return
+        self.statusBar().showMessage("Checking for a new Hertzon version ...", 10000)
+        c = self._manual_update_checker = UpdateChecker(__version__, self)
+        c.available.connect(self._show_update_dialog)
+        c.up_to_date.connect(lambda: QMessageBox.information(
+            self, "Check for Updates", f"Hertzon {__version__} is the newest version."))
+        c.failed.connect(lambda why: QMessageBox.warning(
+            self, "Check for Updates", f"GitHub could not be reached, so no update check was possible.\n\n{why}"))
+        c.start()
+
+    def _show_update_dialog(self, release: dict) -> None:
+        from .update_check import SKIP_SETTING, UpdateDialog, installed_copy, installer_asset
+        old = getattr(self, "_update_dialog", None)
+        if old is not None:
+            try:
+                old.raise_()
+                return
+            except RuntimeError:  # closed and deleted
+                pass
+        can_install = installed_copy() is not None and installer_asset(release) is not None
+        dlg = self._update_dialog = UpdateDialog(release, __version__, can_install, self)
+        dlg.destroyed.connect(lambda *_: setattr(self, "_update_dialog", None))
+
+        def chosen(c: str) -> None:
+            if c == "skip":
+                self.settings.setValue(SKIP_SETTING, release["version"])
+            elif c == "install" and can_install:
+                QTimer.singleShot(0, lambda: self._install_update(release))
+            elif c == "install":
+                from PySide6.QtGui import QDesktopServices
+                from PySide6.QtCore import QUrl
+                QDesktopServices.openUrl(QUrl(release["url"]))
+        dlg.chosen.connect(chosen)
+        dlg.show()
+        dlg.raise_()
+
+    def _install_update(self, release: dict) -> None:
+        """Download the installer (with progress, cancelable, checksum checked), ask to save open changes,
+        start the installer and close Hertzon so that the installer can replace the program files."""
+        import os
+        import threading
+        from PySide6.QtCore import QObject, Signal
+        from PySide6.QtWidgets import QApplication, QProgressDialog
+        from .update_check import download, download_dir, installer_asset
+        a = installer_asset(release)
+        if self.solver.busy and QMessageBox.question(
+                self, "Install Update", "A solve is running. Installing the update stops it. Continue?",
+                QMessageBox.Yes | QMessageBox.No, QMessageBox.No) != QMessageBox.Yes:
+            return
+
+        class Relay(QObject):
+            progress = Signal(int, int)
+            done = Signal(object, str)
+
+        relay = Relay(self)
+        pd = QProgressDialog(f"Downloading {a['name']} ...", "Cancel", 0, 0, self)
+        pd.setWindowTitle("Install Update")
+        pd.setWindowModality(Qt.WindowModal)
+        pd.setMinimumDuration(0)
+
+        def progress(done: int, total: int) -> None:
+            if total:  # without a size the bar stays a busy indicator
+                pd.setMaximum(total)
+                pd.setValue(done)
+        relay.progress.connect(progress)
+        cancel = threading.Event()
+        pd.canceled.connect(cancel.set)
+        loop = QEventLoop()
+        result: list = [None, ""]
+
+        def finished(path, err) -> None:
+            result[:] = [path, err]
+            loop.quit()
+        relay.done.connect(finished)
+
+        def run() -> None:
+            try:
+                path = download(a["browser_download_url"], download_dir() / a["name"], a.get("digest") or "",
+                                progress=relay.progress.emit, cancelled=cancel.is_set)
+                relay.done.emit(path, "")
+            except Exception as e:  # noqa: BLE001
+                relay.done.emit(None, str(e) or type(e).__name__)
+        threading.Thread(target=run, name="hertzon-update-download", daemon=True).start()
+        loop.exec()
+        pd.close()
+        path, err = result
+        if err:
+            QMessageBox.warning(self, "Install Update", f"The installer could not be downloaded:\n{err}\n\n"
+                                f"It is also on the release page:\n{release['url']}")
+            return
+        if path is None or not self.maybe_save():  # cancelled
+            return
+        self.doc.dirty = False  # answered above; closing must not ask again
+        try:
+            os.startfile(str(path))  # noqa: S606 - the installer that was just downloaded and checked
+        except OSError as e:
+            QMessageBox.warning(self, "Install Update", f"The installer could not be started:\n{e}\n\n{path}")
+            return
+        self.msgs.add("info", f"Installing Hertzon {release['version']}: Hertzon closes for the installer.")
+        self.close()
+        QApplication.quit()
 
     def goto_message(self, text: str) -> None:
         """Select what a message is about: object, boundary/excitation/mesh operation, setup, report."""
