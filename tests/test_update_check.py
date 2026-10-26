@@ -94,6 +94,16 @@ def test_skipped_version():
     assert U.is_skipped("0.2.3", "0.2.4")
 
 
+def test_dialog_pause():
+    from datetime import date
+    today = date(2026, 10, 26)
+    assert U.dialog_due("", today)                       # never shown
+    assert U.dialog_due("garbage", today)
+    assert not U.dialog_due("2026-10-26", today)         # several releases a day: one dialog
+    assert not U.dialog_due("2026-10-20", today)
+    assert U.dialog_due("2026-10-19", today)             # 7 days later again
+
+
 def test_installer_asset():
     r = {"assets": [{"name": "Hertzon-0.2.3-linux.tar.gz"}, {"name": "Hertzon-Setup-0.2.3.exe", "x": 1}]}
     assert U.installer_asset(r)["x"] == 1

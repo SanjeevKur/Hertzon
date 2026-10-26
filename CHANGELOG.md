@@ -9,8 +9,10 @@ the GitHub release notes.
 - **Update dialog**: when a new Hertzon version is out, a small dialog after the start shows its version and
   the release notes of every version since the installed one, with **Install**, **Skip this version** and
   **Later**. Install downloads the installer from the release (checksum checked), asks to save open changes,
-  closes Hertzon and starts the installer; settings and the Python environment are kept. Skip this version
-  asks again only for a newer version, Later at the next start. The dialog does not block the start or the
+  closes Hertzon and starts the installer; settings and the Python environment are kept. Because new
+  versions come out often, the dialog comes up by itself at most once every 7 days; in between the status
+  bar says "Hertzon X is available: Update to X..." and opens the dialog on a click. Skip this version asks again
+  only for a newer version, Later after the 7 days. The dialog does not block the start or the
   work, and nothing is installed without a click on Install. Without the Windows installer (Linux, pip or a
   source checkout) the button is **Download** and opens the release page. **Help > Check for Updates...**
   checks on request. The check at start can still be switched off in Tools > Options > General, and the
