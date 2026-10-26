@@ -4170,8 +4170,9 @@ class MainWindow(QMainWindow):
 
     def redraw_equation_plots(self, names: list[str] | None = None) -> None:
         """An equation or function changed: the field plots on screen that use it are drawn again with the
-        new formula. names None: all plots of equations."""
-        from .calc_bridge import dependents
+        new formula. names None: all plots of equations. A plot whose equation is now a value, not a field,
+        is deleted."""
+        from .calc_bridge import dependents, expression_kinds
         des = self.des
         eqs = {e.name for e in des.field_exprs}
         if names is None:
@@ -4183,6 +4184,14 @@ class MainWindow(QMainWindow):
                 if n not in used:
                     used.add(n)
                     todo += [d.removesuffix("()") for d in dependents(des, n)]
+        kinds = expression_kinds(self.doc)
+        gone = [p.name for p in des.field_plots if p.quantity in used and kinds.get(p.quantity) in ("value", "vector")]
+        if gone:
+            des.field_plots = [p for p in des.field_plots if p.name not in gone]
+            self._sync_overlays()
+            self.project_tree.rebuild()
+            self.msgs.add("info", f"Deleted the field plot{'s' if len(gone) > 1 else ''} {', '.join(gone)}: the "
+                                  "equation is a value now, not a field")
         shown = [p.name for p in des.field_plots if p.quantity in used and p.quantity in eqs
                  and p.name in self.view.overlay_actors]
         if not shown:
