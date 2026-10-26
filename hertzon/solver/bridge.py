@@ -141,6 +141,7 @@ class Bridge:
     ev: Evaluator = None  # type: ignore[assignment]
     tess: dict = field(default_factory=dict)
     geos: dict = field(default_factory=dict)        # object name -> EMerge GeoObject
+    voided: set = field(default_factory=set)        # PEC solids that back a wave port (made voids)
     region_geo: object = None
     open_faces: object = None                       # FaceSelection of open boundary (far field)
     samples: dict = field(default_factory=dict)
@@ -722,6 +723,7 @@ class Bridge:
             p = e.props
             num = ev.integer(p["PortNumber"])
             if e.kind == "Wave Port":
+                self.back_port_with_void(e.name, tags)
                 mt = p.get("ModeType", "Auto")
                 port = mw.bc.ModalPort(sel, num, modetype=None if mt == "Auto" else mt,
                                        number_of_modes=max(1, ev.integer(p.get("NumberOfModes", "1"))),
@@ -753,6 +755,29 @@ class Bridge:
         elif any(e.kind == "Incident Plane Wave" and e.enabled for e in self.design.excitations):
             warn("Incident plane waves are ignored while ports are present")
         self.store.write_json("ports.json", self.port_map)
+
+    def back_port_with_void(self, port: str, tags: list[int]) -> None:
+        """A wave port on a face of a PEC solid (e.g. the bottom of a coax bore in a metal body) has the
+        metal on one side. EMerge zeroes every field DoF of a PEC volume, the port face included, and its
+        mode solver takes the port material from the metal side: no modes ("k=-2 must be greater than
+        0"). Such a solid is made a void instead (EMerge's VoidAttribute: no field inside, PEC on its
+        boundary), which is the same metal for the solve and backs the port as in the reference tool."""
+        import gmsh
+        em = self.em
+        for name, g in self.geos.items():
+            if g.dim != 3 or name in self.voided or not self.design.has_obj(name) \
+                    or not self.project.material(self.design.obj(name).material).pec:
+                continue
+            vt = set(g.tags)
+            if any(vt & {int(v) for v in gmsh.model.getAdjacencies(2, t)[0]} for t in tags):
+                g.set_material(em.lib.AIR)
+                g.properties += em.VoidAttribute()
+                # EMerge turns the attribute into these conditions when the geometry is committed; that
+                # has happened already, the port faces are only known in the committed model
+                self.m.mw.bc.no_overwrite().Void(g)
+                self.m.mw.bc.no_overwrite().PEC(g.boundary())
+                self.voided.add(name)
+                info(f"Port '{port}' lies on the metal of '{name}': '{name}' is a void backing the port")
 
     def assign_mesh_ops(self) -> None:
         mesher = self.m.mesher
