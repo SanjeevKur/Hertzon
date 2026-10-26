@@ -24,6 +24,11 @@ Size and time with 4 cores and hzAURA refinement (development container, for ori
 | large_patch.hzn | Patch245 | 19.9k tetrahedra | 6 | 104 s (29 s, 73 s) |
 | medium_hairpin.hzn | Hairpin_N3 | 41.8k tetrahedra | 8 | 222 s (87 s, 132 s) |
 
+On the 32-core Windows workstation of [docs/BENCHMARKS.md](../../../docs/BENCHMARKS.md) (25 October 2026) the
+same projects end on 13.4k (microstrip, 5 passes), 34.5k (patch, 8 passes) and 18.5k tetrahedra (hairpin,
+5 passes). The `benchmark.json` of every run there, and of the earlier runs of 19 October, is in
+[`results`](results).
+
 The file names come from the earlier refinement, with which the patch needed the largest mesh; with
 hzAURA the hairpin filter does.
 
