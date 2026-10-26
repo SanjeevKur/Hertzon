@@ -3496,9 +3496,11 @@ class MainWindow(QMainWindow):
         from .update_check import SHOWN_SETTING, SKIP_SETTING, dialog_due, is_skipped
         version, url = release["version"], release["url"]
         if getattr(self, "_update_label", None) is None:
-            self.msgs.add("info", f"Hertzon {version} is available (this is {__version__}). Download: {url}")
-            lab = self._update_label = QLabel(f"<a href='#'>Hertzon {version} is available</a>")
-            lab.setToolTip("Shows the release notes and installs the new version.\n"
+            self.msgs.add("info", f"Hertzon {version} is available (this is {__version__}). To update, click "
+                          f"\"Update to {version}\" in the status bar or use Help > Check for Updates. "
+                          f"Release page: {url}")
+            lab = self._update_label = QLabel(f"Hertzon {version} is available: <a href='#'>Update to {version}...</a>")
+            lab.setToolTip("Shows the release notes; Install there downloads and starts the installer.\n"
                            "The check at start can be switched off in Tools > Options > General.")
             lab.linkActivated.connect(lambda _=None, r=release: self._show_update_dialog(r))
             self.statusBar().addPermanentWidget(lab)

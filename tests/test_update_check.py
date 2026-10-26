@@ -100,8 +100,8 @@ def test_dialog_pause():
     assert U.dialog_due("", today)                       # never shown
     assert U.dialog_due("garbage", today)
     assert not U.dialog_due("2026-10-26", today)         # several releases a day: one dialog
-    assert not U.dialog_due("2026-10-13", today)
-    assert U.dialog_due("2026-10-12", today)             # 14 days later again
+    assert not U.dialog_due("2026-10-20", today)
+    assert U.dialog_due("2026-10-19", today)             # 7 days later again
 
 
 def test_installer_asset():

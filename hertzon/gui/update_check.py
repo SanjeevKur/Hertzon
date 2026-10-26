@@ -26,7 +26,7 @@ RELEASES_PAGE = f"https://github.com/{REPO}/releases/latest"
 SETTING = "updates/check_on_start"
 SKIP_SETTING = "updates/skipped_version"   # "Skip this version": no dialog until a newer one is out
 SHOWN_SETTING = "updates/dialog_shown"     # when the dialog came up by itself last (ISO date)
-PAUSE_DAYS = 14   # Hertzon is released often; the dialog comes at most this often, the status bar always says it
+PAUSE_DAYS = 7   # Hertzon is released often; the dialog comes at most this often, the status bar always says it
 TIMEOUT = 5.0
 
 # Hertzon releases are tagged v<major>.<minor>.<patch>; the same repository also publishes other releases
