@@ -33,6 +33,9 @@ the GitHub release notes.
   equations of the Fields Calculator.
 
 ### Changed
+- **Fillet of a sheet at its vertices**: a sheet (for example a patch) is now filleted by selecting its corner
+  vertices (press V) instead of edges; each selected vertex gets one fillet with the radius. Projects that
+  filleted a sheet by its edges in 0.2.3 build as before.
 - **Benchmarks**: the Solver Benchmark re-run on the 32-core workstation with 0.2.3 and hzAURA, compared with
   the runs of 19 October (patch antenna 2.5 to 3.7 times faster with the same result, microstrip 1.4 to 1.6
   times), and the hairpin filter added (docs/BENCHMARKS.md). The raw results of both are in

@@ -1068,12 +1068,12 @@ def test_open_example_lists_the_shipped_examples(tmp_path):
     assert example_projects(tmp_path / "missing") == []
 
 
-def _fillet_area(kind, radius, edges, **props):
+def _fillet_area(kind, radius, edges="", vertices="", **props):
     import gmsh
     p = Project()
     d = p.designs[0]
     o = d.add_object(kind, **props)
-    o.history.append(Command.new("Fillet", Radius=radius, Edges=edges))
+    o.history.append(Command.new("Fillet", Radius=radius, Edges=edges, Vertices=vertices))
     K.ensure_gmsh("test_fillet")
     gmsh.model.remove()
     gmsh.model.add("test_fillet")
@@ -1081,22 +1081,33 @@ def _fillet_area(kind, radius, edges, **props):
     return sum(gmsh.model.occ.getMass(*x) for x in ctx.built.get(o.name, [])), ctx.errors.get(o.name)
 
 
-def test_fillet_sheet_rounds_corners_of_selected_edges():
-    # a patch is a sheet: the fillet rounds the two corners of the selected edge (was: object vanished)
-    area, err = _fillet_area("CreateRectangle", "0.5", "0", Position="0,0,1", Axis="Z", XSize="10", YSize="8")
+def test_fillet_sheet_rounds_selected_vertices():
+    # a patch is a sheet: one fillet at each selected vertex (was: object vanished)
+    corner = 1 - np.pi / 4
+    area, err = _fillet_area("CreateRectangle", "0.5", vertices="0", Position="0,0,1", Axis="Z", XSize="10",
+                             YSize="8")
     assert err is None
-    assert area == pytest.approx((80 - 2 * 0.25 * (1 - np.pi / 4)) * 1e-6, rel=1e-6)
-    area, err = _fillet_area("CreateRectangle", "1", "0,1,2,3", Position="0,0,0", Axis="X", YSize="10",
+    assert area == pytest.approx((80 - 0.25 * corner) * 1e-6, rel=1e-6)
+    area, err = _fillet_area("CreateRectangle", "1", vertices="0,1,2,3", Position="0,0,0", Axis="X", YSize="10",
                              ZSize="8")
     assert err is None
-    assert area == pytest.approx((80 - 4 * (1 - np.pi / 4)) * 1e-6, rel=1e-6)
+    assert area == pytest.approx((80 - 4 * corner) * 1e-6, rel=1e-6)
+    # projects of 0.2.3 with edges on a sheet: the corners at both ends of the edge
+    area, err = _fillet_area("CreateRectangle", "0.5", edges="0", Position="0,0,0", Axis="Z", XSize="10",
+                             YSize="8")
+    assert err is None
+    assert area == pytest.approx((80 - 2 * 0.25 * corner) * 1e-6, rel=1e-6)
 
 
 def test_fillet_too_large_is_reported():
-    _, err = _fillet_area("CreateRectangle", "6", "0", Position="0,0,0", Axis="Z", XSize="10", YSize="8")
+    _, err = _fillet_area("CreateRectangle", "6", vertices="0,1", Position="0,0,0", Axis="Z", XSize="10",
+                          YSize="8")
     assert "radius is probably too large" in err
-    _, err = _fillet_area("CreateBox", "0.5", "0,1,2,3", Position="0,0,0", XSize="10", YSize="8", ZSize="0.035")
+    _, err = _fillet_area("CreateBox", "0.5", edges="0,1,2,3", Position="0,0,0", XSize="10", YSize="8",
+                          ZSize="0.035")
     assert "radius is probably too large" in err
+    _, err = _fillet_area("CreateBox", "0.5", vertices="0", Position="0,0,0", XSize="10", YSize="8", ZSize="1")
+    assert "select the edges" in err
 
 
 def test_failed_fillet_leaves_object_unchanged(monkeypatch):
@@ -1118,10 +1129,10 @@ def test_failed_fillet_leaves_object_unchanged(monkeypatch):
         _edge_op = MainWindow._edge_op
     win = Win()
     win.doc = doc
-    win._edge_op("Fillet", {"Radius": "6", "Edges": "0"}, "Patch")
+    win._edge_op("Fillet", {"Radius": "6", "Vertices": "0,1"}, "Patch")
     assert [c.kind for c in doc.design.obj("Patch").history] == ["CreateRectangle"]
     assert "Patch" in doc.tess and not doc.errors and not doc.redo_stack
     assert shown and "unchanged" in shown[0]
-    win._edge_op("Fillet", {"Radius": "0.5", "Edges": "0"}, "Patch")
+    win._edge_op("Fillet", {"Radius": "0.5", "Vertices": "0"}, "Patch")
     assert [c.kind for c in doc.design.obj("Patch").history] == ["CreateRectangle", "Fillet"]
     assert "Patch" in doc.tess and len(shown) == 1
