@@ -243,6 +243,28 @@
       "dB(S(2,1))"
      ],
      "props": {}
+    },
+    {
+     "name": "Return Loss",
+     "kind": "Rectangular",
+     "solution": "Setup1 : Sweep",
+     "traces": [
+      "RL"
+     ],
+     "props": {}
+    },
+    {
+     "name": "Port Powers",
+     "kind": "Data Table",
+     "solution": "Setup1 : LastAdaptive",
+     "traces": [
+      "P_in",
+      "P_out"
+     ],
+     "props": {
+      "port": "1",
+      "fields": "1"
+     }
     }
    ],
    "field_plots": [
@@ -258,9 +280,45 @@
       "freq": "0",
       "phase": "0"
      }
+    },
+    {
+     "name": "Sy_Cut",
+     "quantity": "Sy",
+     "solution": "Setup1 : LastAdaptive",
+     "faces": [],
+     "objects": [],
+     "plane": "XY@b/2",
+     "props": {
+      "port": "1",
+      "freq": "0",
+      "phase": "0"
+     }
     }
    ],
    "coord_systems": [],
+   "field_exprs": [
+    {
+     "name": "RL",
+     "expr": "-dB(S(1,1))",
+     "description": "Return loss of port 1"
+    },
+    {
+     "name": "P_in",
+     "expr": "flux(Port1Sheet, re(S))",
+     "description": "Power into the guide at port 1"
+    },
+    {
+     "name": "P_out",
+     "expr": "flux(Port2Sheet, re(S))",
+     "description": "Power out of the guide at port 2"
+    },
+    {
+     "name": "Sy",
+     "expr": "y(re(S))",
+     "description": "Power flow along the guide"
+    }
+   ],
+   "field_funcs": [],
    "optimetrics": [],
    "parametrics": [],
    "working_cs": "Global",
