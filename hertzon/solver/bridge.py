@@ -1069,7 +1069,7 @@ class Bridge:
         the adaptive solution and the other sweeps stay as they are."""
         fa = adaptive_frequencies(self.setup, self.ev)
         resume = load_amr_state(self.out, self.keys["model_key"], fa)
-        if not resume or not (len(resume["amr_sizes"]) or resume.get("mesh")):
+        if not resume or not (len(resume["amr_sizes"]) or resume.get("mesh") or resume.get("aura")):
             raise RuntimeError("No adaptive solution to reuse; analyze the whole setup first")
         restore_amr_mesh(self.m, resume, float(self.setup.props.get("GrowthRate", "1.6")))
         info(f"Reusing the adaptive mesh: {self.m.mesh.n_tets} tetrahedra")
@@ -1648,8 +1648,10 @@ def adaptive_loop(m, fa: list[float], p: dict, out: Path, on_pass=None, key: str
     m.state.stash()
     _amr(m).reset()
     m._local_mesh = None
+    m._aura_mesh = None
+    m._aura_initial = np.asarray(m.mesh.nodes).T.copy()      # hzAURA state: checked when it is restored
     first = 1
-    if resume and resume["passes"] and (len(resume["amr_sizes"]) or resume.get("mesh")) and len(resume["passes"]) <= maxp:
+    if resume and resume["passes"] and (len(resume["amr_sizes"]) or resume.get("mesh") or resume.get("aura")) and len(resume["passes"]) <= maxp:
         # continue from the last adaptive mesh: rebuild it, re-solve its pass and go on refining
         restore_amr_mesh(m, resume, growth)
         ratio = resume["ratio"]
@@ -1813,6 +1815,11 @@ def _save_amr_state(out: Path, key: str, amr, ratio: float, passes: list, fa, m=
         mesh = getattr(m, "_local_mesh", None) if m is not None else None
         if mesh:
             arr.update({"_mesh_" + k: v for k, v in mesh.items()})
+        elif m is not None and getattr(m, "_aura_mesh", None) is not None and m._aura_mesh is m.mesh:
+            # hzAURA changes EMerge's mesh directly (gmsh never sees it): store its nodes, tets and tags
+            from emerge._emerge.aura.emerge_tools import mesh_to_aura_inputs
+            arr.update({"_aura_" + k: v for k, v in mesh_to_aura_inputs(m.mesh).items() if k != "periodic_pairs"})
+            arr["_aura_initial_nodes"] = m._aura_initial
         np.savez(tmp, key=np.array(key), ratio=np.array(ratio), passes=np.array(json.dumps(passes)),
                  fa=np.asarray(fa, float), **{k.strip("_"): v for k, v in arr.items()})
         os.replace(tmp, out / AMR_STATE)
@@ -2015,6 +2022,7 @@ def _refine_aura(m, error, pct: float, step: int):
         n0 = m.mesh.n_tets
         m._install_refined_mesh(new)
         m._local_mesh = None
+        m._aura_mesh = m.mesh               # stored for resuming (_save_amr_state)
         grow = (m.mesh.n_tets / n0 - 1) * 100
         info(f"Pass {step}: hzAURA refinement -> {m.mesh.n_tets} tetrahedra (+{grow:.1f}%), "
              f"min. quality {rep['q_min']:.3f}, {time.time() - t0:.2f} s")
@@ -2035,6 +2043,9 @@ def restore_amr_mesh(m, resume: dict, growth: float) -> None:
         m._local_mesh = resume["mesh"]
         LR.load_mesh(m, resume["mesh"], what="stored adaptive mesh")
         return
+    if resume.get("aura") is not None:
+        restore_aura_mesh(m, resume["aura"])
+        return
     amr = _amr(m)
     amr._amr_coords = np.asarray(resume["amr_coords"], float)
     amr._amr_sizes = np.asarray(resume["amr_sizes"], float)
@@ -2044,6 +2055,28 @@ def restore_amr_mesh(m, resume: dict, growth: float) -> None:
     m._reset_mesh()
     amr.set_refinement_function(growth, 2.0)
     m.generate_mesh(True)
+
+
+def restore_aura_mesh(m, a: dict) -> None:
+    """Rebuild a stored hzAURA mesh on the initial mesh ``m`` has now. hzAURA keeps the numbering of every old
+    node and appends the new ones, so the initial mesh supplies the tags and the geometry data of EMerge's mesh."""
+    from emerge._emerge.aura import RefineResult
+    from emerge._emerge.aura.emerge_tools import refine_mesh3d
+    m.data.sim.new(iter_step=0)
+    # the smoothing moves old nodes, so the initial mesh is compared with the one stored with the state
+    n0, init = np.asarray(m.mesh.nodes).T, np.asarray(a.get("initial_nodes", np.zeros((0, 3))), float)
+    if n0.shape != init.shape or not np.allclose(n0, init, rtol=0, atol=1e-9 * max(1.0, float(np.abs(n0).max()))):
+        raise RuntimeError("The stored adaptive mesh does not fit the initial mesh; analyze the whole setup again")
+    nodes = np.asarray(a["nodes"], float)
+    tets = np.asarray(a["tets"], np.int64)
+    res = RefineResult(nodes=nodes, tets=tets, tet_root=np.zeros(len(tets), np.int64),
+                       tet_region=np.asarray(a["tet_region"]), tet_new=np.zeros(len(tets), bool),
+                       face_tris=np.asarray(a["face_tris"], np.int64), face_tri_tags=np.asarray(a["face_tri_tags"]),
+                       curve_edges=np.asarray(a["curve_edges"], np.int64),
+                       curve_edge_tags=np.asarray(a["curve_edge_tags"]))
+    m._install_refined_mesh(refine_mesh3d(m.mesh, res))
+    m._local_mesh = None
+    m._aura_mesh = m.mesh
 
 
 def peak_memory() -> float:
@@ -2074,7 +2107,8 @@ def load_amr_state(out: Path, key: str, fa) -> dict | None:
         if str(d["key"]) != key or not np.allclose(d["fa"], np.asarray(fa, float)):
             return None
         mesh = {k[len("mesh_"):]: d[k] for k in d.files if k.startswith("mesh_")} or None
-        return {"ratio": float(d["ratio"]), "passes": json.loads(str(d["passes"])), "mesh": mesh,
+        aura = {k[len("aura_"):]: d[k] for k in d.files if k.startswith("aura_")} or None
+        return {"ratio": float(d["ratio"]), "passes": json.loads(str(d["passes"])), "mesh": mesh, "aura": aura,
                 **{k: d[k] for k in ("amr_coords", "amr_sizes", "amr_ratios", "amr_new")}}
     except Exception:  # noqa: BLE001
         return None
