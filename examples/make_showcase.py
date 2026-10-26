@@ -131,11 +131,6 @@ class Built:
             raise RuntimeError(f"no face of {obj} matches")
         return out
 
-    def edges(self, obj: str, count: int) -> list[FaceRef]:
-        t = self.tess[obj]
-        n = len(getattr(t, "edge_center", []) or []) if hasattr(t, "edge_center") else count
-        return [FaceRef(obj, i) for i in range(min(count, n))]
-
 
 # ---- materials ----------------------------------------------------------------------------------------------
 def project_materials() -> list[Material]:
