@@ -9,7 +9,7 @@ import pyvista as pv
 import vtk
 from pyvistaqt import QtInteractor
 from PySide6.QtCore import Qt, Signal, QPoint
-from PySide6.QtWidgets import QWidget, QVBoxLayout
+from PySide6.QtWidgets import QApplication, QWidget, QVBoxLayout
 
 from .doc import Document, Pick
 from ..model.schema import BOUNDARY_COLORS, EXCITATION_COLORS
@@ -732,6 +732,7 @@ class ModelerView(QWidget):
             self.style.OnMiddleButtonDown()     # Shift + left drag pans
         else:
             self._dolly = False                 # plain left drag: box selection (rotate with the middle button)
+            self._show_band(None)               # a rectangle whose release was lost goes, it is not left behind
             self._band = (self._press_pos, None, None)
 
     def _on_left_release(self, obj, ev):
@@ -850,6 +851,11 @@ class ModelerView(QWidget):
             self._update_preview()
             self.cursorMoved.emit(p)
             return
+        if self._band is not None and not QApplication.mouseButtons() & Qt.LeftButton:
+            # the release went elsewhere (another tab, window or dialog took the mouse): no rectangle stays
+            self._show_band(None)
+            self._band = None
+            self._press_pos = None
         if self._band is not None and self._press_pos is not None:
             pos = self._event_pos()
             p0 = self._band[0]

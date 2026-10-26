@@ -42,6 +42,9 @@ the GitHub release notes.
   examples/benchmark/scaling/results.
 
 ### Fixed
+- **Selection rectangle left in the 3D view**: when the mouse release of a box selection did not reach the
+  3D view (for example after switching tabs), the rectangle stayed on screen. It now goes with the next move
+  or click in the view.
 - **Slow update with the Windows installer**: installing a new version over an existing one hung for minutes
   after copying the files, because the installer took the size for Settings > Apps by walking the whole
   folder, including the existing Python environment; it now takes the size from the installer itself.

@@ -4057,6 +4057,8 @@ class MainWindow(QMainWindow):
 
     def _sync_equation_page(self, *_) -> None:
         """The Equation page of the ribbon is there while the Equations tab is the current one."""
+        if self.tabs.currentIndex() != 0:
+            self.view.reset_interaction()       # a drag in the 3D view does not stay pending behind another tab
         if self._eq_page is None:
             return
         rb, idx = self.ribbon, self._eq_page
