@@ -212,6 +212,16 @@ def test_formula_editor_says_what_is_missing(tex, msg):
         TX.to_text(tex, _formula_env())
 
 
+def test_formula_editor_name_in_front():
+    from hertzon.post.calc import latex as TX
+    assert TX.split_named("P_in = flux(Port1, re(S))") == ("P_in", "flux(Port1, re(S))", 7)
+    assert TX.split_named("flux(Port1, re(S))")[0] == ""
+    assert TX.split_named_tex(TX.name_tex("P_in") + r"=\iint") == ("P_in", r"\iint")
+    assert TX.split_named_tex(r"S=E\times H") == ("S", r"E\times H")
+    with pytest.raises(TX.LatexError):
+        TX.split_named_tex(r"\frac{a}{b}=E")
+
+
 def test_picked_geometry_goes_below_the_sign():
     from hertzon.post.calc import latex as TX
     assert TX.geometry_tex("Port1") == r"\mathrm{Port1}"
@@ -282,9 +292,11 @@ def test_equations_tab_picks_the_geometry_in_the_3d_view():
     assert win.tabs.currentWidget() is calc and rb.isTabVisible(page)
     assert calc.edit.toPlainText() == "int_vol(Box, 0.25*eps0*eps_r*|E|^2)"
     assert calc.info is not None and not calc.info.field
-    calc.name.setText("We")
+    calc.edit.setPlainText("We = " + calc.edit.toPlainText())    # the name in front, as typed
+    assert calc.typed_name() == "We" and calc.info is not None
     assert calc.save()
     assert "Equations: We" in win.tabs.tabText(1)
+    assert win.des.field_exprs[-1].expr == "int_vol(Box, 0.25*eps0*eps_r*|E|^2)"
 
     def tree_items(it):
         yield it
@@ -304,5 +316,22 @@ def test_equations_tab_picks_the_geometry_in_the_3d_view():
     assert win.doc.selection_mode == "object"           # the selection mode is restored
     win._close_tab(win.tabs.indexOf(calc))
     assert win.tabs.indexOf(calc) < 0 and not rb.isTabVisible(page)
+    # export and import the equations of a design
+    import json
+    import tempfile
+    from pathlib import Path
+    from PySide6.QtWidgets import QFileDialog, QMessageBox
+    f = Path(tempfile.mkdtemp()) / "eq.json"
+    save, ask = QFileDialog.getSaveFileName, QMessageBox.question
+    QFileDialog.getSaveFileName = staticmethod(lambda *a, **k: (str(f), ""))
+    QMessageBox.question = staticmethod(lambda *a, **k: QMessageBox.Yes)
+    try:
+        win.export_equations()
+        assert json.loads(f.read_text(encoding="utf-8"))["equations"][0]["name"] == "We"
+        win.des.field_exprs[0].expr = "1"
+        win.import_equations(str(f))
+    finally:
+        QFileDialog.getSaveFileName, QMessageBox.question = save, ask
+    assert [(e.name, e.expr) for e in win.des.field_exprs] == [("We", "int_vol(Box, 0.25*eps0*eps_r*|E|^2)")]
     win.doc.dirty = False
     win.close()

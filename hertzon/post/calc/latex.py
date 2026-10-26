@@ -687,3 +687,40 @@ def _closed(node: L.Node, env: L.Env) -> bool:
         if g is None or 3 not in g.dims and not g.closed:
             return False
     return bool(items)
+
+
+# ---- "Name = formula" ----------------------------------------------------------------------------
+_NAMED = re.compile(r"^\s*([A-Za-z_][A-Za-z_0-9]*)\s*=(?!=)\s*")
+
+
+def split_named(text: str) -> tuple[str, str, int]:
+    """'P_in = flux(Port1, re(S))' -> ('P_in', 'flux(Port1, re(S))', offset of the formula); no name: ''."""
+    m = _NAMED.match(text)
+    return (m.group(1), text[m.end():], m.end()) if m else ("", text, 0)
+
+
+def name_tex(name: str) -> str:
+    """The LaTeX of the name left of = (P_in -> P_{\\mathrm{in}})."""
+    def part(w):
+        return w if len(w) == 1 else r"\mathrm{" + w + "}"
+    base, _, sub = name.partition("_")
+    return part(base) + ("_{" + part(sub) + "}" if sub else "")
+
+
+def split_named_tex(tex: str) -> tuple[str | None, str]:
+    """The editor's LaTeX at its first = outside braces: (name, formula); (None, tex) without =. LatexError if
+    the left side is not a name."""
+    depth = 0
+    for i, c in enumerate(tex):
+        if c == "{":
+            depth += 1
+        elif c == "}":
+            depth -= 1
+        elif c == "=" and depth == 0:
+            left = tex[:i]
+            w = re.sub(r"\\(mathrm|mathit|operatorname|text|mathbf|mathnormal)\b", "", left)
+            w = re.sub(r"[{}\s]|\\[,;:! ]", "", w)
+            if not re.fullmatch(r"[A-Za-z][A-Za-z0-9]*(_[A-Za-z0-9]+)?", w):
+                raise LatexError("Left of = goes the name of the equation: letters, digits and _, e.g. P_in")
+            return w, tex[i + 1:]
+    return None, tex

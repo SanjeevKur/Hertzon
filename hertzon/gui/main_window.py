@@ -62,6 +62,7 @@ def _point_triangle_dist(P, A, B, C):
 
 AXIS_OF_PLANE = {"XY": "Z", "YZ": "X", "XZ": "Y", "ZX": "Y"}
 FILE_FILTER = "Hertzon project (*.hzn)"
+EQ_FILTER = "Hertzon equations (*.json)"
 EXAMPLES_DIR = Path(__file__).resolve().parents[2] / "examples"   # next to the package in the repo and installs
 
 
@@ -4066,8 +4067,83 @@ class MainWindow(QMainWindow):
         new = new.strip()
         if ok and new and new != name:
             self.fields_calculator(name)
-            self.calc_window.name.setText(new)
+            self.calc_window.set_name(new)
             self.calc_window.save()
+
+    def export_equations(self) -> None:
+        """Equations > Export Equations: the equations and functions of the design into a file, to use them in
+        other designs and projects."""
+        des = self.des
+        if not des.field_exprs and not des.field_funcs:
+            QMessageBox.information(self, "Export Equations", "This design has no equations yet.")
+            return
+        start = str(Path(self.doc.project.path).with_name(f"{des.name}_equations.json")) if self.doc.project.path \
+            else f"{des.name}_equations.json"
+        path, _ = QFileDialog.getSaveFileName(self, "Export Equations", start, EQ_FILTER)
+        if not path:
+            return
+        data = {"format": "hertzon-equations", "version": 1,
+                "equations": [{"name": e.name, "expr": e.expr, "description": e.description}
+                              for e in des.field_exprs],
+                "functions": list(des.field_funcs)}
+        try:
+            Path(path).write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+        except OSError as e:
+            QMessageBox.warning(self, "Export Equations", f"Cannot write {path}:\n{e}")
+            return
+        self.msgs.add("info", f"Exported {len(data['equations'])} equations and {len(data['functions'])} "
+                              f"functions to {path}")
+
+    def import_equations(self, path: str | None = None) -> None:
+        """Equations > Import Equations: equations and functions from a file of Export Equations."""
+        if path is None:
+            path, _ = QFileDialog.getOpenFileName(self, "Import Equations", "", EQ_FILTER)
+            if not path:
+                return
+        try:
+            data = json.loads(Path(path).read_text(encoding="utf-8"))
+            eqs = [(str(e["name"]), str(e["expr"]), str(e.get("description", ""))) for e in data.get("equations", [])]
+            funcs = [str(f) for f in data.get("functions", [])]
+        except (OSError, ValueError, KeyError, TypeError, AttributeError) as e:
+            QMessageBox.warning(self, "Import Equations", f"{path} is not a file of equations:\n{e}")
+            return
+        from ..model.design import FieldExpression
+        des = self.des
+
+        def fname(text):
+            return text.split("(", 1)[0].strip()
+        have = {e.name for e in des.field_exprs} | {fname(f) for f in des.field_funcs}
+        same = [n for n, _, _ in eqs if n in have] + [fname(f) for f in funcs if fname(f) in have]
+        replace = False
+        if same:
+            ans = QMessageBox.question(
+                self, "Import Equations", f"The design has already: {', '.join(same)}.\n\nReplace them with the "
+                "ones from the file? (No keeps those of the design.)",
+                QMessageBox.Yes | QMessageBox.No | QMessageBox.Cancel)
+            if ans == QMessageBox.Cancel:
+                return
+            replace = ans == QMessageBox.Yes
+        self.doc.checkpoint()
+        n = 0
+        for name, expr, desc in eqs:
+            old = next((e for e in des.field_exprs if e.name == name), None)
+            if old is None:
+                des.field_exprs.append(FieldExpression(name, expr, desc))
+            elif replace:
+                old.expr, old.description = expr, desc
+            else:
+                continue
+            n += 1
+        for f in funcs:
+            if fname(f) in {fname(x) for x in des.field_funcs}:
+                if not replace:
+                    continue
+                des.field_funcs = [x for x in des.field_funcs if fname(x) != fname(f)]
+            des.field_funcs.append(f)
+            n += 1
+        self.doc.dirty = True
+        self.doc.changed.emit("fields")
+        self.msgs.add("info", f"Imported {n} equations and functions from {path}")
 
     def equation_functions(self, select: str | None = None) -> None:
         self.fields_calculator()
@@ -4623,6 +4699,10 @@ class MainWindow(QMainWindow):
                 for key, _text, desc in LIB.EXPRESSIONS:
                     lib.addAction(desc.split(" (")[0], lambda _=False, k=key: self.new_equation(k))
                 m.addAction("Functions...", self.equation_functions)
+                m.addSeparator()
+                m.addAction("Import Equations...", lambda: self.import_equations())
+                a = m.addAction("Export Equations...", self.export_equations)
+                a.setEnabled(bool(self.des.field_exprs or self.des.field_funcs))
             elif g == "Field Overlays":
                 m.addAction("Clear Overlays", self.clear_overlays)
             elif g == "Radiation":

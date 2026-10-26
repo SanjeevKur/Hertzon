@@ -46,6 +46,17 @@ const GEOMETRY = {
 const NOT_FOLLOWED = "(?![A-Za-z])(?!\\s*(\\\\limits|\\\\nolimits)?\\s*_)(?!\\s*\\\\left)";
 
 function value() { return mf.getValue("latex"); }
+// "P_{\mathrm{in}}=\iint..." -> ["P_{\mathrm{in}}=", "\iint..."]: the name of the equation and its formula
+function splitName(lx) {
+  let depth = 0;
+  for (let i = 0; i < lx.length; i++) {
+    const c = lx[i];
+    if (c === "{") depth++;
+    else if (c === "}") depth--;
+    else if (c === "=" && depth === 0) return [lx.slice(0, i + 1), lx.slice(i + 1)];
+  }
+  return ["", lx];
+}
 function changed() { if (py) py.changed(value()); }
 function hint(t) { document.getElementById("hint").textContent = t || ""; }
 
@@ -115,7 +126,8 @@ window.hz = {
     let sel = "";
     try { if (!mf.selectionIsCollapsed) sel = mf.getValue(mf.selection, "latex"); } catch (e) { sel = ""; }
     if (!sel && whole && value().trim()) {
-      mf.setValue(tpl.replace("#@", value()), { silenceNotifications: true });
+      const [head, body] = splitName(value());     // Name = ... stays in front
+      mf.setValue(head + tpl.replace("#@", body), { silenceNotifications: true });
       toPlaceholder();
     } else {
       mf.insert(tpl.replace("#@", sel || G), { format: "latex", selectionMode: "placeholder" });
@@ -149,6 +161,7 @@ function start() {
   mf.popoverPolicy = "off";
   try { mf.menuItems = []; } catch (e) { /* older MathLive */ }
   mf.inlineShortcuts = {};
+  try { mf.placeholder = "\\text{Name} = \\text{formula}"; } catch (e) { /* older MathLive */ }
   mf.addEventListener("input", onInput);
   // a command after \ is committed by Space; MathLive leaves its LaTeX mode right after the input event
   mf.addEventListener("mode-change", () => setTimeout(onInput, 0));

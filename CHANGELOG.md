@@ -7,8 +7,9 @@ the GitHub release notes.
 
 ### Added
 - **Fields Calculator** (Calculator in the Results ribbon): an Equations tab next to the 3D Modeler for
-  equations of the stored fields. The tab only defines them and shows their type (scalar or vector, field or
-  value) and unit; saved equations are used in Plot Fields (fields) and in reports (values). While the tab is open the ribbon has an Equation page with fields, symbols, fractions, roots,
+  equations of the stored fields. An equation is typed with its name in front (`P_in = flux(Port1, re(S))`)
+  and saved under that name. The tab only defines equations and shows their type (scalar or vector, field
+  or value) and unit; saved equations are used in Plot Fields (fields) and in reports (values). While the tab is open the ribbon has an Equation page with fields, symbols, fractions, roots,
   integrals, large operators, brackets, functions and the library. The formula is typed into a typeset
   formula editor as in a desktop office program: a command after a backslash turns into its symbol with
   Space (`\times` gives ×, `\curl` gives ∇×, `\iint` a surface integral). Text shows the same formula as one
@@ -22,7 +23,7 @@ the GitHub release notes.
   cylindrical and spherical coordinate systems, curl, divergence and gradient. Values are computed on the
   solver's elements with their quadrature, curved elements included. Equations and user functions are saved
   with the design and listed in the project tree under Equations (open, plot, add to a report, rename,
-  delete); a library has power, loss, energy, Q, voltage and current. A named field can be
+  delete, and export to or import from a file for other designs); a library has power, loss, energy, Q, voltage and current. A named field can be
   plotted like E or H (Plot Fields > Quantity), and a named value can be shown over frequency in a report
   (category Fields).
 - **Volume field plots**: Plot on "(selection, inside solids)" (or "Inside the selected solids" in the plot

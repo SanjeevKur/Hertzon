@@ -555,11 +555,6 @@ class EquationsTab(QWidget):
         self.banner.setVisible(False)
         lay.addWidget(self.banner)
         nrow = QHBoxLayout()
-        self.name = QLineEdit()
-        self.name.setObjectName("Name")
-        self.name.setPlaceholderText("Name")
-        self.name.setFixedWidth(220)
-        self.name.textChanged.connect(self._dirty_changed)
         self.desc = QLineEdit()
         self.desc.setObjectName("Desc")
         self.desc.setPlaceholderText("Description (optional)")
@@ -567,8 +562,6 @@ class EquationsTab(QWidget):
         self.unsaved = QLabel("")
         self.unsaved.setProperty("role", "muted")
         self.unsaved.setMinimumWidth(self.unsaved.fontMetrics().horizontalAdvance("unsaved") + 6)
-        nrow.addWidget(self.name)
-        nrow.addSpacing(10)
         nrow.addWidget(self.desc, 1)
         nrow.addWidget(self.unsaved)
         b = QPushButton("Save")
@@ -601,6 +594,7 @@ class EquationsTab(QWidget):
         self.formula.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         ll.addWidget(self.formula, 1)
         self.edit = ExprEdit()
+        self.edit.setPlaceholderText("Name = formula, e.g. P_in = flux(Port1, re(S))")
         self.edit.setFixedHeight(self.edit.fontMetrics().lineSpacing() * 2 + 16)
         self.edit.textChanged.connect(self._text_changed)
         self.edit.cursorPositionChanged.connect(self._signature)
@@ -623,7 +617,7 @@ class EquationsTab(QWidget):
         srow = QHBoxLayout()
         self.status = QLabel()
         srow.addWidget(self.status, 1)
-        keys = QLabel("\\ and a name, then Space: symbol or structure · Tab: next box")
+        keys = QLabel("Name = formula, then Save · \\ and a name, then Space: symbol or structure · Tab: next box")
         keys.setProperty("role", "muted")
         srow.addWidget(keys)
         lay.addLayout(srow)
@@ -688,25 +682,23 @@ class EquationsTab(QWidget):
     def _load_library(self, key: str) -> None:
         name, text, desc = next(x for x in LIB.EXPRESSIONS if x[0] == key)
         self.new()
-        self.name.setText(name if not any(e.name == name for e in self.doc.design.field_exprs) else "")
         self.desc.setText(desc)
-        self.edit.setPlainText(text)
+        free = not any(e.name == name for e in self.doc.design.field_exprs)
+        self.edit.setPlainText(f"{name} = {text}" if free else text)
 
     def load(self, name: str) -> None:
         e = next((x for x in self.doc.design.field_exprs if x.name == name), None)
         if e is None:
             return
         self.current = name
-        self.name.setText(e.name)
         self.desc.setText(e.description)
-        self.edit.setPlainText(e.expr)
+        self.edit.setPlainText(f"{e.name} = {e.expr}")
         self.saved_text = self._state()
         self._dirty_changed()
         self._used_by()
 
     def new(self) -> None:
         self.current = None
-        self.name.clear()
         self.desc.clear()
         self.edit.clear()
         self.saved_text = self._state()
@@ -715,7 +707,18 @@ class EquationsTab(QWidget):
         self.focus_editor()
 
     def _state(self) -> str:
-        return f"{self.name.text()}\n{self.desc.text()}\n{self.edit.toPlainText()}"
+        return f"{self.desc.text()}\n{self.edit.toPlainText()}"
+
+    def typed_name(self) -> str:
+        """The name of the equation: what is left of = (P_in = flux(Port1, re(S)))."""
+        return TX.split_named(self.edit.toPlainText())[0]
+
+    def formula_text(self) -> str:
+        """The formula right of the name."""
+        return TX.split_named(self.edit.toPlainText())[1]
+
+    def set_name(self, name: str) -> None:
+        self.edit.setPlainText(f"{name} = {self.formula_text().strip()}")
 
     def _dirty_changed(self, *_):
         dirty = self._state() != self.saved_text and bool(self.edit.toPlainText().strip())
@@ -723,7 +726,7 @@ class EquationsTab(QWidget):
         self.a_del.setEnabled(self.current is not None)
         tabs = getattr(self.win, "tabs", None)
         if tabs is not None and tabs.indexOf(self) >= 0:
-            tabs.setTabText(tabs.indexOf(self), f"Equations: {self.name.text() or 'new'}{' *' if dirty else ''}")
+            tabs.setTabText(tabs.indexOf(self), f"Equations: {self.typed_name() or 'new'}{' *' if dirty else ''}")
 
     def _used_by(self) -> None:
         if not self.current:
@@ -771,11 +774,13 @@ class EquationsTab(QWidget):
         """The text into the formula editor; False if the text is not an expression (it stays as text)."""
         if self.fe is None:
             return False
-        text = self.edit.toPlainText()
+        name, text, _ = TX.split_named(self.edit.toPlainText())
         try:
             tex = TX.to_latex(text, CB.make_env(self.doc))
         except L.CalcError:
             return False
+        if name:
+            tex = TX.name_tex(name) + "=" + tex
         self.tex_error = None
         self.fe.set_latex(tex)
         return True
@@ -783,7 +788,10 @@ class EquationsTab(QWidget):
     def _tex_changed(self, tex: str) -> None:
         """An edit in the formula editor: its text, or why it is not an expression yet."""
         try:
-            text = TX.to_text(tex, CB.make_env(self.doc))
+            name, rest = TX.split_named_tex(tex)
+            text = TX.to_text(rest, CB.make_env(self.doc))
+            if name:
+                text = f"{name} = {text}"
             err = None
         except TX.LatexError as e:
             text, err = "", str(e)
@@ -834,10 +842,12 @@ class EquationsTab(QWidget):
         self.pick(fn, dim)
 
     def _analyze(self) -> None:
-        text = self.edit.toPlainText().strip()
+        full = self.edit.toPlainText().strip()
+        _, text, off = TX.split_named(self.edit.toPlainText())
+        text = text.strip()
         self.info = None
         self.edit.underline(None, None)
-        self.astext.setText(f"as text:  {text}" if text else "")
+        self.astext.setText(f"as text:  {full}" if full else "")
         if self.mode == "pro" and self.tex_error:
             self._show_kind(None)
             self.status.setText(f"<span style='color:{ERR}'>⚠ {self.tex_error}</span>")
@@ -852,13 +862,13 @@ class EquationsTab(QWidget):
             return
         env = CB.make_env(self.doc)
         try:
-            self.info = L.analyze(self.edit.toPlainText(), env)
+            self.info = L.analyze(self.formula_text(), env)
         except L.CalcError as e:
-            self.edit.underline(e.pos, e.end)
+            self.edit.underline(None if e.pos is None else e.pos + off, None if e.end is None else e.end + off)
             self._show_kind(None)
             self.status.setText(f"<span style='color:{ERR}'>⚠ {e}</span>")
             if self.mode == "pro":
-                self.astext.setText(f"as text:  {text}   <span style='color:{ERR}'>⚠ {e}</span>")
+                self.astext.setText(f"as text:  {full}   <span style='color:{ERR}'>⚠ {e}</span>")
             self.formula.clear()
             self.formula.setText(f"<span style='color:{ERR};font-size:14px'>{e}</span>")
             return
@@ -944,10 +954,14 @@ class EquationsTab(QWidget):
             self._analyze()
             return
         sel = getattr(self, "_pick_sel", "") or ""
-        text = self.edit.toPlainText().strip()
+        _, text, off = TX.split_named(self.edit.toPlainText())
+        text = text.strip()
         self._analyze()
         if not sel and text and self.info is not None and self.info.field:
-            self.edit.selectAll()
+            c = self.edit.textCursor()
+            c.setPosition(off)
+            c.movePosition(QTextCursor.End, QTextCursor.KeepAnchor)
+            self.edit.setTextCursor(c)
             sel = text
         if sel:
             inner = sel
@@ -986,12 +1000,14 @@ class EquationsTab(QWidget):
         return None
 
     def save(self) -> bool:
-        name, text = self.name.text().strip(), self.edit.toPlainText().strip()
+        name, text, _ = TX.split_named(self.edit.toPlainText())
+        text = text.strip()
         if not text:
             return False
         if not name:
-            self.name.setFocus()
-            self.status.setText(f"<span style='color:{ERR}'>Give the expression a name to save it</span>")
+            self.focus_editor()
+            self.status.setText(f"<span style='color:{ERR}'>Start the equation with its name to save it, e.g. "
+                                "P_in = flux(Port1, re(S))</span>")
             return False
         msg = self._check_name(name)
         if msg:
@@ -1097,7 +1113,7 @@ class ComponentDialog(QDialog):
         self.vec = QComboBox()
         self.vec.setEditable(True)
         items = ["E", "H", "D", "B", "J", "S", "Js"]
-        cur = panel.edit.toPlainText().strip()
+        cur = panel.formula_text().strip()
         if cur and panel.info is not None and panel.info.vec and cur not in items:
             items.insert(0, cur)
         self.vec.addItems(items)
