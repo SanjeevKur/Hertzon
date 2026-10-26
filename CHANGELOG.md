@@ -6,6 +6,15 @@ the GitHub release notes.
 ## Unreleased
 
 ### Added
+- **Update dialog**: when a new Hertzon version is out, a small dialog after the start shows its version and
+  the release notes of every version since the installed one, with **Install**, **Skip this version** and
+  **Later**. Install downloads the installer from the release (checksum checked), asks to save open changes,
+  closes Hertzon and starts the installer; settings and the Python environment are kept. Skip this version
+  asks again only for a newer version, Later at the next start. The dialog does not block the start or the
+  work, and nothing is installed without a click on Install. Without the Windows installer (Linux, pip or a
+  source checkout) the button is **Download** and opens the release page. **Help > Check for Updates...**
+  checks on request. The check at start can still be switched off in Tools > Options > General, and the
+  environment variable `HERTZON_NO_UPDATE_CHECK=1` switches off both for managed or offline computers.
 - **Fields Calculator** (Calculator in the Results ribbon): an Equations tab next to the 3D Modeler for
   equations of the stored fields. An equation is typed with its name in front (`P_in = flux(Port1, re(S))`)
   and saved under that name. The tab only defines equations and shows their type (scalar or vector, field
