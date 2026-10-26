@@ -167,7 +167,7 @@ def _formula_env():
     "avg(Port1, mag(E))", "at(P1, E)", "E × H", "re(E·conj(H))", "sqrt(eps_r)/2", "curl(E)",
     "curl E + j*omega*mu0*mu_r*H", "x(E, Global)", "10mm*f/c0", "1e-3*|E|^2", "P_in*2", "-(x+y)", "(x+y)^2/z",
     "flux(face(Box, 3), re(S))", "max(cut_xy(2mm), |E|)", "dB(|E|)", "45deg", "int_surf(Box, |Js|^2)",
-    "dB(S(2,1))", "1-|S(1,1)|^2", "re(Z(1,1))", "VSWR(1)"])
+    "dB(S(2,1))", "1-|S(1,1)|^2", "re(Z(1,1))", "VSWR(1)", "0.5*rs(5.8e7S/m)*|Js|^2", "2.5e-3*E", "1.5e3mm"])
 def test_formula_editor_round_trip(src):
     """Text -> typeset formula -> text gives the same expression (same formula, kind and unit)."""
     from hertzon.post.calc import latex as TX
@@ -197,6 +197,12 @@ def test_formula_editor_round_trip(src):
     (r"\operatorname{Re}\left\{S\right\}", "re(S)"),
     (r"\sqrt\left(x\right)", "sqrt(x)"),
     (r"\sqrt{x}", "sqrt(x)"),
+    (r"5.8\cdot 10^{7}\,\mathrm{S/m}", "5.8e7S/m"),
+    (r"5.8\times10^7\frac{S}{m}", "5.8e7S/m"),
+    (r"5.8e7S/m", "5.8e7S/m"),
+    (r"5.8e-7\,\mathrm{S/m}", "5.8e-7S/m"),
+    (r"3V/m", "3V/m"),
+    (r"2\cdot 10^{x}", "2 · 10^(x)"),
 ])
 def test_formula_editor_reads_what_is_typed(tex, src):
     from hertzon.post.calc import latex as TX

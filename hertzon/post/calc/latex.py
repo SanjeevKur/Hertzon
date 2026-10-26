@@ -243,17 +243,68 @@ def to_text(tex: str, env: L.Env | None = None) -> str:
         return join(atoms)
 
     def push_word(atoms, w):
+        nonlocal p
         w = {"Re": "re", "Im": "im"}.get(w, w)
         prev = atoms[-1] if atoms else None
         if prev and prev.get("join"):
             prev["s"] += w
             prev["join"] = False
             return
+        if prev and prev.get("num") and not prev.get("unit") and "e" not in prev["s"]:
+            # 5.8e7, 5.8e-7: the exponent of the number, maybe with its unit right after (5.8e7S)
+            m = re.fullmatch(r"e(\d+)(\w*)", w)
+            if m:
+                prev["s"] += "e" + m.group(1)
+                if not m.group(2):
+                    return
+                w = m.group(2)
+            elif w == "e" and (is_ch("-") or is_ch("+")) and tok(p + 1) is not None \
+                    and T[p + 1].k == "ch" and T[p + 1].v.isdigit():
+                prev["s"] += "e-" if T[p].v == "-" else "e"
+                p += 1
+                while tok(p) is not None and T[p].k == "ch" and T[p].v.isdigit():
+                    prev["s"] += T[p].v
+                    p += 1
+                return
         if prev and prev.get("num") and not prev.get("unit") and w in UN.NUMBER_UNITS:
             prev["s"] += w
-            prev["unit"] = True
+            prev["unit"] = w
+            return
+        # 2S/m, 3 V/m: the unit of a number goes on after the slash
+        num = atoms[-2] if len(atoms) > 1 else None
+        if prev and prev["t"] == "op" and prev["s"].strip() == "/" and num and num.get("num") \
+                and isinstance(num.get("unit"), str) and num["unit"] + "/" + w in UN.NUMBER_UNITS:
+            atoms.pop()
+            num["s"] += "/" + w
+            num["unit"] += "/" + w
             return
         atoms.append({"t": "v", "s": w, "word": True})
+
+    def ten_power(atoms):
+        """5.8\\cdot 10^{7} after a number: the number 5.8e7, so that a unit can follow it."""
+        nonlocal p
+        prev = atoms[-1] if atoms else None
+        if not prev or not prev.get("num") or prev.get("unit") or "e" in prev["s"]:
+            return False
+        q = skip_space(p)
+        if not (is_ch("1", q) and is_ch("0", q + 1) and is_ch("^", q + 2)):
+            return False
+        q += 3
+        braced = is_ch("{", q)
+        q += braced
+        sign = ""
+        if is_ch("-", q) or is_ch("+", q):
+            sign = T[q].v
+            q += 1
+        digits = ""
+        while tok(q) is not None and T[q].k == "ch" and T[q].v.isdigit() and (braced or not digits):
+            digits += T[q].v
+            q += 1
+        if not digits or (braced and not is_ch("}", q)):
+            return False
+        p = q + braced
+        prev["s"] += "e" + ("-" if sign == "-" else "") + digits
+        return True
 
     def sub_follows():
         return is_ch("_", skip_space(p))
@@ -354,6 +405,11 @@ def to_text(tex: str, env: L.Env | None = None) -> str:
             return
         if v in ("frac", "dfrac", "tfrac"):
             a, b = arg(), arg()
+            prev = atoms[-1] if atoms else None
+            if prev and prev.get("num") and not prev.get("unit") and f"{a}/{b}" in UN.NUMBER_UNITS:
+                prev["s"] += f"{a}/{b}"          # 2\\frac{S}{m}: a unit after the number
+                prev["unit"] = f"{a}/{b}"
+                return
 
             def w(s):
                 return s if re.fullmatch(r"[\w.]+", s) else f"({s})"
@@ -432,6 +488,8 @@ def to_text(tex: str, env: L.Env | None = None) -> str:
                 fail("A name cannot start with _")
             prev["join"] = True
             prev["s"] += "_"
+            return
+        if v in ("cdot", "times") and ten_power(atoms):
             return
         if v == "cdot":
             atoms.append({"t": "op", "s": " · "})

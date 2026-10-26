@@ -239,6 +239,8 @@ STRUCTURES = [
                         ("∠   Phase angle", r"\operatorname{phase}\left(#@\right)", "phase(", ""),
                         ("dB   20·log₁₀|x|", r"\operatorname{dB}\left(#@\right)", "dB(", ""),
                         ("eˣ   Exponential", r"\exp\left(#@\right)", "exp(", ""),
+                        ("Rₛ   Surface resistance", r"\operatorname{rs}\left(#@\right)", "rs(",
+                         "√(ωμ₀/2σ) of a good conductor in Ω, e.g. rs(5.8e7S/m) for copper"),
                         ("sin   Sine", r"\sin\left(#@\right)", "sin(", ""),
                         ("cos   Cosine", r"\cos\left(#@\right)", "cos(", ""),
                         ("F̂   Unit vector F/|F|", r"\operatorname{unit}\left(#@\right)", "unit(", "")]),
