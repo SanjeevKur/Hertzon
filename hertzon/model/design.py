@@ -179,6 +179,15 @@ class FieldPlot:
 
 
 @dataclass
+class FieldExpression:
+    """A named expression of the Fields Calculator (a field such as a loss density, or a value such as a
+    flux or a maximum); it belongs to the design and is evaluated on any solution with saved fields."""
+    name: str
+    expr: str
+    description: str = ""
+
+
+@dataclass
 class Optimization:
     """Optimization: variables with ranges, goals on a solution and the optimizer settings."""
     name: str
@@ -214,6 +223,8 @@ class Design:
     reports: list[Report] = field(default_factory=list)
     field_plots: list[FieldPlot] = field(default_factory=list)
     coord_systems: list[CoordSys] = field(default_factory=list)
+    field_exprs: list[FieldExpression] = field(default_factory=list)
+    field_funcs: list[str] = field(default_factory=list)     # Fields Calculator functions "name(a, b) = body"
     optimetrics: list[Optimization] = field(default_factory=list)
     parametrics: list[ParametricSetup] = field(default_factory=list)
     working_cs: str = "Global"
@@ -420,6 +431,9 @@ def design_from_dict(d: dict) -> Design:
         f = dict(f)
         f["faces"] = [FaceRef(**x) for x in f.get("faces", [])]
         des.field_plots.append(FieldPlot(**f))
+    des.field_exprs = [FieldExpression(f["name"], f.get("expr", ""), f.get("description", ""))
+                       for f in d.get("field_exprs", [])]
+    des.field_funcs = [str(x) for x in d.get("field_funcs", [])]
     for c in d.get("coord_systems", []):
         cs = CoordSys(c["name"], c.get("kind", "Relative"), c.get("reference", "Global"))
         cs.props.update(c.get("props", {}))

@@ -5,6 +5,33 @@ the GitHub release notes.
 
 ## Unreleased
 
+### Added
+- **Fields Calculator** (Calculator in the Results ribbon): an Equations tab next to the 3D Modeler for
+  equations of the stored fields. An equation is typed with its name in front (`P_in = flux(Port1, re(S))`)
+  and saved under that name. The tab only defines equations and shows their type (scalar or vector, field
+  or value) and unit; saved equations are used in Plot Fields (fields) and in reports (values). While the
+  tab is open the ribbon has an Equation page with fields, symbols, fractions, roots,
+  integrals, large operators, brackets, functions and the library. The formula is typed into a typeset
+  formula editor as in a desktop office program: a command after a backslash turns into its symbol with
+  Space (`\times` gives ×, `\curl` gives ∇×, `\iint` a surface integral). Text shows the same formula as one
+  line of text with units, which is also what is saved. An integral or another operation over a geometry
+  switches to the 3D Modeler and asks for the face, object or line, then comes back with it
+  below the sign. Examples:
+  `flux(Port1, re(S))`, `int_line(Radial, E)`, `max(Dielectric, |E|)` or
+  `int_vol(Dielectric, 0.5*omega*eps0*eps_r*tand*|E|^2)`. Each equation shows its type and unit and a typeset
+  formula while you type; errors are underlined where they are. Integrals over lines,
+  faces and volumes of model and non-model objects, cut planes (`cut_xy(10mm)`), points, components in
+  cylindrical and spherical coordinate systems, curl, divergence and gradient. Values are computed on the
+  solver's elements with their quadrature, curved elements included. Equations and user functions are saved
+  with the design and listed in the project tree under Equations (open, plot, add to a report, rename,
+  delete, and export to or import from a file for other designs); a library has power, loss, energy, Q, voltage and current. A named field can be
+  plotted like E or H (Plot Fields > Quantity), and a named value can be shown over frequency in a report
+  (category Fields).
+- **Volume field plots**: Plot on "(selection, inside solids)" (or "Inside the selected solids" in the plot
+  attributes) shows a scalar field through a solid such as a substrate as coloured dots instead of on its
+  surface; vectors keep their arrows inside solids. Works for the built-in quantities and for named
+  equations of the Fields Calculator.
+
 ### Changed
 - **Benchmarks**: the Solver Benchmark re-run on the 32-core workstation with 0.2.3 and hzAURA, compared with
   the runs of 19 October (patch antenna 2.5 to 3.7 times faster with the same result, microstrip 1.4 to 1.6

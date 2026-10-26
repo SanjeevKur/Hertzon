@@ -67,8 +67,8 @@ class ProjectTree(QTreeWidget):
         self.customContextMenuRequested.connect(self._ctx)
         self.itemDoubleClicked.connect(lambda it, c: self.itemActivatedData.emit(it.data(0, ROLE)))
         self.itemSelectionChanged.connect(self._sel)
-        self._expanded: set[str] = {"project", "design", "Boundaries", "Excitations", "Analysis", "Results",
-                                    "Mesh", "Radiation", "Field Overlays"}
+        self._expanded: set[str] = {"project", "design", "Boundaries", "Excitations", "Analysis", "Equations",
+                                    "Results", "Mesh", "Radiation", "Field Overlays"}
         doc.changed.connect(lambda *_: self.rebuild())
         self.rebuild()
 
@@ -195,6 +195,24 @@ class ProjectTree(QTreeWidget):
                 st = self._optim_status(op.name)
                 self._item(g, op.name + {"running": "  [running]", "failed": "  [failed]",
                                          "aborted": "  [aborted]"}.get(st, ""), ("optim", op.name))
+            g = self._item(dn, "Equations", ("group", "Equations"))
+            g.setToolTip(0, "Equations of the Fields Calculator (Results > Calculator): ∫ values, ◧ fields, "
+                            "ƒ functions")
+            if des.field_exprs:
+                from .calc_bridge import expression_kinds
+                try:
+                    kinds = expression_kinds(self.doc)
+                except Exception:  # noqa: BLE001
+                    kinds = {}
+                for e in des.field_exprs:
+                    k = kinds.get(e.name, "")
+                    it = self._item(g, f"{'◧' if k == 'field' else '⚠' if k == 'error' else '∫'}  {e.name}",
+                                    ("equation", e.name))
+                    it.setToolTip(0, f"{e.name} = {e.expr}" + (f"\n{e.description}" if e.description else ""))
+            for text in des.field_funcs:
+                head = text.split("=", 1)[0].strip()
+                it = self._item(g, f"ƒ  {head}", ("eqfunc", head.split("(", 1)[0].strip()))
+                it.setToolTip(0, text)
             g = self._item(dn, "Results", ("group", "Results"))
             for r in des.reports:
                 self._item(g, r.name, ("report", r.name))

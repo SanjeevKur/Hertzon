@@ -29,8 +29,18 @@ class FieldPlotDialog(QDialog):
             f.addRow("Name", self.name)
         self.qty = QComboBox()
         self.qty.addItems(F.QUANTITIES)
+        exprs = [e.name for e in getattr(win.doc.design, "field_exprs", None) or []]
+        if exprs:
+            self.qty.insertSeparator(self.qty.count())
+            self.qty.addItems(exprs)
         self.qty.setCurrentText(fp.quantity if fp else quantity)
-        f.addRow("Quantity", self.qty)
+        qrow = QHBoxLayout()
+        qrow.addWidget(self.qty, 1)
+        calc = QPushButton("Fields Calculator...")
+        calc.setToolTip("Define a new quantity as an expression of E, H and J")
+        calc.clicked.connect(self._calculator)
+        qrow.addWidget(calc)
+        f.addRow("Quantity", qrow)
         self.sol = QComboBox()
         sols = F.field_solutions(win.doc)
         self.sol.addItems(sols)
@@ -54,7 +64,9 @@ class FieldPlotDialog(QDialog):
             self.port.addItem(str(i))
         f.addRow("Excited port", self.port)
         self.where = QComboBox()
-        self.where.addItems(["(selection)", "XY", "YZ", "XZ"])
+        self.where.addItems(["(selection)", "(selection, inside solids)", "XY", "YZ", "XZ"])
+        self.where.setItemData(1, "Selected solids: the field inside them, as coloured dots (scalars) or arrows",
+                               Qt.ToolTipRole)
         self.pval = QLineEdit("")
         self.pval.setPlaceholderText("cut position (empty = model centre)")
         self.keep = QCheckBox("Keep the plotted objects / faces")
@@ -67,6 +79,8 @@ class FieldPlotDialog(QDialog):
                 ax, _, val = fp.plane.partition("@")
                 self.where.setCurrentText(ax)
                 self.pval.setText(val)
+            elif F.attributes(fp.props)["Volume"]:
+                self.where.setCurrentIndex(1)
             targets = [*(fp.objects or []), *[f"{r.obj}:face{r.face}" for r in (fp.faces or [])]]
             self.keep.setText(f"Keep: {', '.join(targets)[:60] or '(cut plane)'}")
             self.keep.setChecked(not has_selection)
@@ -81,6 +95,11 @@ class FieldPlotDialog(QDialog):
         bb.rejected.connect(self.reject)
         f.addRow(bb)
 
+    def _calculator(self) -> None:
+        """Leave this dialog for the calculator; saving the new expression there opens it again."""
+        self.reject()
+        self.win.fields_calculator(for_plot=True)
+
     def _load_freqs(self, text: str) -> None:
         self.freq.clear()
         try:
@@ -93,11 +112,12 @@ class FieldPlotDialog(QDialog):
             self.freq.addItem("(first)")
 
     def values(self) -> dict:
-        pl = "" if self.where.currentText() == "(selection)" else f"{self.where.currentText()}@{self.pval.text()}"
+        sel = self.where.currentIndex() <= 1
+        pl = "" if sel else f"{self.where.currentText()}@{self.pval.text()}"
         return {"name": self.name.text().strip(), "quantity": self.qty.currentText(),
                 "solution": self.sol.currentText(), "plane": pl, "keep": self.keep.isChecked(),
                 "props": {"port": self.port.currentText(), "freq": str(max(0, self.freq.currentIndex())),
-                          "phase": f"{self.phase.value():g}"}}
+                          "phase": f"{self.phase.value():g}", "Volume": str(self.where.currentIndex() == 1)}}
 
 
 # ================================================================================================
@@ -301,6 +321,10 @@ class PlotAttributesDialog(QDialog):
         f.addRow("Plot type", pt)
         self.w["ShowGrid"] = QCheckBox("Show grid (solver mesh lines)")
         f.addRow("", self.w["ShowGrid"])
+        self.w["Volume"] = QCheckBox("Inside the selected solids (volume plot)")
+        self.w["Volume"].setToolTip("Scalars as coloured dots through the volume, vectors as arrows; "
+                                    "off: on the surface of the solids")
+        f.addRow("", self.w["Volume"])
         self.tabs.addTab(t, "Plots")
 
     # ---- load / store ------------------------------------------------------------------------
@@ -315,10 +339,11 @@ class PlotAttributesDialog(QDialog):
         a = F.attributes(fp.props)
         self._loading = True
         try:
-            base = F.base_unit(fp.quantity)
+            calc = F.calc_expression(self.win.doc, fp.quantity) is not None
+            base = "" if calc else F.base_unit(fp.quantity)    # an expression shows its own unit
             un = self.w["Units"]
             un.clear()
-            un.addItems([u for u, _ in F.UNITS[base]])
+            un.addItems([u for u, _ in F.UNITS.get(base, [])] or ["(expression)"])
             un.setCurrentText(a["Units"] or base)
             for k, wdg in self.w.items():
                 v = a[k]

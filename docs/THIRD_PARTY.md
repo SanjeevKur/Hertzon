@@ -50,6 +50,7 @@ Versions are those of a current installation; `pyproject.toml` lists the require
 | File | Origin | Licence |
 |---|---|---|
 | `hertzon/mesher/src/predicates.c` | Robust geometric predicates by Jonathan Richard Shewchuk | Public domain |
+| `hertzon/gui/formula/mathlive.min.js`, `hertzon/gui/formula/fonts/` | [MathLive](https://github.com/arnog/mathlive) 0.109.2 by Arno Gourdol (with the KaTeX fonts it ships), the formula editor of the Fields Calculator; licence text in `hertzon/gui/formula/LICENSE-mathlive.txt` | MIT (fonts: SIL OFL 1.1) |
 
 ## Notes
 

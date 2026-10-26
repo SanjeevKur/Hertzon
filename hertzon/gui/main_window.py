@@ -62,6 +62,7 @@ def _point_triangle_dist(P, A, B, C):
 
 AXIS_OF_PLANE = {"XY": "Z", "YZ": "X", "XZ": "Y", "ZX": "Y"}
 FILE_FILTER = "Hertzon project (*.hzn)"
+EQ_FILTER = "Hertzon equations (*.json)"
 EXAMPLES_DIR = Path(__file__).resolve().parents[2] / "examples"   # next to the package in the repo and installs
 
 
@@ -92,6 +93,9 @@ class MainWindow(QMainWindow):
         self.tabs = QTabWidget()
         self.tabs.setTabsClosable(True)
         self.tabs.tabCloseRequested.connect(self._close_tab)
+        self.tabs.currentChanged.connect(self._sync_equation_page)
+        self.calc_window = None                  # the Equations tab (Fields Calculator), made when first opened
+        self._eq_page: int | None = None         # its page of the ribbon, shown while the tab is open
         self.view = ModelerView(self.doc)
         self.model_tree = ModelTree(self.doc)
         split = QSplitter()
@@ -430,6 +434,7 @@ class MainWindow(QMainWindow):
         pf = fm.addMenu("Plot Fields")
         for q in F.QUANTITIES:
             pf.addAction(q, lambda _=False, q=q: self.plot_fields(q))
+        fm.addAction("Fields Calculator...", lambda: self.fields_calculator())
         fm.addAction("Animate Last Field Plot", self.toggle_animation)
         fm.addAction("Export Animation as GIF...", self.export_animation_gif)
         fm.addAction("Clear Field Overlays", self.clear_overlays)
@@ -798,6 +803,8 @@ class MainWindow(QMainWindow):
         g.small("Attributes", "options", lambda: self._on_current_plot(self.field_plot_attributes))
         g.small("Clear", "clear", self.clear_overlays)
         g.small("Plot Mesh", "plot_mesh", lambda: self.plot_mesh())
+        g.large("Calculator", "calculator", lambda: self.fields_calculator(),
+                tip="Fields Calculator: equations of E, H and J in the Equations tab")
         rb.setCurrentIndex(2)
 
     def _connect(self) -> None:
@@ -3981,13 +3988,181 @@ class MainWindow(QMainWindow):
         for k, v in list(self.report_tabs.items()):
             if v is w:
                 del self.report_tabs[k]
+        if w is not None and w is self.calc_window:
+            w.closing()
         if idx > 0:
             self.tabs.removeTab(idx)
 
     def _close_reports(self) -> None:
+        """Close the report tabs and the Equations tab (another design is shown)."""
+        if self.calc_window is not None and self.tabs.indexOf(self.calc_window) >= 0:
+            self.calc_window.closing()
+            self.calc_window.new()
         while self.tabs.count() > 1:
             self.tabs.removeTab(1)
         self.report_tabs.clear()
+
+    def prepare_equations(self) -> None:
+        """Make the Equations tab (hidden) before the window is shown. Its formula editor is a web view, drawn
+        by the graphics card like the 3D view: a window gets that way of drawing when it is made, so adding
+        the first such view later rebuilt the whole window (it flickered closed and open) and the start of the
+        web engine held the GUI on the first click."""
+        try:
+            from PySide6.QtOpenGLWidgets import QOpenGLWidget
+            self._gl_marker = QOpenGLWidget(self)        # the window draws with the graphics card from the start
+            self._gl_marker.setFixedSize(0, 0)
+            self._gl_marker.hide()
+        except Exception:  # noqa: BLE001
+            pass
+        self._make_equations()
+
+    def _make_equations(self) -> None:
+        if self.calc_window is None:
+            from .calculator import EquationsTab
+            self.calc_window = EquationsTab(self)
+            self.calc_window.hide()
+            self.calc_window.build_ribbon(self.ribbon.page("Equation"))
+            self._eq_page = self.ribbon.count() - 1
+            self.ribbon.setTabVisible(self._eq_page, False)
+
+    def fields_calculator(self, name: str | None = None, for_plot: bool = False) -> None:
+        """Results > Fields > Calculator: the Equations tab next to the 3D Modeler for equations of E, H and J,
+        with the Equation page of the ribbon."""
+        self._make_equations()
+        w = self.calc_window
+        if self.tabs.indexOf(w) < 0:
+            self.tabs.insertTab(1, w, "Equations")
+        w.refresh()
+        self.tabs.setCurrentWidget(w)
+        if for_plot:
+            w.open_for_plot()
+        elif name:
+            w.load(name)
+        w._dirty_changed()
+        w.focus_editor()
+
+    def _sync_equation_page(self, *_) -> None:
+        """The Equation page of the ribbon is there while the Equations tab is the current one."""
+        if self._eq_page is None:
+            return
+        rb, idx = self.ribbon, self._eq_page
+        on = self.calc_window is not None and self.tabs.currentWidget() is self.calc_window
+        if on == rb.isTabVisible(idx):
+            return
+        rb.setTabVisible(idx, on)
+        if on:
+            rb.setCurrentIndex(idx)
+        elif rb.currentIndex() == idx or not rb.isTabVisible(rb.currentIndex()):
+            rb.setCurrentIndex(next(i for i in range(rb.count()) if rb.tabText(i) == "Results"))
+
+    def new_equation(self, library: str | None = None) -> None:
+        self.fields_calculator()
+        if library:
+            self.calc_window._load_library(library)
+        else:
+            self.calc_window.new()
+
+    def rename_equation(self, name: str) -> None:
+        new, ok = QInputDialog.getText(self, "Rename Equation", "Name:", text=name)
+        new = new.strip()
+        if ok and new and new != name:
+            self.fields_calculator(name)
+            self.calc_window.set_name(new)
+            self.calc_window.save()
+
+    def export_equations(self) -> None:
+        """Equations > Export Equations: the equations and functions of the design into a file, to use them in
+        other designs and projects."""
+        des = self.des
+        if not des.field_exprs and not des.field_funcs:
+            QMessageBox.information(self, "Export Equations", "This design has no equations yet.")
+            return
+        start = str(Path(self.doc.project.path).with_name(f"{des.name}_equations.json")) if self.doc.project.path \
+            else f"{des.name}_equations.json"
+        path, _ = QFileDialog.getSaveFileName(self, "Export Equations", start, EQ_FILTER)
+        if not path:
+            return
+        data = {"format": "hertzon-equations", "version": 1,
+                "equations": [{"name": e.name, "expr": e.expr, "description": e.description}
+                              for e in des.field_exprs],
+                "functions": list(des.field_funcs)}
+        try:
+            Path(path).write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+        except OSError as e:
+            QMessageBox.warning(self, "Export Equations", f"Cannot write {path}:\n{e}")
+            return
+        self.msgs.add("info", f"Exported {len(data['equations'])} equations and {len(data['functions'])} "
+                              f"functions to {path}")
+
+    def import_equations(self, path: str | None = None) -> None:
+        """Equations > Import Equations: equations and functions from a file of Export Equations."""
+        if path is None:
+            path, _ = QFileDialog.getOpenFileName(self, "Import Equations", "", EQ_FILTER)
+            if not path:
+                return
+        try:
+            data = json.loads(Path(path).read_text(encoding="utf-8"))
+            eqs = [(str(e["name"]), str(e["expr"]), str(e.get("description", ""))) for e in data.get("equations", [])]
+            funcs = [str(f) for f in data.get("functions", [])]
+        except (OSError, ValueError, KeyError, TypeError, AttributeError) as e:
+            QMessageBox.warning(self, "Import Equations", f"{path} is not a file of equations:\n{e}")
+            return
+        from ..model.design import FieldExpression
+        des = self.des
+
+        def fname(text):
+            return text.split("(", 1)[0].strip()
+        have = {e.name for e in des.field_exprs} | {fname(f) for f in des.field_funcs}
+        same = [n for n, _, _ in eqs if n in have] + [fname(f) for f in funcs if fname(f) in have]
+        replace = False
+        if same:
+            ans = QMessageBox.question(
+                self, "Import Equations", f"The design has already: {', '.join(same)}.\n\nReplace them with the "
+                "ones from the file? (No keeps those of the design.)",
+                QMessageBox.Yes | QMessageBox.No | QMessageBox.Cancel)
+            if ans == QMessageBox.Cancel:
+                return
+            replace = ans == QMessageBox.Yes
+        self.doc.checkpoint()
+        n = 0
+        for name, expr, desc in eqs:
+            old = next((e for e in des.field_exprs if e.name == name), None)
+            if old is None:
+                des.field_exprs.append(FieldExpression(name, expr, desc))
+            elif replace:
+                old.expr, old.description = expr, desc
+            else:
+                continue
+            n += 1
+        for f in funcs:
+            if fname(f) in {fname(x) for x in des.field_funcs}:
+                if not replace:
+                    continue
+                des.field_funcs = [x for x in des.field_funcs if fname(x) != fname(f)]
+            des.field_funcs.append(f)
+            n += 1
+        self.doc.dirty = True
+        self.doc.changed.emit("fields")
+        self.msgs.add("info", f"Imported {n} equations and functions from {path}")
+
+    def equation_functions(self, select: str | None = None) -> None:
+        self.fields_calculator()
+        self.calc_window.functions_dialog(select)
+
+    def field_report(self, name: str, solution: str = "", port: int = 1) -> None:
+        """A rectangular report of a value of the Fields Calculator over frequency."""
+        sols = F.field_solutions(self.doc)
+        # over frequency: a sweep with saved fields, else the given solution
+        sol = next((s for s in sols if not s.endswith("LastAdaptive")), solution or (sols[0] if sols else ""))
+        names = {r.name for r in self.des.reports}
+        i = 1
+        while f"Fields Plot {i}" in names:
+            i += 1
+        r = Report(f"Fields Plot {i}", "Rectangular", sol, [name], {"port": str(port)})
+        self.des.reports.append(r)
+        self.doc.dirty = True
+        self.doc.changed.emit("results")
+        self.open_report(r.name)
 
     def plot_fields(self, quantity: str) -> None:
         from .fieldplot_dialogs import FieldPlotDialog, default_attributes
@@ -4107,6 +4282,7 @@ class MainWindow(QMainWindow):
         if not self._draw_field_plot(name, loud=True):
             return
         if focus:
+            self.tabs.setCurrentIndex(0)          # the plot is in the 3D Modeler (e.g. from the Equations tab)
             self.doc.select([])
             self.show_overlays([name])
 
@@ -4442,6 +4618,10 @@ class MainWindow(QMainWindow):
             self.open_report(data[1])
         elif kind == "fieldplot":
             self.modify_field_plot(data[1])
+        elif kind == "equation":
+            self.fields_calculator(data[1])
+        elif kind == "eqfunc":
+            self.equation_functions(data[1])
         elif kind == "optim":
             self.edit_optimization(data[1])
         elif kind == "param":
@@ -4512,6 +4692,17 @@ class MainWindow(QMainWindow):
                 m.addAction("Export S-Parameters (Touchstone)...", self.export_touchstone)
                 m.addSeparator()
                 m.addAction("Clean Up Solutions...", self.clean_up_solutions)
+            elif g == "Equations":
+                m.addAction("New Equation", self.new_equation)
+                lib = m.addMenu("From Library")
+                from ..post.calc import library as LIB
+                for key, _text, desc in LIB.EXPRESSIONS:
+                    lib.addAction(desc.split(" (")[0], lambda _=False, k=key: self.new_equation(k))
+                m.addAction("Functions...", self.equation_functions)
+                m.addSeparator()
+                m.addAction("Import Equations...", lambda: self.import_equations())
+                a = m.addAction("Export Equations...", self.export_equations)
+                a.setEnabled(bool(self.des.field_exprs or self.des.field_funcs))
             elif g == "Field Overlays":
                 m.addAction("Clear Overlays", self.clear_overlays)
             elif g == "Radiation":
@@ -4555,6 +4746,20 @@ class MainWindow(QMainWindow):
             m.addAction("Delete", self._delete_project_items)
         elif kind == "report":
             m.addAction("Open", lambda: self.open_report(data[1]))
+            m.addAction("Delete", self._delete_project_items)
+        elif kind == "equation":
+            from .calc_bridge import expression_kinds
+            k = expression_kinds(self.doc).get(data[1], "")
+            m.addAction("Open", lambda: self.fields_calculator(data[1]))
+            if k == "field":
+                m.addAction("Plot Field...", lambda: self.plot_fields(data[1]))
+            elif k == "value":
+                m.addAction("Add to Report", lambda: self.field_report(data[1]))
+            m.addSeparator()
+            m.addAction("Rename...", lambda: self.rename_equation(data[1]))
+            m.addAction("Delete", self._delete_project_items)
+        elif kind == "eqfunc":
+            m.addAction("Edit...", lambda: self.equation_functions(data[1]))
             m.addAction("Delete", self._delete_project_items)
         elif kind == "optim":
             m.addAction("Properties...", lambda: self.edit_optimization(data[1]))
@@ -4762,6 +4967,10 @@ class MainWindow(QMainWindow):
             elif k == "fieldplot":
                 self.des.field_plots = [p for p in self.des.field_plots if p.name != d[1]]
                 self.view.remove_overlay(d[1])
+            elif k == "equation":
+                self.des.field_exprs = [e for e in self.des.field_exprs if e.name != d[1]]
+            elif k == "eqfunc":
+                self.des.field_funcs = [f for f in self.des.field_funcs if f.split("(", 1)[0].strip() != d[1]]
             elif k == "sphere":
                 self.des.spheres = [s for s in self.des.spheres if s.name != d[1]]
             elif k == "optim":
