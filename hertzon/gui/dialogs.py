@@ -847,8 +847,10 @@ class OptionsDialog(QDialog):
         f.addRow("", self.emlog)
         from .update_check import SETTING as UPDATE_SETTING
         self.update_check = QCheckBox("Check for a new Hertzon version at start")
-        self.update_check.setToolTip("Asks GitHub for the newest release and shows a hint when one is available.\n"
-                                     "Nothing is sent but the request itself; without network nothing happens.")
+        self.update_check.setToolTip("Asks GitHub for the newest release and, when one is available, shows its\n"
+                                     "release notes with Install, Skip this version and Later. Nothing is installed\n"
+                                     "without a click on Install, nothing is sent but the request itself, and\n"
+                                     "without network nothing happens. Help > Check for Updates checks on request.")
         self.update_check.setChecked(s.value(UPDATE_SETTING, True, type=bool))
         f.addRow("", self.update_check)
         tabs.addTab(gen, "General")

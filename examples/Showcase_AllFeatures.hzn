@@ -1,0 +1,4702 @@
+{
+ "name": "Showcase_AllFeatures",
+ "designs": [
+  {
+   "name": "A_PatchArray",
+   "units": "mm",
+   "settings": {
+    "SolutionType": "Modal",
+    "AutoOpen": "Auto Open",
+    "AutoOpenBoundary": "Radiation",
+    "AutoOpenPadding": "",
+    "FilterAirMargin": "12mm",
+    "MaterialOverride": "True",
+    "RadiatingStructure": "True",
+    "OutputVariables": "RL = -dB(S(1,1))\nZin_re = re(Z(1,1))\nZin_im = im(Z(1,1))"
+   },
+   "variables": {
+    "h": "1.524mm",
+    "Lp": "32.4mm",
+    "Wp": "40mm",
+    "inset": "10mm",
+    "gap": "1mm",
+    "wf": "3.4mm",
+    "d_el": "0.8*c0/f0",
+    "y0": "0mm",
+    "yj": "-14mm",
+    "Wsub": "d_el+Wp+30mm",
+    "Lsub": "Lp+50mm",
+    "ysub": "-Lsub+Lp+15mm",
+    "cut": "2.5mm",
+    "g_c": "1mm",
+    "yc": "(ysub+yj)/2",
+    "h_rad": "10mm",
+    "t_rad": "2mm"
+   },
+   "objects": [
+    {
+     "name": "Substrate",
+     "history": [
+      {
+       "kind": "CreateBox",
+       "props": {
+        "Position": "-Wsub/2,ysub,0",
+        "XSize": "Wsub",
+        "YSize": "Lsub",
+        "ZSize": "h"
+       },
+       "suppressed": false
+      }
+     ],
+     "material": "Showcase_Laminate_DS",
+     "solve_inside": true,
+     "model": true,
+     "color": "#bebebe",
+     "transparency": 0.0,
+     "wireframe": false,
+     "visible": true,
+     "consumed_by": null,
+     "group": "",
+     "orientation": "Global"
+    },
+    {
+     "name": "Ground",
+     "history": [
+      {
+       "kind": "CreateRectangle",
+       "props": {
+        "Position": "-Wsub/2,ysub,0",
+        "Axis": "Z",
+        "XSize": "Wsub",
+        "YSize": "Lsub",
+        "ZSize": "1"
+       },
+       "suppressed": false
+      }
+     ],
+     "material": "vacuum",
+     "solve_inside": true,
+     "model": true,
+     "color": "#8080ff",
+     "transparency": 0.0,
+     "wireframe": false,
+     "visible": true,
+     "consumed_by": null,
+     "group": "",
+     "orientation": "Global"
+    },
+    {
+     "name": "Radiator",
+     "history": [
+      {
+       "kind": "CreateRectangle",
+       "props": {
+        "Position": "d_el/2-Wp/2,y0,h",
+        "Axis": "Z",
+        "XSize": "Wp",
+        "YSize": "Lp",
+        "ZSize": "1"
+       },
+       "suppressed": false
+      },
+      {
+       "kind": "Chamfer",
+       "props": {
+        "Distance": "cut",
+        "Edges": "",
+        "Vertices": "1,3"
+       },
+       "suppressed": false
+      },
+      {
+       "kind": "Subtract",
+       "props": {
+        "Tools": "NotchR",
+        "KeepOriginals": "False"
+       },
+       "suppressed": false
+      },
+      {
+       "kind": "Unite",
+       "props": {
+        "Tools": "FeedR",
+        "KeepOriginals": "False"
+       },
+       "suppressed": false
+      },
+      {
+       "kind": "Unite",
+       "props": {
+        "Tools": "PatchL",
+        "KeepOriginals": "False"
+       },
+       "suppressed": false
+      },
+      {
+       "kind": "Unite",
+       "props": {
+        "Tools": "FeedBar,MainB",
+        "KeepOriginals": "False"
+       },
+       "suppressed": false
+      }
+     ],
+     "material": "pec",
+     "solve_inside": true,
+     "model": true,
+     "color": "#d4a017",
+     "transparency": 0.0,
+     "wireframe": false,
+     "visible": true,
+     "consumed_by": null,
+     "group": "",
+     "orientation": "Global"
+    },
+    {
+     "name": "NotchR",
+     "history": [
+      {
+       "kind": "CreateRectangle",
+       "props": {
+        "Position": "d_el/2-wf/2-gap,y0,h",
+        "Axis": "Z",
+        "XSize": "wf+2*gap",
+        "YSize": "inset",
+        "ZSize": "1"
+       },
+       "suppressed": false
+      }
+     ],
+     "material": "vacuum",
+     "solve_inside": true,
+     "model": true,
+     "color": "#8080ff",
+     "transparency": 0.0,
+     "wireframe": false,
+     "visible": true,
+     "consumed_by": "Radiator",
+     "group": "",
+     "orientation": "Global"
+    },
+    {
+     "name": "FeedR",
+     "history": [
+      {
+       "kind": "CreateRectangle",
+       "props": {
+        "Position": "d_el/2-wf/2,yj,h",
+        "Axis": "Z",
+        "XSize": "wf",
+        "YSize": "y0+inset-yj",
+        "ZSize": "1"
+       },
+       "suppressed": false
+      }
+     ],
+     "material": "vacuum",
+     "solve_inside": true,
+     "model": true,
+     "color": "#8080ff",
+     "transparency": 0.0,
+     "wireframe": false,
+     "visible": true,
+     "consumed_by": "Radiator",
+     "group": "",
+     "orientation": "Global"
+    },
+    {
+     "name": "PatchL",
+     "history": [
+      {
+       "kind": "CreateRectangle",
+       "props": {
+        "Position": "-d_el/2-Wp/2,y0,h",
+        "Axis": "Z",
+        "XSize": "Wp",
+        "YSize": "Lp",
+        "ZSize": "1"
+       },
+       "suppressed": false
+      },
+      {
+       "kind": "Fillet",
+       "props": {
+        "Radius": "cut",
+        "Edges": "",
+        "Vertices": "1,3"
+       },
+       "suppressed": false
+      },
+      {
+       "kind": "Subtract",
+       "props": {
+        "Tools": "NotchL",
+        "KeepOriginals": "False"
+       },
+       "suppressed": false
+      },
+      {
+       "kind": "Unite",
+       "props": {
+        "Tools": "FeedL",
+        "KeepOriginals": "False"
+       },
+       "suppressed": false
+      }
+     ],
+     "material": "pec",
+     "solve_inside": true,
+     "model": true,
+     "color": "#8080ff",
+     "transparency": 0.0,
+     "wireframe": false,
+     "visible": true,
+     "consumed_by": "Radiator",
+     "group": "",
+     "orientation": "Global"
+    },
+    {
+     "name": "NotchL",
+     "history": [
+      {
+       "kind": "CreateRectangle",
+       "props": {
+        "Position": "-d_el/2-wf/2-gap,y0,h",
+        "Axis": "Z",
+        "XSize": "wf+2*gap",
+        "YSize": "inset",
+        "ZSize": "1"
+       },
+       "suppressed": false
+      }
+     ],
+     "material": "vacuum",
+     "solve_inside": true,
+     "model": true,
+     "color": "#8080ff",
+     "transparency": 0.0,
+     "wireframe": false,
+     "visible": true,
+     "consumed_by": "PatchL",
+     "group": "",
+     "orientation": "Global"
+    },
+    {
+     "name": "FeedL",
+     "history": [
+      {
+       "kind": "CreateRectangle",
+       "props": {
+        "Position": "-d_el/2-wf/2,yj,h",
+        "Axis": "Z",
+        "XSize": "wf",
+        "YSize": "y0+inset-yj",
+        "ZSize": "1"
+       },
+       "suppressed": false
+      }
+     ],
+     "material": "vacuum",
+     "solve_inside": true,
+     "model": true,
+     "color": "#8080ff",
+     "transparency": 0.0,
+     "wireframe": false,
+     "visible": true,
+     "consumed_by": "PatchL",
+     "group": "",
+     "orientation": "Global"
+    },
+    {
+     "name": "FeedBar",
+     "history": [
+      {
+       "kind": "CreateRectangle",
+       "props": {
+        "Position": "-d_el/2-wf/2,yj-wf,h",
+        "Axis": "Z",
+        "XSize": "d_el+wf",
+        "YSize": "wf",
+        "ZSize": "1"
+       },
+       "suppressed": false
+      }
+     ],
+     "material": "vacuum",
+     "solve_inside": true,
+     "model": true,
+     "color": "#8080ff",
+     "transparency": 0.0,
+     "wireframe": false,
+     "visible": true,
+     "consumed_by": "Radiator",
+     "group": "",
+     "orientation": "Global"
+    },
+    {
+     "name": "MainB",
+     "history": [
+      {
+       "kind": "CreateRectangle",
+       "props": {
+        "Position": "-wf/2,yc+g_c/2,h",
+        "Axis": "Z",
+        "XSize": "wf",
+        "YSize": "yj-wf-yc-g_c/2",
+        "ZSize": "1"
+       },
+       "suppressed": false
+      }
+     ],
+     "material": "vacuum",
+     "solve_inside": true,
+     "model": true,
+     "color": "#8080ff",
+     "transparency": 0.0,
+     "wireframe": false,
+     "visible": true,
+     "consumed_by": "Radiator",
+     "group": "",
+     "orientation": "Global"
+    },
+    {
+     "name": "MainA",
+     "history": [
+      {
+       "kind": "CreateRectangle",
+       "props": {
+        "Position": "-wf/2,ysub,h",
+        "Axis": "Z",
+        "XSize": "wf",
+        "YSize": "yc-g_c/2-ysub",
+        "ZSize": "1"
+       },
+       "suppressed": false
+      }
+     ],
+     "material": "pec",
+     "solve_inside": true,
+     "model": true,
+     "color": "#d4a017",
+     "transparency": 0.0,
+     "wireframe": false,
+     "visible": true,
+     "consumed_by": null,
+     "group": "",
+     "orientation": "Global"
+    },
+    {
+     "name": "C1",
+     "history": [
+      {
+       "kind": "CreateRectangle",
+       "props": {
+        "Position": "-wf/2,yc-g_c/2,h",
+        "Axis": "Z",
+        "XSize": "wf",
+        "YSize": "g_c",
+        "ZSize": "1"
+       },
+       "suppressed": false
+      }
+     ],
+     "material": "vacuum",
+     "solve_inside": true,
+     "model": true,
+     "color": "#8080ff",
+     "transparency": 0.0,
+     "wireframe": false,
+     "visible": true,
+     "consumed_by": null,
+     "group": "C1_0603",
+     "orientation": "Global"
+    },
+    {
+     "name": "C1_Body",
+     "history": [
+      {
+       "kind": "CreateBox",
+       "props": {
+        "Position": "-0.8mm,yc-g_c/2-0.4mm,h",
+        "XSize": "1.6mm",
+        "YSize": "g_c+0.8mm",
+        "ZSize": "0.8mm"
+       },
+       "suppressed": false
+      }
+     ],
+     "material": "Al2_O3_ceramic",
+     "solve_inside": true,
+     "model": false,
+     "color": "#f7f7ef",
+     "transparency": 0.4,
+     "wireframe": false,
+     "visible": true,
+     "consumed_by": null,
+     "group": "C1_0603",
+     "orientation": "Global"
+    },
+    {
+     "name": "PortSheet",
+     "history": [
+      {
+       "kind": "CreateRectangle",
+       "props": {
+        "Position": "-wf/2,ysub,0",
+        "Axis": "Y",
+        "XSize": "wf",
+        "YSize": "1",
+        "ZSize": "h"
+       },
+       "suppressed": false
+      }
+     ],
+     "material": "vacuum",
+     "solve_inside": true,
+     "model": true,
+     "color": "#8080ff",
+     "transparency": 0.0,
+     "wireframe": false,
+     "visible": true,
+     "consumed_by": null,
+     "group": "",
+     "orientation": "Global"
+    },
+    {
+     "name": "Radome",
+     "history": [
+      {
+       "kind": "CreateBox",
+       "props": {
+        "Position": "-Wsub/2,-Lp/2-12mm,h_rad",
+        "XSize": "Wsub",
+        "YSize": "Lp+24mm",
+        "ZSize": "t_rad"
+       },
+       "suppressed": false
+      },
+      {
+       "kind": "Fillet",
+       "props": {
+        "Radius": "0.5mm",
+        "Edges": "0,2,4,6",
+        "Vertices": ""
+       },
+       "suppressed": false
+      }
+     ],
+     "material": "PLA",
+     "solve_inside": true,
+     "model": true,
+     "color": "#e0e0c0",
+     "transparency": 0.7,
+     "wireframe": false,
+     "visible": true,
+     "consumed_by": null,
+     "group": "",
+     "orientation": "CS_Array"
+    }
+   ],
+   "boundaries": [
+    {
+     "name": "Copper_Traces",
+     "kind": "Finite Conductivity",
+     "props": {
+      "UseMaterial": "True",
+      "Material": "copper",
+      "Conductivity": "58000000",
+      "Permeability": "1",
+      "Roughness": "1um",
+      "UseThickness": "True",
+      "Thickness": "35um",
+      "TwoSided": "False"
+     },
+     "faces": [],
+     "objects": [
+      "Radiator",
+      "MainA"
+     ],
+     "edges": [],
+     "enabled": true
+    },
+    {
+     "name": "Ground_Brass",
+     "kind": "Finite Conductivity",
+     "props": {
+      "UseMaterial": "False",
+      "Material": "copper",
+      "Conductivity": "15.9e6",
+      "Permeability": "1",
+      "Roughness": "0um",
+      "UseThickness": "False",
+      "Thickness": "35um",
+      "TwoSided": "False"
+     },
+     "faces": [],
+     "objects": [
+      "Ground"
+     ],
+     "edges": [],
+     "enabled": true
+    },
+    {
+     "name": "C1_RLC",
+     "kind": "Lumped RLC",
+     "props": {
+      "Model": "Series RLC",
+      "UseResistance": "True",
+      "Resistance": "0.15ohm",
+      "UseInductance": "True",
+      "Inductance": "0.6nH",
+      "UseCapacitance": "True",
+      "Capacitance": "22pF",
+      "TouchstoneFile": "",
+      "TouchstoneMount": "Series",
+      "Component": "0603",
+      "IntegrationLine": "0,yc-g_c/2,h;0,yc+g_c/2,h"
+     },
+     "faces": [],
+     "objects": [
+      "C1"
+     ],
+     "edges": [],
+     "enabled": true
+    }
+   ],
+   "excitations": [
+    {
+     "name": "P1",
+     "kind": "Lumped Port",
+     "props": {
+      "PortNumber": "1",
+      "Impedance": "50ohm",
+      "IntegrationLine": ""
+     },
+     "faces": [],
+     "objects": [
+      "PortSheet"
+     ],
+     "edges": [],
+     "enabled": true
+    }
+   ],
+   "mesh_ops": [
+    {
+     "name": "Mesh_Radiator",
+     "kind": "Length Based On Selection",
+     "props": {
+      "MaxLength": "3mm",
+      "RestrictElements": "False",
+      "MaxElements": "1000"
+     },
+     "faces": [],
+     "objects": [
+      "Radiator"
+     ],
+     "edges": [],
+     "enabled": true
+    },
+    {
+     "name": "Mesh_Substrate",
+     "kind": "Length Based Inside Selection",
+     "props": {
+      "MaxLength": "6mm",
+      "RestrictElements": "True",
+      "MaxElements": "60000"
+     },
+     "faces": [],
+     "objects": [
+      "Substrate"
+     ],
+     "edges": [],
+     "enabled": true
+    },
+    {
+     "name": "Mesh_FeedEdges",
+     "kind": "Length Based On Edges",
+     "props": {
+      "MaxLength": "0.8mm",
+      "RestrictElements": "False",
+      "MaxElements": "1000"
+     },
+     "faces": [],
+     "objects": [],
+     "edges": [
+      {
+       "obj": "MainA",
+       "face": 0,
+       "sig": []
+      },
+      {
+       "obj": "MainA",
+       "face": 1,
+       "sig": []
+      },
+      {
+       "obj": "MainA",
+       "face": 2,
+       "sig": []
+      },
+      {
+       "obj": "MainA",
+       "face": 3,
+       "sig": []
+      }
+     ],
+     "enabled": true
+    },
+    {
+     "name": "Mesh_GroundSkin",
+     "kind": "Skin Depth Based",
+     "props": {
+      "SkinDepth": "1.3um",
+      "Layers": "2",
+      "SurfaceTriangleLength": "4mm"
+     },
+     "faces": [],
+     "objects": [
+      "Ground"
+     ],
+     "edges": [],
+     "enabled": true
+    }
+   ],
+   "setups": [
+    {
+     "name": "Setup1",
+     "props": {
+      "Enabled": "True",
+      "SolutionFrequencyMode": "Single",
+      "Frequency": "f0",
+      "MultiFrequencies": "1GHz,2GHz",
+      "LowFrequency": "1GHz",
+      "HighFrequency": "10GHz",
+      "MaximumPasses": "10",
+      "MaximumDeltaS": "0.02",
+      "MaximumDeltaEnergy": "0.001",
+      "UseMatrixConvergence": "True",
+      "MaxDeltaMag": "0.02",
+      "MaxDeltaPhase": "2",
+      "LambdaRefinement": "True",
+      "LambdaTarget": "0.3333",
+      "UseFreeSpaceLambda": "False",
+      "PercentRefinement": "25",
+      "MaximumRefinement": "600000",
+      "MinimumPasses": "3",
+      "MinimumConvergedPasses": "2",
+      "BasisOrder": "First Order",
+      "CurvedElements": "True",
+      "Solver": "Auto",
+      "ErrorInclusion": "50",
+      "RefinementRatio": "0.6",
+      "GrowthRate": "1.6",
+      "EnforceRefinementPercent": "True",
+      "RefinementMethod": "hzAURA (EMerge)",
+      "SaveFields": "True",
+      "Threads": "0",
+      "_BasisNames": "v2"
+     },
+     "sweeps": [
+      {
+       "name": "Interp",
+       "props": {
+        "Enabled": "True",
+        "SweepType": "Interpolating",
+        "Distribution": "Linear Count",
+        "Start": "2GHz",
+        "Stop": "3GHz",
+        "Step": "0.1GHz",
+        "Count": "201",
+        "SamplesPerDecade": "20",
+        "Points": "1GHz,2GHz",
+        "SaveFields": "False",
+        "ErrorTolerance": "0.5",
+        "MaxSolutions": "60",
+        "Parallel": "False"
+       }
+      },
+      {
+       "name": "Fast",
+       "props": {
+        "Enabled": "True",
+        "SweepType": "Fast",
+        "Distribution": "Linear Step",
+        "Start": "2.3GHz",
+        "Stop": "2.6GHz",
+        "Step": "0.01GHz",
+        "Count": "101",
+        "SamplesPerDecade": "20",
+        "Points": "1GHz,2GHz",
+        "SaveFields": "True",
+        "ErrorTolerance": "0.5",
+        "MaxSolutions": "250",
+        "Parallel": "False"
+       }
+      },
+      {
+       "name": "Points",
+       "props": {
+        "Enabled": "True",
+        "SweepType": "Discrete",
+        "Distribution": "Single Points",
+        "Start": "1GHz",
+        "Stop": "10GHz",
+        "Step": "0.1GHz",
+        "Count": "101",
+        "SamplesPerDecade": "20",
+        "Points": "2.4GHz,2.45GHz,2.5GHz",
+        "SaveFields": "True",
+        "ErrorTolerance": "0.5",
+        "MaxSolutions": "250",
+        "Parallel": "True"
+       }
+      },
+      {
+       "name": "LogScan",
+       "props": {
+        "Enabled": "False",
+        "SweepType": "Interpolating",
+        "Distribution": "Log Scale",
+        "Start": "1GHz",
+        "Stop": "6GHz",
+        "Step": "0.1GHz",
+        "Count": "101",
+        "SamplesPerDecade": "40",
+        "Points": "1GHz,2GHz",
+        "SaveFields": "False",
+        "ErrorTolerance": "0.5",
+        "MaxSolutions": "250",
+        "Parallel": "False"
+       }
+      }
+     ],
+     "eigen": false
+    },
+    {
+     "name": "Setup_Multi",
+     "props": {
+      "Enabled": "False",
+      "SolutionFrequencyMode": "Multi-Frequencies",
+      "Frequency": "5GHz",
+      "MultiFrequencies": "2.4GHz,2.5GHz",
+      "LowFrequency": "1GHz",
+      "HighFrequency": "10GHz",
+      "MaximumPasses": "8",
+      "MaximumDeltaS": "0.02",
+      "MaximumDeltaEnergy": "0.001",
+      "UseMatrixConvergence": "False",
+      "MaxDeltaMag": "0.02",
+      "MaxDeltaPhase": "2",
+      "LambdaRefinement": "True",
+      "LambdaTarget": "0.6667",
+      "UseFreeSpaceLambda": "True",
+      "PercentRefinement": "30",
+      "MaximumRefinement": "1000000",
+      "MinimumPasses": "2",
+      "MinimumConvergedPasses": "1",
+      "BasisOrder": "Second Order",
+      "CurvedElements": "True",
+      "Solver": "Auto",
+      "ErrorInclusion": "50",
+      "RefinementRatio": "0.6",
+      "GrowthRate": "1.6",
+      "EnforceRefinementPercent": "True",
+      "RefinementMethod": "hzAURA (EMerge)",
+      "SaveFields": "True",
+      "Threads": "4",
+      "_BasisNames": "v2"
+     },
+     "sweeps": [
+      {
+       "name": "Step",
+       "props": {
+        "Enabled": "True",
+        "SweepType": "Discrete",
+        "Distribution": "Linear Step",
+        "Start": "2.3GHz",
+        "Stop": "2.6GHz",
+        "Step": "0.05GHz",
+        "Count": "101",
+        "SamplesPerDecade": "20",
+        "Points": "1GHz,2GHz",
+        "SaveFields": "False",
+        "ErrorTolerance": "0.5",
+        "MaxSolutions": "250",
+        "Parallel": "False"
+       }
+      }
+     ],
+     "eigen": false
+    },
+    {
+     "name": "Setup_Broadband",
+     "props": {
+      "Enabled": "False",
+      "SolutionFrequencyMode": "Broadband",
+      "Frequency": "5GHz",
+      "MultiFrequencies": "1GHz,2GHz",
+      "LowFrequency": "2GHz",
+      "HighFrequency": "3GHz",
+      "MaximumPasses": "6",
+      "MaximumDeltaS": "0.02",
+      "MaximumDeltaEnergy": "0.001",
+      "UseMatrixConvergence": "False",
+      "MaxDeltaMag": "0.02",
+      "MaxDeltaPhase": "2",
+      "LambdaRefinement": "True",
+      "LambdaTarget": "0.1",
+      "UseFreeSpaceLambda": "False",
+      "PercentRefinement": "30",
+      "MaximumRefinement": "1000000",
+      "MinimumPasses": "2",
+      "MinimumConvergedPasses": "1",
+      "BasisOrder": "Zero Order",
+      "CurvedElements": "True",
+      "Solver": "MUMPS",
+      "ErrorInclusion": "40",
+      "RefinementRatio": "0.5",
+      "GrowthRate": "1.5",
+      "EnforceRefinementPercent": "True",
+      "RefinementMethod": "hzAURA (EMerge)",
+      "SaveFields": "True",
+      "Threads": "0",
+      "_BasisNames": "v2"
+     },
+     "sweeps": [],
+     "eigen": false
+    }
+   ],
+   "spheres": [
+    {
+     "name": "FF_Global",
+     "props": {
+      "CoordinateSystem": "Global",
+      "PhiStart": "0deg",
+      "PhiStop": "360deg",
+      "PhiStep": "5deg",
+      "ThetaStart": "0deg",
+      "ThetaStop": "180deg",
+      "ThetaStep": "5deg"
+     }
+    },
+    {
+     "name": "FF_Upper_Tilted",
+     "props": {
+      "CoordinateSystem": "CS_Tilted",
+      "PhiStart": "0deg",
+      "PhiStop": "360deg",
+      "PhiStep": "15deg",
+      "ThetaStart": "0deg",
+      "ThetaStop": "90deg",
+      "ThetaStep": "3deg"
+     }
+    }
+   ],
+   "reports": [
+    {
+     "name": "S11 and Return Loss",
+     "kind": "Rectangular",
+     "solution": "Setup1 : Interp",
+     "traces": [
+      "dB(S(1,1))",
+      "RL"
+     ],
+     "props": {
+      "markers": "2.45e9"
+     }
+    },
+    {
+     "name": "Input Impedance",
+     "kind": "Rectangular",
+     "solution": "Setup1 : Interp",
+     "traces": [
+      "Zin_re",
+      "Zin_im",
+      "VSWR(1)"
+     ],
+     "props": {}
+    },
+    {
+     "name": "Smith Chart 1",
+     "kind": "Smith Chart",
+     "solution": "Setup1 : Interp",
+     "traces": [
+      "S(1,1)"
+     ],
+     "props": {}
+    },
+    {
+     "name": "Data Table 1",
+     "kind": "Data Table",
+     "solution": "Setup1 : Points",
+     "traces": [
+      "dB(S(1,1))",
+      "ang_deg(S(1,1))",
+      "re(Z(1,1))",
+      "im(Z(1,1))"
+     ],
+     "props": {}
+    },
+    {
+     "name": "Convergence",
+     "kind": "Rectangular",
+     "solution": "Setup1 : AdaptivePasses",
+     "traces": [
+      "dB(S(1,1))"
+     ],
+     "props": {}
+    },
+    {
+     "name": "Gain E-Plane",
+     "kind": "Radiation Pattern",
+     "solution": "Setup1 : LastAdaptive",
+     "traces": [
+      "dB(GainTotal)"
+     ],
+     "props": {
+      "cut": "Phi",
+      "cut_value": "90",
+      "sphere": "FF_Global"
+     }
+    },
+    {
+     "name": "Gain H-Plane",
+     "kind": "Radiation Pattern",
+     "solution": "Setup1 : LastAdaptive",
+     "traces": [
+      "dB(GainTotal)",
+      "dB(GainTheta)",
+      "dB(GainPhi)"
+     ],
+     "props": {
+      "cut": "Phi",
+      "cut_value": "0",
+      "sphere": "FF_Global"
+     }
+    },
+    {
+     "name": "Far Field Plot 1",
+     "kind": "Radiation Pattern",
+     "solution": "Setup1 : LastAdaptive",
+     "traces": [
+      "dB(RealizedGainTotal)"
+     ],
+     "props": {
+      "cut": "Theta",
+      "cut_value": "30",
+      "plot": "Rectangular",
+      "sphere": "FF_Upper_Tilted"
+     }
+    },
+    {
+     "name": "3D Gain",
+     "kind": "3D Polar Plot",
+     "solution": "Setup1 : LastAdaptive",
+     "traces": [
+      "dB(GainTotal)"
+     ],
+     "props": {
+      "sphere": "FF_Global"
+     }
+    },
+    {
+     "name": "Antenna Parameters Plot 1",
+     "kind": "Antenna Parameters",
+     "solution": "Setup1 : Fast",
+     "traces": [
+      "dB(PeakGain)",
+      "dB(PeakRealizedGain)",
+      "dB(PeakDirectivity)"
+     ],
+     "props": {
+      "sphere": "FF_Global"
+     }
+    },
+    {
+     "name": "Antenna Parameters Table 1",
+     "kind": "Antenna Parameters Table",
+     "solution": "Setup1 : LastAdaptive",
+     "traces": [
+      "dB(PeakDirectivity)",
+      "dB(PeakGain)",
+      "dB(PeakRealizedGain)",
+      "RadiationEfficiency",
+      "RadiatedPower",
+      "AcceptedPower",
+      "dB(FrontToBackRatio)",
+      "dB(AxialRatioAtMax)"
+     ],
+     "props": {
+      "sphere": "FF_Global"
+     }
+    },
+    {
+     "name": "Near Field 1",
+     "kind": "Near Field Line",
+     "solution": "Setup1 : LastAdaptive",
+     "traces": [
+      "mag(NearETotal)"
+     ],
+     "props": {
+      "start": "-60,15,20",
+      "end": "60,15,20",
+      "points": "121"
+     }
+    },
+    {
+     "name": "Fields Plot 1",
+     "kind": "Rectangular",
+     "solution": "Setup1 : Fast",
+     "traces": [
+      "Pin"
+     ],
+     "props": {
+      "port": "1",
+      "fields": "1"
+     }
+    },
+    {
+     "name": "Fields Table 1",
+     "kind": "Data Table",
+     "solution": "Setup1 : Points",
+     "traces": [
+      "Pin",
+      "Emax_sub"
+     ],
+     "props": {
+      "port": "1",
+      "fields": "1"
+     }
+    },
+    {
+     "name": "Inset Families",
+     "kind": "Rectangular",
+     "solution": "Setup1 : Interp",
+     "traces": [
+      "dB(S(1,1))"
+     ],
+     "props": {
+      "families": "ParametricInset"
+     }
+    }
+   ],
+   "field_plots": [
+    {
+     "name": "Jsurf_Radiator",
+     "quantity": "Mag_Jsurf",
+     "solution": "Setup1 : LastAdaptive",
+     "faces": [],
+     "objects": [
+      "Radiator"
+     ],
+     "plane": "",
+     "props": {
+      "Log": "True",
+      "ColorMap": "Rainbow"
+     }
+    },
+    {
+     "name": "Vector_Jsurf_Radiator",
+     "quantity": "Vector_Jsurf",
+     "solution": "Setup1 : LastAdaptive",
+     "faces": [],
+     "objects": [
+      "Radiator"
+     ],
+     "plane": "",
+     "props": {
+      "ArrowCount": "800"
+     }
+    },
+    {
+     "name": "E_SubstrateTop",
+     "quantity": "ComplexMag_E",
+     "solution": "Setup1 : LastAdaptive",
+     "faces": [
+      {
+       "obj": "Substrate",
+       "face": 5,
+       "sig": [
+        -1.0299920638612292e-18,
+        0.006200000000000001,
+        0.001524,
+        0.0,
+        0.0,
+        1.0,
+        0.01383425258422857
+       ]
+      }
+     ],
+     "objects": [],
+     "plane": "",
+     "props": {}
+    },
+    {
+     "name": "E_Cut_YZ",
+     "quantity": "Mag_E",
+     "solution": "Setup1 : LastAdaptive",
+     "faces": [],
+     "objects": [],
+     "plane": "YZ@d_el/2",
+     "props": {
+      "dB": "True"
+     }
+    },
+    {
+     "name": "H_Cut_XZ",
+     "quantity": "Mag_H",
+     "solution": "Setup1 : LastAdaptive",
+     "faces": [],
+     "objects": [],
+     "plane": "XZ@Lp/2",
+     "props": {}
+    },
+    {
+     "name": "Vector_E_XY",
+     "quantity": "Vector_E",
+     "solution": "Setup1 : LastAdaptive",
+     "faces": [],
+     "objects": [],
+     "plane": "XY@h/2",
+     "props": {}
+    },
+    {
+     "name": "Gain3D",
+     "quantity": "RadiationField",
+     "solution": "LastAdaptive",
+     "faces": [],
+     "objects": [],
+     "plane": "",
+     "props": {}
+    }
+   ],
+   "coord_systems": [
+    {
+     "name": "CS_Array",
+     "kind": "Relative",
+     "reference": "Global",
+     "props": {
+      "Mode": "Axis/Position",
+      "Origin": "0,Lp/2,h",
+      "XAxis": "1,0,0",
+      "YPoint": "0,1,0",
+      "Phi": "0deg",
+      "Theta": "0deg",
+      "Psi": "0deg"
+     }
+    },
+    {
+     "name": "CS_Tilted",
+     "kind": "Relative",
+     "reference": "CS_Array",
+     "props": {
+      "Mode": "Euler Angle ZXZ",
+      "Origin": "0,0,0",
+      "XAxis": "1,0,0",
+      "YPoint": "0,1,0",
+      "Phi": "0deg",
+      "Theta": "30deg",
+      "Psi": "0deg"
+     }
+    },
+    {
+     "name": "CS_Rot45",
+     "kind": "Relative",
+     "reference": "CS_Array",
+     "props": {
+      "Mode": "Euler Angle ZYZ",
+      "Origin": "0,0,0",
+      "XAxis": "1,0,0",
+      "YPoint": "0,1,0",
+      "Phi": "45deg",
+      "Theta": "0deg",
+      "Psi": "0deg"
+     }
+    },
+    {
+     "name": "FaceCS_SubstrateTop",
+     "kind": "Face",
+     "reference": "Global",
+     "props": {
+      "Mode": "Axis/Position",
+      "Origin": "-1.02999e-15,6.2,1.524",
+      "XAxis": "1,0,0",
+      "YPoint": "0,1,0",
+      "Phi": "0deg",
+      "Theta": "0deg",
+      "Psi": "0deg",
+      "Face": "Substrate:5"
+     }
+    }
+   ],
+   "field_exprs": [
+    {
+     "name": "Pin",
+     "expr": "flux(PortSheet, re(S))",
+     "description": "power into the port sheet"
+    },
+    {
+     "name": "magE",
+     "expr": "|E|",
+     "description": "magnitude of E"
+    },
+    {
+     "name": "Emax_sub",
+     "expr": "emax(Substrate)",
+     "description": "largest |E| in the laminate"
+    },
+    {
+     "name": "RL_calc",
+     "expr": "-dB(S(1,1))",
+     "description": "return loss from the network data"
+    }
+   ],
+   "field_funcs": [
+    "emax(G) = max(G, |E|)"
+   ],
+   "optimetrics": [
+    {
+     "name": "Optim_Match",
+     "solution": "Setup1 : Interp",
+     "variables": [
+      {
+       "name": "Lp",
+       "include": true,
+       "min": "30mm",
+       "max": "35mm"
+      },
+      {
+       "name": "inset",
+       "include": true,
+       "min": "6mm",
+       "max": "13mm"
+      },
+      {
+       "name": "wf",
+       "include": false,
+       "min": "2.8mm",
+       "max": "4mm"
+      }
+     ],
+     "goals": [
+      {
+       "calc": "dB(S(1,1))",
+       "start": "2.4GHz",
+       "stop": "2.5GHz",
+       "cond": "<=",
+       "value": "-15",
+       "weight": "1"
+      },
+      {
+       "calc": "re(Z(1,1))",
+       "start": "2.45GHz",
+       "stop": "2.45GHz",
+       "cond": "=",
+       "value": "50",
+       "weight": "0.2"
+      },
+      {
+       "calc": "dB(S(1,1))",
+       "start": "2.42GHz",
+       "stop": "2.48GHz",
+       "cond": "Ripple <=",
+       "value": "3",
+       "weight": "0.5"
+      }
+     ],
+     "props": {
+      "Optimizer": "Conjugate Gradient",
+      "CostFunction": "Worst Case",
+      "MaxEvaluations": "200",
+      "ParallelEvaluations": "4",
+      "DifferenceStep": "0.04",
+      "InitialStep": "0.15",
+      "GradientTolerance": "0.0001",
+      "MaxLineTrials": "16"
+     }
+    }
+   ],
+   "parametrics": [
+    {
+     "name": "ParametricInset",
+     "sweeps": [
+      {
+       "variable": "inset",
+       "type": "Linear step",
+       "start": "8mm",
+       "stop": "12mm",
+       "step": "1mm",
+       "sync": ""
+      },
+      {
+       "variable": "Lp",
+       "type": "Linear count",
+       "start": "32mm",
+       "stop": "33mm",
+       "step": "3",
+       "sync": ""
+      }
+     ],
+     "setups": [
+      "Setup1"
+     ],
+     "calcs": [
+      {
+       "calc": "dB(S(1,1))",
+       "solution": "Setup1 : Interp",
+       "func": "Min",
+       "start": "2GHz",
+       "stop": "3GHz"
+      },
+      {
+       "calc": "re(Z(1,1))",
+       "solution": "Setup1 : LastAdaptive",
+       "func": "Value",
+       "start": "",
+       "stop": ""
+      }
+     ],
+     "props": {
+      "SaveFields": "False",
+      "ParallelVariations": "2"
+     }
+    },
+    {
+     "name": "ParametricWidthSync",
+     "sweeps": [
+      {
+       "variable": "wf",
+       "type": "Single value",
+       "start": "3.2mm",
+       "sync": "1"
+      },
+      {
+       "variable": "gap",
+       "type": "Single value",
+       "start": "0.8mm",
+       "sync": "1"
+      }
+     ],
+     "setups": [
+      "Setup1"
+     ],
+     "calcs": [
+      {
+       "calc": "dB(S(1,1))",
+       "solution": "Setup1 : Interp",
+       "func": "Peak to Peak",
+       "start": "2.4GHz",
+       "stop": "2.5GHz"
+      }
+     ],
+     "props": {
+      "SaveFields": "False",
+      "ParallelVariations": "1"
+     }
+    }
+   ],
+   "working_cs": "CS_Array",
+   "notes": "Driven antenna: 2x1 inset-fed patch array on a dispersive laminate with a DC-block chip capacitor (Lumped RLC, grouped with its body), lumped port, finite conductivity, a radome in a relative coordinate system, all mesh operations, three setups (single, multi-frequency, broadband), Interpolating / Fast / Discrete sweeps, two far-field spheres, output variables, Fields Calculator expressions and functions, every report type of a driven antenna, field overlays on objects, faces and cut planes, an optimization and a parametric sweep."
+  },
+  {
+   "name": "B_WaveguideIrisFilter_Half",
+   "units": "mm",
+   "settings": {
+    "SolutionType": "Modal",
+    "AutoOpen": "Off",
+    "AutoOpenBoundary": "Auto",
+    "AutoOpenPadding": "",
+    "FilterAirMargin": "12mm",
+    "MaterialOverride": "True"
+   },
+   "variables": {
+    "a": "22.86mm",
+    "b": "10.16mm",
+    "L": "60mm",
+    "t_ir": "2mm",
+    "w_ir": "11mm",
+    "Lc": "17mm",
+    "r_tune": "1.2mm",
+    "h_tune": "3mm"
+   },
+   "objects": [
+    {
+     "name": "Guide",
+     "history": [
+      {
+       "kind": "CreateBox",
+       "props": {
+        "Position": "0,0,0",
+        "XSize": "a",
+        "YSize": "L",
+        "ZSize": "b"
+       },
+       "suppressed": false
+      },
+      {
+       "kind": "Subtract",
+       "props": {
+        "Tools": "Iris1L,Iris1R,Iris2L,Iris2R",
+        "KeepOriginals": "False"
+       },
+       "suppressed": false
+      },
+      {
+       "kind": "Split",
+       "props": {
+        "Plane": "YZ",
+        "Base": "0,0,0",
+        "Normal": "0,0,1",
+        "Keep": "Negative",
+        "CoordinateSystem": "CS_Mid"
+       },
+       "suppressed": false
+      }
+     ],
+     "material": "vacuum",
+     "solve_inside": true,
+     "model": true,
+     "color": "#e6f2ff",
+     "transparency": 0.0,
+     "wireframe": false,
+     "visible": true,
+     "consumed_by": null,
+     "group": "",
+     "orientation": "Global"
+    },
+    {
+     "name": "Iris1L",
+     "history": [
+      {
+       "kind": "CreateBox",
+       "props": {
+        "Position": "0,L/2-Lc/2-t_ir,0",
+        "XSize": "a/2-w_ir/2",
+        "YSize": "t_ir",
+        "ZSize": "b"
+       },
+       "suppressed": false
+      }
+     ],
+     "material": "pec",
+     "solve_inside": true,
+     "model": true,
+     "color": "#d6a45c",
+     "transparency": 0.0,
+     "wireframe": false,
+     "visible": true,
+     "consumed_by": "Guide",
+     "group": "",
+     "orientation": "Global"
+    },
+    {
+     "name": "Iris1R",
+     "history": [
+      {
+       "kind": "CreateBox",
+       "props": {
+        "Position": "a/2+w_ir/2,L/2-Lc/2-t_ir,0",
+        "XSize": "a/2-w_ir/2",
+        "YSize": "t_ir",
+        "ZSize": "b"
+       },
+       "suppressed": false
+      }
+     ],
+     "material": "pec",
+     "solve_inside": true,
+     "model": true,
+     "color": "#d6a45c",
+     "transparency": 0.0,
+     "wireframe": false,
+     "visible": true,
+     "consumed_by": "Guide",
+     "group": "",
+     "orientation": "Global"
+    },
+    {
+     "name": "Iris2L",
+     "history": [
+      {
+       "kind": "CreateBox",
+       "props": {
+        "Position": "0,L/2+Lc/2,0",
+        "XSize": "a/2-w_ir/2",
+        "YSize": "t_ir",
+        "ZSize": "b"
+       },
+       "suppressed": false
+      }
+     ],
+     "material": "pec",
+     "solve_inside": true,
+     "model": true,
+     "color": "#d6a45c",
+     "transparency": 0.0,
+     "wireframe": false,
+     "visible": true,
+     "consumed_by": "Guide",
+     "group": "",
+     "orientation": "Global"
+    },
+    {
+     "name": "Iris2R",
+     "history": [
+      {
+       "kind": "CreateBox",
+       "props": {
+        "Position": "a/2+w_ir/2,L/2+Lc/2,0",
+        "XSize": "a/2-w_ir/2",
+        "YSize": "t_ir",
+        "ZSize": "b"
+       },
+       "suppressed": false
+      }
+     ],
+     "material": "pec",
+     "solve_inside": true,
+     "model": true,
+     "color": "#d6a45c",
+     "transparency": 0.0,
+     "wireframe": false,
+     "visible": true,
+     "consumed_by": "Guide",
+     "group": "",
+     "orientation": "Global"
+    },
+    {
+     "name": "TuningPost",
+     "history": [
+      {
+       "kind": "CreateCylinder",
+       "props": {
+        "CenterPosition": "a/4,L/2,b",
+        "Axis": "Z",
+        "Radius": "r_tune",
+        "Height": "-h_tune",
+        "NumberOfSegments": "12"
+       },
+       "suppressed": false
+      }
+     ],
+     "material": "Al2_O3_ceramic",
+     "solve_inside": true,
+     "model": true,
+     "color": "#f7f7ef",
+     "transparency": 0.0,
+     "wireframe": false,
+     "visible": true,
+     "consumed_by": null,
+     "group": "",
+     "orientation": "Global"
+    },
+    {
+     "name": "Port1Sheet",
+     "history": [
+      {
+       "kind": "CreateRectangle",
+       "props": {
+        "Position": "0,0,0",
+        "Axis": "Y",
+        "XSize": "a/2",
+        "YSize": "1",
+        "ZSize": "b"
+       },
+       "suppressed": false
+      }
+     ],
+     "material": "vacuum",
+     "solve_inside": true,
+     "model": true,
+     "color": "#8080ff",
+     "transparency": 0.0,
+     "wireframe": false,
+     "visible": true,
+     "consumed_by": null,
+     "group": "",
+     "orientation": "Global"
+    },
+    {
+     "name": "Port2Sheet",
+     "history": [
+      {
+       "kind": "CreateRectangle",
+       "props": {
+        "Position": "0,L,0",
+        "Axis": "Y",
+        "XSize": "a/2",
+        "YSize": "1",
+        "ZSize": "b"
+       },
+       "suppressed": false
+      }
+     ],
+     "material": "vacuum",
+     "solve_inside": true,
+     "model": true,
+     "color": "#8080ff",
+     "transparency": 0.0,
+     "wireframe": false,
+     "visible": true,
+     "consumed_by": null,
+     "group": "",
+     "orientation": "Global"
+    }
+   ],
+   "boundaries": [
+    {
+     "name": "Sym_PerfectH",
+     "kind": "Symmetry",
+     "props": {
+      "Type": "Perfect H",
+      "ImpedanceMultiplier": "2"
+     },
+     "faces": [
+      {
+       "obj": "Guide",
+       "face": 13,
+       "sig": [
+        0.01143,
+        0.029999999999999992,
+        0.00508,
+        1.0,
+        0.0,
+        0.0,
+        0.0006096
+       ]
+      }
+     ],
+     "objects": [],
+     "edges": [],
+     "enabled": true
+    },
+    {
+     "name": "TopWall_Rs",
+     "kind": "Impedance",
+     "props": {
+      "Resistance": "0.03",
+      "Reactance": "0.03"
+     },
+     "faces": [
+      {
+       "obj": "Guide",
+       "face": 1,
+       "sig": [
+        0.0058135228371193805,
+        0.029999999999999995,
+        0.01016,
+        0.0,
+        0.0,
+        1.0,
+        0.00066208
+       ]
+      }
+     ],
+     "objects": [],
+     "edges": [],
+     "enabled": true
+    },
+    {
+     "name": "BottomWall_PEC",
+     "kind": "Perfect E",
+     "props": {
+      "InfGroundPlane": "False"
+     },
+     "faces": [
+      {
+       "obj": "Guide",
+       "face": 3,
+       "sig": [
+        0.0058135228371193805,
+        0.029999999999999995,
+        0.0,
+        0.0,
+        0.0,
+        -1.0,
+        0.00066208
+       ]
+      }
+     ],
+     "objects": [],
+     "edges": [],
+     "enabled": true
+    }
+   ],
+   "excitations": [
+    {
+     "name": "WP1",
+     "kind": "Wave Port",
+     "props": {
+      "PortNumber": "1",
+      "NumberOfModes": "2",
+      "ModeType": "TE",
+      "ImpedanceDefinition": "Zpi",
+      "Renormalize": "False",
+      "RenormImpedance": "50ohm",
+      "Deembed": "True",
+      "DeembedDistance": "-5mm"
+     },
+     "faces": [],
+     "objects": [
+      "Port1Sheet"
+     ],
+     "edges": [],
+     "enabled": true
+    },
+    {
+     "name": "WP2",
+     "kind": "Wave Port",
+     "props": {
+      "PortNumber": "2",
+      "NumberOfModes": "1",
+      "ModeType": "Auto",
+      "ImpedanceDefinition": "Zvi",
+      "Renormalize": "True",
+      "RenormImpedance": "50ohm",
+      "Deembed": "False",
+      "DeembedDistance": "0"
+     },
+     "faces": [],
+     "objects": [
+      "Port2Sheet"
+     ],
+     "edges": [],
+     "enabled": true
+    }
+   ],
+   "mesh_ops": [],
+   "setups": [
+    {
+     "name": "Setup1",
+     "props": {
+      "Enabled": "True",
+      "SolutionFrequencyMode": "Single",
+      "Frequency": "10GHz",
+      "MultiFrequencies": "1GHz,2GHz",
+      "LowFrequency": "1GHz",
+      "HighFrequency": "10GHz",
+      "MaximumPasses": "10",
+      "MaximumDeltaS": "0.01",
+      "MaximumDeltaEnergy": "0.001",
+      "UseMatrixConvergence": "False",
+      "MaxDeltaMag": "0.02",
+      "MaxDeltaPhase": "2",
+      "LambdaRefinement": "True",
+      "LambdaTarget": "0.3333",
+      "UseFreeSpaceLambda": "False",
+      "PercentRefinement": "30",
+      "MaximumRefinement": "1000000",
+      "MinimumPasses": "2",
+      "MinimumConvergedPasses": "1",
+      "BasisOrder": "First Order",
+      "CurvedElements": "True",
+      "Solver": "Auto",
+      "ErrorInclusion": "50",
+      "RefinementRatio": "0.6",
+      "GrowthRate": "1.6",
+      "EnforceRefinementPercent": "True",
+      "RefinementMethod": "hzAURA (EMerge)",
+      "SaveFields": "True",
+      "Threads": "0",
+      "_BasisNames": "v2"
+     },
+     "sweeps": [
+      {
+       "name": "Sweep",
+       "props": {
+        "Enabled": "True",
+        "SweepType": "Interpolating",
+        "Distribution": "Linear Count",
+        "Start": "8.5GHz",
+        "Stop": "11.5GHz",
+        "Step": "0.1GHz",
+        "Count": "301",
+        "SamplesPerDecade": "20",
+        "Points": "1GHz,2GHz",
+        "SaveFields": "False",
+        "ErrorTolerance": "0.5",
+        "MaxSolutions": "250",
+        "Parallel": "False"
+       }
+      },
+      {
+       "name": "Coarse",
+       "props": {
+        "Enabled": "True",
+        "SweepType": "Discrete",
+        "Distribution": "Linear Step",
+        "Start": "8.5GHz",
+        "Stop": "11.5GHz",
+        "Step": "0.25GHz",
+        "Count": "101",
+        "SamplesPerDecade": "20",
+        "Points": "1GHz,2GHz",
+        "SaveFields": "True",
+        "ErrorTolerance": "0.5",
+        "MaxSolutions": "250",
+        "Parallel": "False"
+       }
+      }
+     ],
+     "eigen": false
+    }
+   ],
+   "spheres": [],
+   "reports": [
+    {
+     "name": "S Parameters",
+     "kind": "Rectangular",
+     "solution": "Setup1 : Sweep",
+     "traces": [
+      "dB(S(1,1))",
+      "dB(S(2,1))",
+      "dB(S(1:2,1:1))"
+     ],
+     "props": {}
+    },
+    {
+     "name": "Group Delay",
+     "kind": "Rectangular",
+     "solution": "Setup1 : Sweep",
+     "traces": [
+      "GroupDelay(2,1)"
+     ],
+     "props": {}
+    },
+    {
+     "name": "Phase",
+     "kind": "Rectangular",
+     "solution": "Setup1 : Sweep",
+     "traces": [
+      "ang_deg(S(2,1))",
+      "ang_rad(S(1,1))"
+     ],
+     "props": {}
+    },
+    {
+     "name": "Smith",
+     "kind": "Smith Chart",
+     "solution": "Setup1 : Sweep",
+     "traces": [
+      "S(1,1)",
+      "S(2,2)"
+     ],
+     "props": {}
+    },
+    {
+     "name": "Iris Families",
+     "kind": "Rectangular",
+     "solution": "Setup1 : Sweep",
+     "traces": [
+      "dB(S(2,1))"
+     ],
+     "props": {
+      "families": "IrisWidth"
+     }
+    }
+   ],
+   "field_plots": [
+    {
+     "name": "E_MidHeight",
+     "quantity": "Mag_E",
+     "solution": "Setup1 : LastAdaptive",
+     "faces": [],
+     "objects": [],
+     "plane": "XY@b/2",
+     "props": {}
+    },
+    {
+     "name": "H_Vector_MidHeight",
+     "quantity": "Vector_H",
+     "solution": "Setup1 : LastAdaptive",
+     "faces": [],
+     "objects": [],
+     "plane": "XY@b/2",
+     "props": {}
+    },
+    {
+     "name": "J_Walls",
+     "quantity": "Mag_Jsurf",
+     "solution": "Setup1 : LastAdaptive",
+     "faces": [
+      {
+       "obj": "Guide",
+       "face": 1,
+       "sig": [
+        0.0058135228371193805,
+        0.029999999999999995,
+        0.01016,
+        0.0,
+        0.0,
+        1.0,
+        0.00066208
+       ]
+      },
+      {
+       "obj": "Guide",
+       "face": 3,
+       "sig": [
+        0.0058135228371193805,
+        0.029999999999999995,
+        0.0,
+        0.0,
+        0.0,
+        -1.0,
+        0.00066208
+       ]
+      }
+     ],
+     "objects": [],
+     "plane": "",
+     "props": {}
+    }
+   ],
+   "coord_systems": [
+    {
+     "name": "CS_Mid",
+     "kind": "Relative",
+     "reference": "Global",
+     "props": {
+      "Mode": "Axis/Position",
+      "Origin": "a/2,0,0",
+      "XAxis": "1,0,0",
+      "YPoint": "0,1,0",
+      "Phi": "0deg",
+      "Theta": "0deg",
+      "Psi": "0deg"
+     }
+    }
+   ],
+   "field_exprs": [],
+   "field_funcs": [],
+   "optimetrics": [],
+   "parametrics": [
+    {
+     "name": "IrisWidth",
+     "sweeps": [
+      {
+       "variable": "w_ir",
+       "type": "Linear step",
+       "start": "10mm",
+       "stop": "12mm",
+       "step": "0.5mm",
+       "sync": ""
+      }
+     ],
+     "setups": [
+      "Setup1"
+     ],
+     "calcs": [
+      {
+       "calc": "dB(S(2,1))",
+       "solution": "Setup1 : Sweep",
+       "func": "Max",
+       "start": "9.5GHz",
+       "stop": "10.5GHz"
+      }
+     ],
+     "props": {
+      "SaveFields": "False",
+      "ParallelVariations": "1"
+     }
+    }
+   ],
+   "working_cs": "Global",
+   "notes": "WR-90 two-cavity iris filter, half model: the full guide is cut with Split, the symmetry plane x = a/2 is a Perfect H Symmetry boundary. Wave ports with two modes, renormalization and de-embedding, an impedance wall, a dielectric tuning post (Unite with a clone, KeepOriginals), Perfect E / Perfect H assignments, a parametric family over the iris width and an eigen-free driven sweep."
+  },
+  {
+   "name": "C_DielectricResonator_Eigen",
+   "units": "mm",
+   "settings": {
+    "SolutionType": "Eigenmode",
+    "AutoOpen": "Off",
+    "AutoOpenBoundary": "Auto",
+    "AutoOpenPadding": "",
+    "FilterAirMargin": "12mm",
+    "MaterialOverride": "True"
+   },
+   "variables": {
+    "Rc": "20mm",
+    "Hc": "24mm",
+    "Rd": "8.6mm",
+    "Hd": "7mm",
+    "Hs": "6mm"
+   },
+   "objects": [
+    {
+     "name": "Cavity",
+     "history": [
+      {
+       "kind": "CreateCylinder",
+       "props": {
+        "CenterPosition": "0,0,0",
+        "Axis": "Z",
+        "Radius": "Rc",
+        "Height": "Hc",
+        "NumberOfSegments": "0"
+       },
+       "suppressed": false
+      }
+     ],
+     "material": "vacuum",
+     "solve_inside": true,
+     "model": true,
+     "color": "#e6f2ff",
+     "transparency": 0.8,
+     "wireframe": false,
+     "visible": true,
+     "consumed_by": null,
+     "group": "",
+     "orientation": "Global"
+    },
+    {
+     "name": "Support",
+     "history": [
+      {
+       "kind": "CreateCone",
+       "props": {
+        "CenterPosition": "0,0,0",
+        "Axis": "Z",
+        "LowerRadius": "Rd*0.8",
+        "UpperRadius": "Rd*0.4",
+        "Height": "Hs",
+        "NumberOfSegments": "8"
+       },
+       "suppressed": false
+      }
+     ],
+     "material": "polystyrene",
+     "solve_inside": true,
+     "model": true,
+     "color": "#f0ead6",
+     "transparency": 0.0,
+     "wireframe": false,
+     "visible": true,
+     "consumed_by": null,
+     "group": "",
+     "orientation": "Global"
+    },
+    {
+     "name": "Puck",
+     "history": [
+      {
+       "kind": "CreateCylinder",
+       "props": {
+        "CenterPosition": "0,0,Hs",
+        "Axis": "Z",
+        "Radius": "Rd",
+        "Height": "Hd",
+        "NumberOfSegments": "0"
+       },
+       "suppressed": false
+      },
+      {
+       "kind": "Subtract",
+       "props": {
+        "Tools": "PuckHole",
+        "KeepOriginals": "False"
+       },
+       "suppressed": false
+      }
+     ],
+     "material": "Showcase_Anisotropic",
+     "solve_inside": true,
+     "model": true,
+     "color": "#bebebe",
+     "transparency": 0.0,
+     "wireframe": false,
+     "visible": true,
+     "consumed_by": null,
+     "group": "",
+     "orientation": "Global"
+    },
+    {
+     "name": "PuckHole",
+     "history": [
+      {
+       "kind": "CreateCylinder",
+       "props": {
+        "CenterPosition": "0,0,Hs",
+        "Axis": "Z",
+        "Radius": "Rd/4",
+        "Height": "Hd",
+        "NumberOfSegments": "0"
+       },
+       "suppressed": false
+      }
+     ],
+     "material": "vacuum",
+     "solve_inside": true,
+     "model": true,
+     "color": "#e6f2ff",
+     "transparency": 0.0,
+     "wireframe": false,
+     "visible": true,
+     "consumed_by": "Puck",
+     "group": "",
+     "orientation": "Global"
+    },
+    {
+     "name": "TuningDisc",
+     "history": [
+      {
+       "kind": "CreateCylinder",
+       "props": {
+        "CenterPosition": "0,0,Hc-2mm",
+        "Axis": "Z",
+        "Radius": "Rd/2",
+        "Height": "1mm",
+        "NumberOfSegments": "0"
+       },
+       "suppressed": false
+      },
+      {
+       "kind": "Move",
+       "props": {
+        "Vector": "0,0,-1mm"
+       },
+       "suppressed": false
+      }
+     ],
+     "material": "Showcase_Ferrite",
+     "solve_inside": true,
+     "model": true,
+     "color": "#bebebe",
+     "transparency": 0.0,
+     "wireframe": false,
+     "visible": true,
+     "consumed_by": null,
+     "group": "",
+     "orientation": "Global"
+    }
+   ],
+   "boundaries": [
+    {
+     "name": "CavityWalls",
+     "kind": "Finite Conductivity",
+     "props": {
+      "UseMaterial": "True",
+      "Material": "copper",
+      "Conductivity": "58000000",
+      "Permeability": "1",
+      "Roughness": "0um",
+      "UseThickness": "False",
+      "Thickness": "35um",
+      "TwoSided": "False"
+     },
+     "faces": [],
+     "objects": [
+      "Cavity"
+     ],
+     "edges": [],
+     "enabled": true
+    }
+   ],
+   "excitations": [],
+   "mesh_ops": [],
+   "setups": [
+    {
+     "name": "Eigen1",
+     "props": {
+      "MinimumFrequency": "3GHz",
+      "NumberOfModes": "4",
+      "MaximumPasses": "8",
+      "MaximumDeltaFreq": "1",
+      "MinimumConvergedPasses": "2",
+      "LambdaTarget": "0.3333",
+      "_BasisNames": "v2"
+     },
+     "sweeps": [],
+     "eigen": true
+    }
+   ],
+   "spheres": [],
+   "reports": [],
+   "field_plots": [
+    {
+     "name": "E_Mid",
+     "quantity": "Mag_E",
+     "solution": "Eigen1 : LastAdaptive",
+     "faces": [],
+     "objects": [],
+     "plane": "XY@Hs+Hd/2",
+     "props": {}
+    },
+    {
+     "name": "H_Side",
+     "quantity": "Mag_H",
+     "solution": "Eigen1 : LastAdaptive",
+     "faces": [],
+     "objects": [],
+     "plane": "XZ@0",
+     "props": {}
+    }
+   ],
+   "coord_systems": [],
+   "field_exprs": [],
+   "field_funcs": [],
+   "optimetrics": [],
+   "parametrics": [],
+   "working_cs": "Global",
+   "notes": "Eigenmode solution: a cylindrical copper cavity with a ceramic puck on a faceted cone support and a ferrite tuning disc; finite conductivity walls, field overlays on cut planes."
+  },
+  {
+   "name": "D_GeometryZoo_RCS",
+   "units": "mm",
+   "settings": {
+    "SolutionType": "Modal",
+    "AutoOpen": "Off",
+    "AutoOpenBoundary": "Auto",
+    "AutoOpenPadding": "",
+    "FilterAirMargin": "12mm",
+    "MaterialOverride": "True"
+   },
+   "variables": {
+    "sp": "40mm",
+    "s": "12mm"
+   },
+   "objects": [
+    {
+     "name": "Box_ChamferFillet",
+     "history": [
+      {
+       "kind": "CreateBox",
+       "props": {
+        "Position": "(-2)*sp,(-2)*sp,0",
+        "XSize": "s",
+        "YSize": "s",
+        "ZSize": "s"
+       },
+       "suppressed": false
+      },
+      {
+       "kind": "Chamfer",
+       "props": {
+        "Distance": "1.5mm",
+        "Edges": "0",
+        "Vertices": ""
+       },
+       "suppressed": false
+      },
+      {
+       "kind": "Fillet",
+       "props": {
+        "Radius": "1mm",
+        "Edges": "5",
+        "Vertices": ""
+       },
+       "suppressed": false
+      }
+     ],
+     "material": "Showcase_PEC",
+     "solve_inside": true,
+     "model": true,
+     "color": "#bebebe",
+     "transparency": 0.0,
+     "wireframe": false,
+     "visible": true,
+     "consumed_by": null,
+     "group": "",
+     "orientation": "Global"
+    },
+    {
+     "name": "Cyl_Faceted",
+     "history": [
+      {
+       "kind": "CreateCylinder",
+       "props": {
+        "CenterPosition": "(-1)*sp,(-2)*sp,0",
+        "Axis": "X",
+        "Radius": "s/2",
+        "Height": "s",
+        "NumberOfSegments": "10"
+       },
+       "suppressed": false
+      }
+     ],
+     "material": "Showcase_Brass",
+     "solve_inside": true,
+     "model": true,
+     "color": "#bebebe",
+     "transparency": 0.0,
+     "wireframe": false,
+     "visible": true,
+     "consumed_by": null,
+     "group": "",
+     "orientation": "Global"
+    },
+    {
+     "name": "Sphere_True",
+     "history": [
+      {
+       "kind": "CreateSphere",
+       "props": {
+        "CenterPosition": "(0)*sp,(-2)*sp,0",
+        "Radius": "s/2",
+        "NumberOfVertices": "0"
+       },
+       "suppressed": false
+      }
+     ],
+     "material": "pec",
+     "solve_inside": true,
+     "model": true,
+     "color": "#d6a45c",
+     "transparency": 0.0,
+     "wireframe": false,
+     "visible": true,
+     "consumed_by": null,
+     "group": "",
+     "orientation": "Global"
+    },
+    {
+     "name": "Sphere_Icosa",
+     "history": [
+      {
+       "kind": "CreateSphere",
+       "props": {
+        "CenterPosition": "(1)*sp,(-2)*sp,0",
+        "Radius": "s/2",
+        "NumberOfVertices": "12"
+       },
+       "suppressed": false
+      }
+     ],
+     "material": "pec",
+     "solve_inside": true,
+     "model": true,
+     "color": "#d6a45c",
+     "transparency": 0.0,
+     "wireframe": false,
+     "visible": true,
+     "consumed_by": null,
+     "group": "",
+     "orientation": "Global"
+    },
+    {
+     "name": "Cone",
+     "history": [
+      {
+       "kind": "CreateCone",
+       "props": {
+        "CenterPosition": "(2)*sp,(-2)*sp,0",
+        "Axis": "Y",
+        "LowerRadius": "s/2",
+        "UpperRadius": "s/6",
+        "Height": "s",
+        "NumberOfSegments": "0"
+       },
+       "suppressed": false
+      }
+     ],
+     "material": "Showcase_Debye_Absorber",
+     "solve_inside": true,
+     "model": true,
+     "color": "#bebebe",
+     "transparency": 0.0,
+     "wireframe": false,
+     "visible": true,
+     "consumed_by": null,
+     "group": "",
+     "orientation": "Global"
+    },
+    {
+     "name": "Torus",
+     "history": [
+      {
+       "kind": "CreateTorus",
+       "props": {
+        "CenterPosition": "(-2)*sp,(-1)*sp,0",
+        "Axis": "Z",
+        "MajorRadius": "s/2",
+        "MinorRadius": "s/6"
+       },
+       "suppressed": false
+      }
+     ],
+     "material": "pec",
+     "solve_inside": true,
+     "model": true,
+     "color": "#d6a45c",
+     "transparency": 0.0,
+     "wireframe": false,
+     "visible": true,
+     "consumed_by": null,
+     "group": "",
+     "orientation": "Global"
+    },
+    {
+     "name": "Hexagonal_Prism",
+     "history": [
+      {
+       "kind": "CreateRegularPolyhedron",
+       "props": {
+        "CenterPosition": "(-1)*sp,(-1)*sp,0",
+        "StartPosition": "(-1)*sp+s/2,(-1)*sp,0",
+        "Height": "s",
+        "NumberOfSides": "6",
+        "Axis": "Z"
+       },
+       "suppressed": false
+      }
+     ],
+     "material": "PTFE_glass",
+     "solve_inside": true,
+     "model": true,
+     "color": "#e8e0d0",
+     "transparency": 0.0,
+     "wireframe": false,
+     "visible": true,
+     "consumed_by": null,
+     "group": "",
+     "orientation": "Global"
+    },
+    {
+     "name": "Ellipse_Thick",
+     "history": [
+      {
+       "kind": "CreateEllipse",
+       "props": {
+        "CenterPosition": "(0)*sp,(-1)*sp,0",
+        "Axis": "Z",
+        "MajorRadius": "s/2",
+        "Ratio": "0.6"
+       },
+       "suppressed": false
+      },
+      {
+       "kind": "ThickenSheet",
+       "props": {
+        "Thickness": "2mm",
+        "BothSides": "True",
+        "ReverseDirection": "False"
+       },
+       "suppressed": false
+      }
+     ],
+     "material": "pec",
+     "solve_inside": true,
+     "model": true,
+     "color": "#8080ff",
+     "transparency": 0.0,
+     "wireframe": false,
+     "visible": true,
+     "consumed_by": null,
+     "group": "",
+     "orientation": "Global"
+    },
+    {
+     "name": "Pentagon_Extruded",
+     "history": [
+      {
+       "kind": "CreateRegularPolygon",
+       "props": {
+        "CenterPosition": "(1)*sp,(-1)*sp,0",
+        "StartPosition": "(1)*sp+s/2,(-1)*sp,0",
+        "NumberOfSides": "5",
+        "Axis": "Z"
+       },
+       "suppressed": false
+      },
+      {
+       "kind": "SweepAlongVector",
+       "props": {
+        "Vector": "0,0,s/2"
+       },
+       "suppressed": false
+      }
+     ],
+     "material": "Showcase_Ferrite",
+     "solve_inside": true,
+     "model": true,
+     "color": "#8080ff",
+     "transparency": 0.0,
+     "wireframe": false,
+     "visible": true,
+     "consumed_by": null,
+     "group": "",
+     "orientation": "Global"
+    },
+    {
+     "name": "Ring_Revolved",
+     "history": [
+      {
+       "kind": "CreateRectangle",
+       "props": {
+        "Position": "(2)*sp+s/4,(-1)*sp,0",
+        "Axis": "Y",
+        "XSize": "s/4",
+        "YSize": "1",
+        "ZSize": "s/4"
+       },
+       "suppressed": false
+      },
+      {
+       "kind": "SweepAroundAxis",
+       "props": {
+        "Axis": "Z",
+        "Angle": "270deg",
+        "Center": "(2)*sp,(-1)*sp,0"
+       },
+       "suppressed": false
+      }
+     ],
+     "material": "pec",
+     "solve_inside": true,
+     "model": true,
+     "color": "#8080ff",
+     "transparency": 0.0,
+     "wireframe": false,
+     "visible": true,
+     "consumed_by": null,
+     "group": "",
+     "orientation": "Global"
+    },
+    {
+     "name": "Polyline_Mixed",
+     "history": [
+      {
+       "kind": "CreatePolyline",
+       "props": {
+        "Points": "(-2)*sp,(0)*sp,0;(-2)*sp+s,(0)*sp,0;(-2)*sp+s+s/3,(0)*sp+s/2,0;(-2)*sp+s,(0)*sp+s,0;(-2)*sp+s/2,(0)*sp+s+s/4,0;(-2)*sp,(0)*sp+s,0",
+        "SegmentTypes": "Line,Arc,Spline:3",
+        "Closed": "True",
+        "Covered": "True"
+       },
+       "suppressed": false
+      },
+      {
+       "kind": "ThickenSheet",
+       "props": {
+        "Thickness": "1mm",
+        "BothSides": "False",
+        "ReverseDirection": "False"
+       },
+       "suppressed": false
+      }
+     ],
+     "material": "pec",
+     "solve_inside": true,
+     "model": true,
+     "color": "#8080ff",
+     "transparency": 0.0,
+     "wireframe": false,
+     "visible": true,
+     "consumed_by": null,
+     "group": "",
+     "orientation": "Global"
+    },
+    {
+     "name": "Loop_Covered",
+     "history": [
+      {
+       "kind": "CreatePolyline",
+       "props": {
+        "Points": "(-1)*sp,0,0;(-1)*sp+s,0,0;(-1)*sp+s,s,0;(-1)*sp,s,0",
+        "SegmentTypes": "Line,AngularArc:90deg:XY",
+        "Closed": "True",
+        "Covered": "False"
+       },
+       "suppressed": false
+      },
+      {
+       "kind": "Cover",
+       "props": {},
+       "suppressed": false
+      }
+     ],
+     "material": "pec",
+     "solve_inside": true,
+     "model": true,
+     "color": "#8080ff",
+     "transparency": 0.0,
+     "wireframe": false,
+     "visible": true,
+     "consumed_by": null,
+     "group": "",
+     "orientation": "Global"
+    },
+    {
+     "name": "Helix_Wire",
+     "history": [
+      {
+       "kind": "CreateHelix",
+       "props": {
+        "CenterPosition": "(0)*sp,(0)*sp,0",
+        "Axis": "Z",
+        "Radius": "s/3",
+        "Pitch": "4mm",
+        "Turns": "3",
+        "RightHanded": "True",
+        "WireRadius": "0.6mm",
+        "NumberOfSegmentsPerTurn": "0"
+       },
+       "suppressed": false
+      }
+     ],
+     "material": "Showcase_PEC",
+     "solve_inside": true,
+     "model": true,
+     "color": "#bebebe",
+     "transparency": 0.0,
+     "wireframe": false,
+     "visible": true,
+     "consumed_by": null,
+     "group": "",
+     "orientation": "Global"
+    },
+    {
+     "name": "Spiral_Trace",
+     "history": [
+      {
+       "kind": "CreateSpiral",
+       "props": {
+        "CenterPosition": "(1)*sp,(0)*sp,0",
+        "Axis": "Z",
+        "InnerRadius": "2mm",
+        "Pitch": "2mm",
+        "Turns": "2.5",
+        "RightHanded": "False",
+        "Width": "0.8mm"
+       },
+       "suppressed": false
+      }
+     ],
+     "material": "pec",
+     "solve_inside": true,
+     "model": true,
+     "color": "#8080ff",
+     "transparency": 0.0,
+     "wireframe": false,
+     "visible": true,
+     "consumed_by": null,
+     "group": "",
+     "orientation": "Global"
+    },
+    {
+     "name": "Bondwire",
+     "history": [
+      {
+       "kind": "CreateBondwire",
+       "props": {
+        "Type": "JEDEC 5-Point",
+        "StartPosition": "(2)*sp,(0)*sp,0",
+        "EndPosition": "(2)*sp+s,0,0",
+        "H1": "3mm",
+        "H2": "0.5mm",
+        "Diameter": "0.5mm"
+       },
+       "suppressed": false
+      }
+     ],
+     "material": "pec",
+     "solve_inside": true,
+     "model": true,
+     "color": "#d6a45c",
+     "transparency": 0.0,
+     "wireframe": false,
+     "visible": true,
+     "consumed_by": null,
+     "group": "",
+     "orientation": "Global"
+    },
+    {
+     "name": "Unite_Result",
+     "history": [
+      {
+       "kind": "CreateBox",
+       "props": {
+        "Position": "(-2)*sp,(1)*sp,0",
+        "XSize": "s",
+        "YSize": "s/3",
+        "ZSize": "s/3"
+       },
+       "suppressed": false
+      },
+      {
+       "kind": "Unite",
+       "props": {
+        "Tools": "UniteTool",
+        "KeepOriginals": "False"
+       },
+       "suppressed": false
+      }
+     ],
+     "material": "pec",
+     "solve_inside": true,
+     "model": true,
+     "color": "#d6a45c",
+     "transparency": 0.0,
+     "wireframe": false,
+     "visible": true,
+     "consumed_by": null,
+     "group": "",
+     "orientation": "Global"
+    },
+    {
+     "name": "UniteTool",
+     "history": [
+      {
+       "kind": "CreateCylinder",
+       "props": {
+        "CenterPosition": "(-2)*sp+s/2,(1)*sp,s/6",
+        "Axis": "Y",
+        "Radius": "s/4",
+        "Height": "s",
+        "NumberOfSegments": "0"
+       },
+       "suppressed": false
+      }
+     ],
+     "material": "vacuum",
+     "solve_inside": true,
+     "model": true,
+     "color": "#e6f2ff",
+     "transparency": 0.0,
+     "wireframe": false,
+     "visible": true,
+     "consumed_by": "Unite_Result",
+     "group": "",
+     "orientation": "Global"
+    },
+    {
+     "name": "Subtract_KeepOriginal",
+     "history": [
+      {
+       "kind": "CreateBox",
+       "props": {
+        "Position": "(-1)*sp,(1)*sp,0",
+        "XSize": "s",
+        "YSize": "s",
+        "ZSize": "s/2"
+       },
+       "suppressed": false
+      },
+      {
+       "kind": "Subtract",
+       "props": {
+        "Tools": "SubtractTool_tool",
+        "KeepOriginals": "True"
+       },
+       "suppressed": false
+      }
+     ],
+     "material": "Showcase_Brass",
+     "solve_inside": true,
+     "model": true,
+     "color": "#bebebe",
+     "transparency": 0.0,
+     "wireframe": false,
+     "visible": true,
+     "consumed_by": null,
+     "group": "",
+     "orientation": "Global"
+    },
+    {
+     "name": "SubtractTool",
+     "history": [
+      {
+       "kind": "CreateSphere",
+       "props": {
+        "CenterPosition": "(-1)*sp+s,(1)*sp+s,s/2",
+        "Radius": "s/2",
+        "NumberOfVertices": "0"
+       },
+       "suppressed": false
+      }
+     ],
+     "material": "PLA",
+     "solve_inside": true,
+     "model": true,
+     "color": "#e0e0c0",
+     "transparency": 0.6,
+     "wireframe": true,
+     "visible": true,
+     "consumed_by": null,
+     "group": "",
+     "orientation": "Global"
+    },
+    {
+     "name": "SubtractTool_tool",
+     "history": [
+      {
+       "kind": "CreateSphere",
+       "props": {
+        "CenterPosition": "(-1)*sp+s,(1)*sp+s,s/2",
+        "Radius": "s/2",
+        "NumberOfVertices": "0"
+       },
+       "suppressed": false
+      }
+     ],
+     "material": "vacuum",
+     "solve_inside": true,
+     "model": true,
+     "color": "#e6f2ff",
+     "transparency": 0.0,
+     "wireframe": false,
+     "visible": true,
+     "consumed_by": "Subtract_KeepOriginal",
+     "group": "",
+     "orientation": "Global"
+    },
+    {
+     "name": "Intersect_Lens",
+     "history": [
+      {
+       "kind": "CreateSphere",
+       "props": {
+        "CenterPosition": "(0)*sp,(1)*sp,-s/3",
+        "Radius": "s/2",
+        "NumberOfVertices": "0"
+       },
+       "suppressed": false
+      },
+      {
+       "kind": "Intersect",
+       "props": {
+        "Tools": "IntersectTool",
+        "KeepOriginals": "False"
+       },
+       "suppressed": false
+      }
+     ],
+     "material": "Showcase_Anisotropic",
+     "solve_inside": true,
+     "model": true,
+     "color": "#bebebe",
+     "transparency": 0.0,
+     "wireframe": false,
+     "visible": true,
+     "consumed_by": null,
+     "group": "",
+     "orientation": "Global"
+    },
+    {
+     "name": "IntersectTool",
+     "history": [
+      {
+       "kind": "CreateSphere",
+       "props": {
+        "CenterPosition": "(0)*sp,(1)*sp,s/3",
+        "Radius": "s/2",
+        "NumberOfVertices": "0"
+       },
+       "suppressed": false
+      }
+     ],
+     "material": "vacuum",
+     "solve_inside": true,
+     "model": true,
+     "color": "#e6f2ff",
+     "transparency": 0.0,
+     "wireframe": false,
+     "visible": true,
+     "consumed_by": "Intersect_Lens",
+     "group": "",
+     "orientation": "Global"
+    },
+    {
+     "name": "Swept_Tube",
+     "history": [
+      {
+       "kind": "CreateCircle",
+       "props": {
+        "CenterPosition": "(1)*sp,(1)*sp,0",
+        "Axis": "Y",
+        "Radius": "1.2mm",
+        "NumberOfSegments": "0"
+       },
+       "suppressed": false
+      },
+      {
+       "kind": "SweepAlongPath",
+       "props": {
+        "Tools": "SweepPath",
+        "Trihedron": "CorrectedFrenet"
+       },
+       "suppressed": false
+      }
+     ],
+     "material": "pec",
+     "solve_inside": true,
+     "model": true,
+     "color": "#8080ff",
+     "transparency": 0.0,
+     "wireframe": false,
+     "visible": true,
+     "consumed_by": null,
+     "group": "",
+     "orientation": "Global"
+    },
+    {
+     "name": "SweepPath",
+     "history": [
+      {
+       "kind": "CreatePolyline",
+       "props": {
+        "Points": "(1)*sp,(1)*sp,0;(1)*sp,(1)*sp+s/2,s/3;(1)*sp+s/2,(1)*sp+s,s/2",
+        "SegmentTypes": "Spline:3",
+        "Closed": "False",
+        "Covered": "False"
+       },
+       "suppressed": false
+      }
+     ],
+     "material": "vacuum",
+     "solve_inside": true,
+     "model": true,
+     "color": "#8080ff",
+     "transparency": 0.0,
+     "wireframe": false,
+     "visible": true,
+     "consumed_by": "Swept_Tube",
+     "group": "",
+     "orientation": "Global"
+    },
+    {
+     "name": "Loft_Connect",
+     "history": [
+      {
+       "kind": "CreateCircle",
+       "props": {
+        "CenterPosition": "(2)*sp,(1)*sp,0",
+        "Axis": "Z",
+        "Radius": "s/2",
+        "NumberOfSegments": "0"
+       },
+       "suppressed": false
+      },
+      {
+       "kind": "Connect",
+       "props": {
+        "Tools": "LoftTop",
+        "Ruled": "False"
+       },
+       "suppressed": false
+      }
+     ],
+     "material": "pec",
+     "solve_inside": true,
+     "model": true,
+     "color": "#8080ff",
+     "transparency": 0.0,
+     "wireframe": false,
+     "visible": true,
+     "consumed_by": null,
+     "group": "",
+     "orientation": "Global"
+    },
+    {
+     "name": "LoftTop",
+     "history": [
+      {
+       "kind": "CreateRectangle",
+       "props": {
+        "Position": "(2)*sp-s/4,(1)*sp-s/4,s",
+        "Axis": "Z",
+        "XSize": "s/2",
+        "YSize": "s/2",
+        "ZSize": "1"
+       },
+       "suppressed": false
+      }
+     ],
+     "material": "vacuum",
+     "solve_inside": true,
+     "model": true,
+     "color": "#8080ff",
+     "transparency": 0.0,
+     "wireframe": false,
+     "visible": true,
+     "consumed_by": "Loft_Connect",
+     "group": "",
+     "orientation": "Global"
+    },
+    {
+     "name": "Imprinted_Box",
+     "history": [
+      {
+       "kind": "CreateBox",
+       "props": {
+        "Position": "(-2)*sp,(2)*sp,0",
+        "XSize": "s",
+        "YSize": "s",
+        "ZSize": "s/4"
+       },
+       "suppressed": false
+      },
+      {
+       "kind": "Imprint",
+       "props": {
+        "Tools": "ImprintPad"
+       },
+       "suppressed": false
+      }
+     ],
+     "material": "silicon",
+     "solve_inside": true,
+     "model": true,
+     "color": "#6d6d7d",
+     "transparency": 0.0,
+     "wireframe": false,
+     "visible": true,
+     "consumed_by": null,
+     "group": "",
+     "orientation": "Global"
+    },
+    {
+     "name": "ImprintPad",
+     "history": [
+      {
+       "kind": "CreateRectangle",
+       "props": {
+        "Position": "(-2)*sp+s/4,(2)*sp+s/4,s/4",
+        "Axis": "Z",
+        "XSize": "s/2",
+        "YSize": "s/2",
+        "ZSize": "1"
+       },
+       "suppressed": false
+      }
+     ],
+     "material": "vacuum",
+     "solve_inside": true,
+     "model": true,
+     "color": "#8080ff",
+     "transparency": 0.0,
+     "wireframe": false,
+     "visible": true,
+     "consumed_by": "Imprinted_Box",
+     "group": "",
+     "orientation": "Global"
+    },
+    {
+     "name": "OpenShell_Uncover",
+     "history": [
+      {
+       "kind": "CreateBox",
+       "props": {
+        "Position": "(-1)*sp,(2)*sp,0",
+        "XSize": "s",
+        "YSize": "s",
+        "ZSize": "s/2"
+       },
+       "suppressed": false
+      },
+      {
+       "kind": "UncoverFaces",
+       "props": {
+        "Faces": "5"
+       },
+       "suppressed": false
+      }
+     ],
+     "material": "pec",
+     "solve_inside": true,
+     "model": true,
+     "color": "#d6a45c",
+     "transparency": 0.0,
+     "wireframe": false,
+     "visible": true,
+     "consumed_by": null,
+     "group": "",
+     "orientation": "Global"
+    },
+    {
+     "name": "KeepFaces_L",
+     "history": [
+      {
+       "kind": "CreateBox",
+       "props": {
+        "Position": "(0)*sp,(2)*sp,0",
+        "XSize": "s",
+        "YSize": "s",
+        "ZSize": "s/2"
+       },
+       "suppressed": false
+      },
+      {
+       "kind": "KeepFaces",
+       "props": {
+        "Faces": "0,2"
+       },
+       "suppressed": false
+      }
+     ],
+     "material": "pec",
+     "solve_inside": true,
+     "model": true,
+     "color": "#d6a45c",
+     "transparency": 0.0,
+     "wireframe": false,
+     "visible": true,
+     "consumed_by": null,
+     "group": "",
+     "orientation": "Global"
+    },
+    {
+     "name": "SweepFaces",
+     "history": [
+      {
+       "kind": "CreateBox",
+       "props": {
+        "Position": "(1)*sp,(2)*sp,0",
+        "XSize": "s/2",
+        "YSize": "s/2",
+        "ZSize": "s/4"
+       },
+       "suppressed": false
+      },
+      {
+       "kind": "SweepFacesAlongNormal",
+       "props": {
+        "Faces": "5",
+        "Distance": "3mm"
+       },
+       "suppressed": false
+      }
+     ],
+     "material": "glass",
+     "solve_inside": true,
+     "model": true,
+     "color": "#cfe8ef",
+     "transparency": 0.0,
+     "wireframe": false,
+     "visible": true,
+     "consumed_by": null,
+     "group": "",
+     "orientation": "Global"
+    },
+    {
+     "name": "Split_Hemisphere",
+     "history": [
+      {
+       "kind": "CreateSphere",
+       "props": {
+        "CenterPosition": "(2)*sp,(2)*sp,0",
+        "Radius": "s/2",
+        "NumberOfVertices": "0"
+       },
+       "suppressed": false
+      },
+      {
+       "kind": "Split",
+       "props": {
+        "Plane": "XY",
+        "Base": "0,0,0",
+        "Normal": "0,0,1",
+        "Keep": "Positive",
+        "CoordinateSystem": "Global"
+       },
+       "suppressed": false
+      }
+     ],
+     "material": "pec",
+     "solve_inside": true,
+     "model": true,
+     "color": "#d6a45c",
+     "transparency": 0.0,
+     "wireframe": false,
+     "visible": true,
+     "consumed_by": null,
+     "group": "",
+     "orientation": "Global"
+    },
+    {
+     "name": "KeepBody_Part",
+     "history": [
+      {
+       "kind": "CreateBox",
+       "props": {
+        "Position": "(-2)*sp,(3)*sp,0",
+        "XSize": "s",
+        "YSize": "s/4",
+        "ZSize": "s/4"
+       },
+       "suppressed": false
+      },
+      {
+       "kind": "Subtract",
+       "props": {
+        "Tools": "KeepBodyCutter",
+        "KeepOriginals": "False"
+       },
+       "suppressed": false
+      },
+      {
+       "kind": "KeepBody",
+       "props": {
+        "Body": "1"
+       },
+       "suppressed": false
+      }
+     ],
+     "material": "pec",
+     "solve_inside": true,
+     "model": true,
+     "color": "#d6a45c",
+     "transparency": 0.0,
+     "wireframe": false,
+     "visible": true,
+     "consumed_by": null,
+     "group": "",
+     "orientation": "Global"
+    },
+    {
+     "name": "KeepBodyCutter",
+     "history": [
+      {
+       "kind": "CreateBox",
+       "props": {
+        "Position": "(-2)*sp+s/2-1mm,(3)*sp-1mm,-1mm",
+        "XSize": "2mm",
+        "YSize": "s/4+2mm",
+        "ZSize": "s/4+2mm"
+       },
+       "suppressed": false
+      }
+     ],
+     "material": "vacuum",
+     "solve_inside": true,
+     "model": true,
+     "color": "#e6f2ff",
+     "transparency": 0.0,
+     "wireframe": false,
+     "visible": true,
+     "consumed_by": "KeepBody_Part",
+     "group": "",
+     "orientation": "Global"
+    },
+    {
+     "name": "Section_Disc",
+     "history": [
+      {
+       "kind": "CreateSphere",
+       "props": {
+        "CenterPosition": "(-1)*sp,(3)*sp,0",
+        "Radius": "s/2",
+        "NumberOfVertices": "0"
+       },
+       "suppressed": false
+      },
+      {
+       "kind": "Section",
+       "props": {
+        "Base": "(-1)*sp,(3)*sp,0",
+        "Normal": "0,1,1"
+       },
+       "suppressed": false
+      }
+     ],
+     "material": "pec",
+     "solve_inside": true,
+     "model": true,
+     "color": "#d6a45c",
+     "transparency": 0.0,
+     "wireframe": false,
+     "visible": true,
+     "consumed_by": null,
+     "group": "",
+     "orientation": "Global"
+    },
+    {
+     "name": "Transformed",
+     "history": [
+      {
+       "kind": "CreateBox",
+       "props": {
+        "Position": "(0)*sp,(3)*sp,0",
+        "XSize": "s/2",
+        "YSize": "s/4",
+        "ZSize": "s/6"
+       },
+       "suppressed": false
+      },
+      {
+       "kind": "Move",
+       "props": {
+        "Vector": "2mm,0,0"
+       },
+       "suppressed": false
+      },
+      {
+       "kind": "Rotate",
+       "props": {
+        "Axis": "Z",
+        "Angle": "30deg",
+        "Center": "(0)*sp,(3)*sp,0"
+       },
+       "suppressed": false
+      },
+      {
+       "kind": "Mirror",
+       "props": {
+        "Base": "(0)*sp,(3)*sp,0",
+        "Normal": "1,0,0"
+       },
+       "suppressed": false
+      },
+      {
+       "kind": "Scale",
+       "props": {
+        "Factor": "1.2",
+        "Center": "(0)*sp,(3)*sp,0"
+       },
+       "suppressed": false
+      },
+      {
+       "kind": "Move",
+       "props": {
+        "Vector": "0,0,50mm"
+       },
+       "suppressed": true
+      }
+     ],
+     "material": "pec",
+     "solve_inside": true,
+     "model": true,
+     "color": "#d6a45c",
+     "transparency": 0.0,
+     "wireframe": false,
+     "visible": true,
+     "consumed_by": null,
+     "group": "",
+     "orientation": "Global"
+    },
+    {
+     "name": "InRelativeCS",
+     "history": [
+      {
+       "kind": "CreateBox",
+       "props": {
+        "Position": "-s/2,-s/2,0",
+        "XSize": "s",
+        "YSize": "s/3",
+        "ZSize": "s/5"
+       },
+       "suppressed": false
+      }
+     ],
+     "material": "pec",
+     "solve_inside": true,
+     "model": true,
+     "color": "#d6a45c",
+     "transparency": 0.0,
+     "wireframe": false,
+     "visible": true,
+     "consumed_by": null,
+     "group": "Zoo_Group",
+     "orientation": "CS_Zoo"
+    },
+    {
+     "name": "HiddenSphere",
+     "history": [
+      {
+       "kind": "CreateSphere",
+       "props": {
+        "CenterPosition": "(1)*sp,(3)*sp,0",
+        "Radius": "s/4",
+        "NumberOfVertices": "0"
+       },
+       "suppressed": false
+      }
+     ],
+     "material": "pec",
+     "solve_inside": true,
+     "model": true,
+     "color": "#d6a45c",
+     "transparency": 0.0,
+     "wireframe": false,
+     "visible": false,
+     "consumed_by": null,
+     "group": "Zoo_Group",
+     "orientation": "Global"
+    },
+    {
+     "name": "NonModel_Marker",
+     "history": [
+      {
+       "kind": "CreateCylinder",
+       "props": {
+        "CenterPosition": "(2)*sp,(3)*sp,0",
+        "Axis": "Z",
+        "Radius": "s/4",
+        "Height": "s",
+        "NumberOfSegments": "0"
+       },
+       "suppressed": false
+      }
+     ],
+     "material": "nylon",
+     "solve_inside": true,
+     "model": false,
+     "color": "#f0e8d8",
+     "transparency": 0.0,
+     "wireframe": true,
+     "visible": true,
+     "consumed_by": null,
+     "group": "Zoo_Group",
+     "orientation": "Global"
+    },
+    {
+     "name": "Region",
+     "history": [
+      {
+       "kind": "CreateRegion",
+       "props": {
+        "PaddingType": "Absolute Offset",
+        "+X": "40mm",
+        "-X": "40mm",
+        "+Y": "40mm",
+        "-Y": "40mm",
+        "+Z": "40mm",
+        "-Z": "40mm"
+       },
+       "suppressed": false
+      }
+     ],
+     "material": "air",
+     "solve_inside": true,
+     "model": true,
+     "color": "#e6f2ff",
+     "transparency": 0.85,
+     "wireframe": false,
+     "visible": true,
+     "consumed_by": null,
+     "group": "",
+     "orientation": "Global"
+    }
+   ],
+   "boundaries": [
+    {
+     "name": "Rad_Region",
+     "kind": "Radiation",
+     "props": {
+      "Order": "First order",
+      "FarFieldReference": "True"
+     },
+     "faces": [],
+     "objects": [
+      "Region"
+     ],
+     "edges": [],
+     "enabled": true
+    }
+   ],
+   "excitations": [
+    {
+     "name": "PlaneWave",
+     "kind": "Incident Plane Wave",
+     "props": {
+      "VectorInput": "Spherical",
+      "E0Vector": "1,0,0",
+      "KVector": "0,0,1",
+      "Theta": "45deg",
+      "Phi": "30deg",
+      "Polarization": "90deg",
+      "ZeroPhasePosition": "0,0,0",
+      "EMagnitude": "1"
+     },
+     "faces": [],
+     "objects": [],
+     "edges": [],
+     "enabled": true
+    },
+    {
+     "name": "PlaneWave_Cartesian",
+     "kind": "Incident Plane Wave",
+     "props": {
+      "VectorInput": "Cartesian",
+      "E0Vector": "0,1,0",
+      "KVector": "0,0,-1",
+      "Theta": "0deg",
+      "Phi": "0deg",
+      "Polarization": "0deg",
+      "ZeroPhasePosition": "0,0,0",
+      "EMagnitude": "1"
+     },
+     "faces": [],
+     "objects": [],
+     "edges": [],
+     "enabled": false
+    }
+   ],
+   "mesh_ops": [],
+   "setups": [
+    {
+     "name": "Setup1",
+     "props": {
+      "Enabled": "True",
+      "SolutionFrequencyMode": "Single",
+      "Frequency": "1.5GHz",
+      "MultiFrequencies": "1GHz,2GHz",
+      "LowFrequency": "1GHz",
+      "HighFrequency": "10GHz",
+      "MaximumPasses": "6",
+      "MaximumDeltaS": "0.02",
+      "MaximumDeltaEnergy": "0.002",
+      "UseMatrixConvergence": "False",
+      "MaxDeltaMag": "0.02",
+      "MaxDeltaPhase": "2",
+      "LambdaRefinement": "True",
+      "LambdaTarget": "0.3333",
+      "UseFreeSpaceLambda": "False",
+      "PercentRefinement": "30",
+      "MaximumRefinement": "1000000",
+      "MinimumPasses": "2",
+      "MinimumConvergedPasses": "1",
+      "BasisOrder": "First Order",
+      "CurvedElements": "True",
+      "Solver": "Auto",
+      "ErrorInclusion": "50",
+      "RefinementRatio": "0.6",
+      "GrowthRate": "1.6",
+      "EnforceRefinementPercent": "True",
+      "RefinementMethod": "hzAURA (EMerge)",
+      "SaveFields": "True",
+      "Threads": "0",
+      "_BasisNames": "v2"
+     },
+     "sweeps": [
+      {
+       "name": "RCS_Sweep",
+       "props": {
+        "Enabled": "True",
+        "SweepType": "Discrete",
+        "Distribution": "Linear Count",
+        "Start": "1GHz",
+        "Stop": "2GHz",
+        "Step": "0.1GHz",
+        "Count": "5",
+        "SamplesPerDecade": "20",
+        "Points": "1GHz,2GHz",
+        "SaveFields": "True",
+        "ErrorTolerance": "0.5",
+        "MaxSolutions": "250",
+        "Parallel": "False"
+       }
+      }
+     ],
+     "eigen": false
+    }
+   ],
+   "spheres": [
+    {
+     "name": "FF_RCS",
+     "props": {
+      "CoordinateSystem": "Global",
+      "PhiStart": "0deg",
+      "PhiStop": "360deg",
+      "PhiStep": "10deg",
+      "ThetaStart": "0deg",
+      "ThetaStop": "180deg",
+      "ThetaStep": "5deg"
+     }
+    }
+   ],
+   "reports": [
+    {
+     "name": "Bistatic RCS",
+     "kind": "Radiation Pattern",
+     "solution": "Setup1 : LastAdaptive",
+     "traces": [
+      "dBsm(BistaticRCSTotal)"
+     ],
+     "props": {
+      "cut": "Phi",
+      "cut_value": "30",
+      "plot": "Rectangular",
+      "sphere": "FF_RCS"
+     }
+    },
+    {
+     "name": "Bistatic RCS 3D",
+     "kind": "3D Polar Plot",
+     "solution": "Setup1 : LastAdaptive",
+     "traces": [
+      "dBsm(BistaticRCSTotal)"
+     ],
+     "props": {
+      "sphere": "FF_RCS"
+     }
+    },
+    {
+     "name": "Monostatic RCS",
+     "kind": "Monostatic RCS",
+     "solution": "Setup1 : RCS_Sweep",
+     "traces": [
+      "dBsm(MonostaticRCSTotal)"
+     ],
+     "props": {}
+    },
+    {
+     "name": "Monostatic RCS Table",
+     "kind": "Monostatic RCS Table",
+     "solution": "Setup1 : AdaptivePasses",
+     "traces": [
+      "dBsm(MonostaticRCSTotal)"
+     ],
+     "props": {}
+    }
+   ],
+   "field_plots": [
+    {
+     "name": "E_Total_XY",
+     "quantity": "Mag_E",
+     "solution": "Setup1 : LastAdaptive",
+     "faces": [],
+     "objects": [],
+     "plane": "XY@s/4",
+     "props": {}
+    },
+    {
+     "name": "J_Torus",
+     "quantity": "Mag_Jsurf",
+     "solution": "Setup1 : LastAdaptive",
+     "faces": [],
+     "objects": [
+      "Torus",
+      "Helix_Wire"
+     ],
+     "plane": "",
+     "props": {}
+    },
+    {
+     "name": "J_Volume_Ferrite",
+     "quantity": "Mag_J",
+     "solution": "Setup1 : LastAdaptive",
+     "faces": [],
+     "objects": [
+      "Pentagon_Extruded"
+     ],
+     "plane": "",
+     "props": {}
+    }
+   ],
+   "coord_systems": [
+    {
+     "name": "CS_Zoo",
+     "kind": "Relative",
+     "reference": "Global",
+     "props": {
+      "Mode": "Axis/Position",
+      "Origin": "0,0,-2*sp",
+      "XAxis": "cos(20deg),sin(20deg),0",
+      "YPoint": "-sin(20deg),cos(20deg),0",
+      "Phi": "0deg",
+      "Theta": "0deg",
+      "Psi": "0deg"
+     }
+    }
+   ],
+   "field_exprs": [],
+   "field_funcs": [],
+   "optimetrics": [],
+   "parametrics": [],
+   "working_cs": "Global",
+   "notes": "Every create command and every operation of the modeler on a grid of objects (pitch 'sp'), inside an explicit Region with a Radiation boundary, illuminated by an incident plane wave (monostatic and bistatic RCS). Also: groups, an object in a relative coordinate system, a suppressed history command, hidden / wireframe / non-model objects and project materials (Debye, anisotropic, ferrite, brass, project PEC)."
+  },
+  {
+   "name": "E_CoaxMonopole_PML",
+   "units": "cm",
+   "settings": {
+    "SolutionType": "Terminal",
+    "AutoOpen": "Off",
+    "AutoOpenBoundary": "Auto",
+    "AutoOpenPadding": "",
+    "FilterAirMargin": "12mm",
+    "MaterialOverride": "True"
+   },
+   "variables": {
+    "Lm": "c0/f_mono/4*0.95",
+    "rw": "0.065cm",
+    "ro": "0.15cm",
+    "Lc": "1cm",
+    "Rg": "8cm"
+   },
+   "objects": [
+    {
+     "name": "Monopole",
+     "history": [
+      {
+       "kind": "CreateCylinder",
+       "props": {
+        "CenterPosition": "0,0,0",
+        "Axis": "Z",
+        "Radius": "rw",
+        "Height": "Lm",
+        "NumberOfSegments": "0"
+       },
+       "suppressed": false
+      }
+     ],
+     "material": "copper",
+     "solve_inside": true,
+     "model": true,
+     "color": "#d98c4a",
+     "transparency": 0.0,
+     "wireframe": false,
+     "visible": true,
+     "consumed_by": null,
+     "group": "",
+     "orientation": "Global"
+    },
+    {
+     "name": "GroundDisc",
+     "history": [
+      {
+       "kind": "CreateCircle",
+       "props": {
+        "CenterPosition": "0,0,0",
+        "Axis": "Z",
+        "Radius": "Rg",
+        "NumberOfSegments": "0"
+       },
+       "suppressed": false
+      },
+      {
+       "kind": "Subtract",
+       "props": {
+        "Tools": "GroundHole",
+        "KeepOriginals": "False"
+       },
+       "suppressed": false
+      }
+     ],
+     "material": "vacuum",
+     "solve_inside": true,
+     "model": true,
+     "color": "#8080ff",
+     "transparency": 0.0,
+     "wireframe": false,
+     "visible": true,
+     "consumed_by": null,
+     "group": "",
+     "orientation": "Global"
+    },
+    {
+     "name": "GroundHole",
+     "history": [
+      {
+       "kind": "CreateCircle",
+       "props": {
+        "CenterPosition": "0,0,0",
+        "Axis": "Z",
+        "Radius": "ro",
+        "NumberOfSegments": "0"
+       },
+       "suppressed": false
+      }
+     ],
+     "material": "vacuum",
+     "solve_inside": true,
+     "model": true,
+     "color": "#8080ff",
+     "transparency": 0.0,
+     "wireframe": false,
+     "visible": true,
+     "consumed_by": "GroundDisc",
+     "group": "",
+     "orientation": "Global"
+    },
+    {
+     "name": "CoaxDielectric",
+     "history": [
+      {
+       "kind": "CreateCylinder",
+       "props": {
+        "CenterPosition": "0,0,-Lc",
+        "Axis": "Z",
+        "Radius": "ro",
+        "Height": "Lc",
+        "NumberOfSegments": "0"
+       },
+       "suppressed": false
+      },
+      {
+       "kind": "Subtract",
+       "props": {
+        "Tools": "CoaxInner",
+        "KeepOriginals": "False"
+       },
+       "suppressed": false
+      }
+     ],
+     "material": "Teflon (tm)",
+     "solve_inside": true,
+     "model": true,
+     "color": "#f0f0f0",
+     "transparency": 0.0,
+     "wireframe": false,
+     "visible": true,
+     "consumed_by": null,
+     "group": "",
+     "orientation": "Global"
+    },
+    {
+     "name": "CoaxInner",
+     "history": [
+      {
+       "kind": "CreateCylinder",
+       "props": {
+        "CenterPosition": "0,0,-Lc",
+        "Axis": "Z",
+        "Radius": "rw",
+        "Height": "Lc",
+        "NumberOfSegments": "0"
+       },
+       "suppressed": false
+      }
+     ],
+     "material": "vacuum",
+     "solve_inside": true,
+     "model": true,
+     "color": "#e6f2ff",
+     "transparency": 0.0,
+     "wireframe": false,
+     "visible": true,
+     "consumed_by": "CoaxDielectric",
+     "group": "",
+     "orientation": "Global"
+    },
+    {
+     "name": "CoaxPort",
+     "history": [
+      {
+       "kind": "CreateCircle",
+       "props": {
+        "CenterPosition": "0,0,-Lc",
+        "Axis": "Z",
+        "Radius": "ro",
+        "NumberOfSegments": "0"
+       },
+       "suppressed": false
+      }
+     ],
+     "material": "vacuum",
+     "solve_inside": true,
+     "model": true,
+     "color": "#8080ff",
+     "transparency": 0.0,
+     "wireframe": false,
+     "visible": true,
+     "consumed_by": null,
+     "group": "",
+     "orientation": "Global"
+    },
+    {
+     "name": "Air",
+     "history": [
+      {
+       "kind": "CreateBox",
+       "props": {
+        "Position": "-Rg-2cm,-Rg-2cm,0",
+        "XSize": "2*Rg+4cm",
+        "YSize": "2*Rg+4cm",
+        "ZSize": "Lm+6cm"
+       },
+       "suppressed": false
+      }
+     ],
+     "material": "air",
+     "solve_inside": true,
+     "model": true,
+     "color": "#e6f2ff",
+     "transparency": 0.9,
+     "wireframe": false,
+     "visible": true,
+     "consumed_by": null,
+     "group": "",
+     "orientation": "Global"
+    }
+   ],
+   "boundaries": [
+    {
+     "name": "GroundPlane",
+     "kind": "Perfect E",
+     "props": {
+      "InfGroundPlane": "True"
+     },
+     "faces": [],
+     "objects": [
+      "GroundDisc"
+     ],
+     "edges": [],
+     "enabled": true
+    },
+    {
+     "name": "CoaxOuterInner",
+     "kind": "Perfect E",
+     "props": {
+      "InfGroundPlane": "False"
+     },
+     "faces": [],
+     "objects": [
+      "CoaxDielectric"
+     ],
+     "edges": [],
+     "enabled": true
+    },
+    {
+     "name": "PML_Air",
+     "kind": "PML",
+     "props": {
+      "Thickness": "",
+      "Layers": "6",
+      "Exponent": "2",
+      "MaxAttenuation": "8"
+     },
+     "faces": [
+      {
+       "obj": "Air",
+       "face": 0,
+       "sig": [
+        -0.1,
+        1.2395537142388862e-18,
+        0.0656003543875,
+        -1.0,
+        0.0,
+        0.0,
+        0.026240141755
+       ]
+      },
+      {
+       "obj": "Air",
+       "face": 1,
+       "sig": [
+        0.1,
+        1.2395537142388862e-18,
+        0.0656003543875,
+        1.0,
+        0.0,
+        0.0,
+        0.026240141755
+       ]
+      },
+      {
+       "obj": "Air",
+       "face": 2,
+       "sig": [
+        8.014477237496196e-18,
+        -0.1,
+        0.0656003543875,
+        0.0,
+        -1.0,
+        0.0,
+        0.026240141755
+       ]
+      },
+      {
+       "obj": "Air",
+       "face": 3,
+       "sig": [
+        8.014477237496196e-18,
+        0.1,
+        0.0656003543875,
+        0.0,
+        1.0,
+        0.0,
+        0.026240141755
+       ]
+      },
+      {
+       "obj": "Air",
+       "face": 5,
+       "sig": [
+        -1.6263032587282557e-19,
+        4.0115480381963664e-18,
+        0.131200708775,
+        0.0,
+        0.0,
+        1.0,
+        0.04000000000000001
+       ]
+      }
+     ],
+     "objects": [],
+     "edges": [],
+     "enabled": true
+    }
+   ],
+   "excitations": [
+    {
+     "name": "Feed",
+     "kind": "Wave Port",
+     "props": {
+      "PortNumber": "1",
+      "NumberOfModes": "1",
+      "ModeType": "TEM",
+      "ImpedanceDefinition": "Zpv",
+      "Renormalize": "False",
+      "RenormImpedance": "50ohm",
+      "Deembed": "False",
+      "DeembedDistance": "0"
+     },
+     "faces": [],
+     "objects": [
+      "CoaxPort"
+     ],
+     "edges": [],
+     "enabled": true
+    }
+   ],
+   "mesh_ops": [
+    {
+     "name": "Mesh_MonopoleEdges",
+     "kind": "Length Based On Edges",
+     "props": {
+      "MaxLength": "0.3cm",
+      "RestrictElements": "False",
+      "MaxElements": "1000"
+     },
+     "faces": [],
+     "objects": [],
+     "edges": [
+      {
+       "obj": "Monopole",
+       "face": 0,
+       "sig": []
+      },
+      {
+       "obj": "Monopole",
+       "face": 2,
+       "sig": []
+      }
+     ],
+     "enabled": true
+    }
+   ],
+   "setups": [
+    {
+     "name": "Setup1",
+     "props": {
+      "Enabled": "True",
+      "SolutionFrequencyMode": "Single",
+      "Frequency": "f_mono",
+      "MultiFrequencies": "1GHz,2GHz",
+      "LowFrequency": "1GHz",
+      "HighFrequency": "10GHz",
+      "MaximumPasses": "8",
+      "MaximumDeltaS": "0.02",
+      "MaximumDeltaEnergy": "0.001",
+      "UseMatrixConvergence": "False",
+      "MaxDeltaMag": "0.02",
+      "MaxDeltaPhase": "2",
+      "LambdaRefinement": "True",
+      "LambdaTarget": "0.3333",
+      "UseFreeSpaceLambda": "False",
+      "PercentRefinement": "30",
+      "MaximumRefinement": "1000000",
+      "MinimumPasses": "2",
+      "MinimumConvergedPasses": "1",
+      "BasisOrder": "First Order",
+      "CurvedElements": "True",
+      "Solver": "Auto",
+      "ErrorInclusion": "50",
+      "RefinementRatio": "0.6",
+      "GrowthRate": "1.6",
+      "EnforceRefinementPercent": "True",
+      "RefinementMethod": "hzAURA (EMerge)",
+      "SaveFields": "True",
+      "Threads": "0",
+      "_BasisNames": "v2"
+     },
+     "sweeps": [
+      {
+       "name": "Sweep",
+       "props": {
+        "Enabled": "True",
+        "SweepType": "Fast",
+        "Distribution": "Linear Count",
+        "Start": "0.7GHz",
+        "Stop": "1.3GHz",
+        "Step": "0.1GHz",
+        "Count": "121",
+        "SamplesPerDecade": "20",
+        "Points": "1GHz,2GHz",
+        "SaveFields": "False",
+        "ErrorTolerance": "0.5",
+        "MaxSolutions": "250",
+        "Parallel": "False"
+       }
+      }
+     ],
+     "eigen": false
+    }
+   ],
+   "spheres": [
+    {
+     "name": "FF",
+     "props": {
+      "CoordinateSystem": "Global",
+      "PhiStart": "0deg",
+      "PhiStop": "360deg",
+      "PhiStep": "10deg",
+      "ThetaStart": "0deg",
+      "ThetaStop": "90deg",
+      "ThetaStep": "10deg"
+     }
+    }
+   ],
+   "reports": [
+    {
+     "name": "Terminal S11",
+     "kind": "Rectangular",
+     "solution": "Setup1 : Sweep",
+     "traces": [
+      "dB(S(1,1))",
+      "re(Z(1,1))",
+      "im(Z(1,1))"
+     ],
+     "props": {}
+    },
+    {
+     "name": "Elevation Pattern",
+     "kind": "Radiation Pattern",
+     "solution": "Setup1 : LastAdaptive",
+     "traces": [
+      "dB(DirTotal)"
+     ],
+     "props": {
+      "cut": "Phi",
+      "cut_value": "0",
+      "sphere": "FF"
+     }
+    }
+   ],
+   "field_plots": [
+    {
+     "name": "E_XZ",
+     "quantity": "Mag_E",
+     "solution": "Setup1 : LastAdaptive",
+     "faces": [],
+     "objects": [],
+     "plane": "XZ@0",
+     "props": {}
+    }
+   ],
+   "coord_systems": [],
+   "field_exprs": [],
+   "field_funcs": [],
+   "optimetrics": [],
+   "parametrics": [],
+   "working_cs": "Global",
+   "notes": "Terminal solution type, units cm: a quarter-wave monopole fed by a coaxial line with a wave port under a circular ground disc; explicit air region with PML on its faces, a Perfect E infinite ground plane, Length Based On Edges mesh refinement and a far-field sphere."
+  },
+  {
+   "name": "F_UnitCell_Periodic",
+   "units": "mm",
+   "settings": {
+    "SolutionType": "Modal",
+    "AutoOpen": "Off",
+    "AutoOpenBoundary": "Auto",
+    "AutoOpenPadding": "",
+    "FilterAirMargin": "12mm",
+    "MaterialOverride": "True"
+   },
+   "variables": {
+    "px": "15mm",
+    "py": "15mm",
+    "hz": "30mm",
+    "ls": "11mm",
+    "ws": "1.5mm"
+   },
+   "objects": [
+    {
+     "name": "Cell",
+     "history": [
+      {
+       "kind": "CreateBox",
+       "props": {
+        "Position": "-px/2,-py/2,0",
+        "XSize": "px",
+        "YSize": "py",
+        "ZSize": "hz"
+       },
+       "suppressed": false
+      }
+     ],
+     "material": "vacuum",
+     "solve_inside": true,
+     "model": true,
+     "color": "#e6f2ff",
+     "transparency": 0.85,
+     "wireframe": false,
+     "visible": true,
+     "consumed_by": null,
+     "group": "",
+     "orientation": "Global"
+    },
+    {
+     "name": "Spacer",
+     "history": [
+      {
+       "kind": "CreateBox",
+       "props": {
+        "Position": "-px/2,-py/2,0",
+        "XSize": "px",
+        "YSize": "py",
+        "ZSize": "1.52mm"
+       },
+       "suppressed": false
+      }
+     ],
+     "material": "Rogers RO3003 (tm)",
+     "solve_inside": true,
+     "model": true,
+     "color": "#c8b090",
+     "transparency": 0.0,
+     "wireframe": false,
+     "visible": true,
+     "consumed_by": null,
+     "group": "",
+     "orientation": "Global"
+    },
+    {
+     "name": "CrossA",
+     "history": [
+      {
+       "kind": "CreateRectangle",
+       "props": {
+        "Position": "-ls/2,-ws/2,1.52mm",
+        "Axis": "Z",
+        "XSize": "ls",
+        "YSize": "ws",
+        "ZSize": "1"
+       },
+       "suppressed": false
+      },
+      {
+       "kind": "Unite",
+       "props": {
+        "Tools": "CrossB",
+        "KeepOriginals": "False"
+       },
+       "suppressed": false
+      }
+     ],
+     "material": "pec",
+     "solve_inside": true,
+     "model": true,
+     "color": "#8080ff",
+     "transparency": 0.0,
+     "wireframe": false,
+     "visible": true,
+     "consumed_by": null,
+     "group": "",
+     "orientation": "Global"
+    },
+    {
+     "name": "CrossB",
+     "history": [
+      {
+       "kind": "CreateRectangle",
+       "props": {
+        "Position": "-ws/2,-ls/2,1.52mm",
+        "Axis": "Z",
+        "XSize": "ws",
+        "YSize": "ls",
+        "ZSize": "1"
+       },
+       "suppressed": false
+      }
+     ],
+     "material": "vacuum",
+     "solve_inside": true,
+     "model": true,
+     "color": "#8080ff",
+     "transparency": 0.0,
+     "wireframe": false,
+     "visible": true,
+     "consumed_by": "CrossA",
+     "group": "",
+     "orientation": "Global"
+    }
+   ],
+   "boundaries": [
+    {
+     "name": "CrossPEC",
+     "kind": "Perfect E",
+     "props": {
+      "InfGroundPlane": "False"
+     },
+     "faces": [],
+     "objects": [
+      "CrossA"
+     ],
+     "edges": [],
+     "enabled": true
+    },
+    {
+     "name": "Master_X",
+     "kind": "Primary",
+     "props": {
+      "UVector": "-px/2,-py/2,0;-px/2,py/2,0"
+     },
+     "faces": [
+      {
+       "obj": "Cell",
+       "face": 0,
+       "sig": [
+        -0.0075,
+        2.823443157514335e-19,
+        0.015,
+        -1.0,
+        0.0,
+        0.0,
+        0.00044999999999999993
+       ]
+      }
+     ],
+     "objects": [],
+     "edges": [],
+     "enabled": true
+    },
+    {
+     "name": "Slave_X",
+     "kind": "Secondary",
+     "props": {
+      "Primary": "Master_X",
+      "UVector": "px/2,-py/2,0;px/2,py/2,0",
+      "PhaseDelay": "0deg"
+     },
+     "faces": [
+      {
+       "obj": "Cell",
+       "face": 1,
+       "sig": [
+        0.0075,
+        2.823443157514335e-19,
+        0.015,
+        1.0,
+        0.0,
+        0.0,
+        0.00044999999999999993
+       ]
+      }
+     ],
+     "objects": [],
+     "edges": [],
+     "enabled": true
+    },
+    {
+     "name": "Master_Y",
+     "kind": "Primary",
+     "props": {
+      "UVector": "-px/2,-py/2,0;px/2,-py/2,0"
+     },
+     "faces": [
+      {
+       "obj": "Cell",
+       "face": 2,
+       "sig": [
+        3.388131789017202e-19,
+        -0.0075,
+        0.015,
+        0.0,
+        -1.0,
+        0.0,
+        0.00044999999999999993
+       ]
+      }
+     ],
+     "objects": [],
+     "edges": [],
+     "enabled": true
+    },
+    {
+     "name": "Slave_Y",
+     "kind": "Secondary",
+     "props": {
+      "Primary": "Master_Y",
+      "UVector": "-px/2,py/2,0;px/2,py/2,0",
+      "PhaseDelay": "0deg"
+     },
+     "faces": [
+      {
+       "obj": "Cell",
+       "face": 3,
+       "sig": [
+        3.388131789017202e-19,
+        0.0075,
+        0.015,
+        0.0,
+        1.0,
+        0.0,
+        0.00044999999999999993
+       ]
+      }
+     ],
+     "objects": [],
+     "edges": [],
+     "enabled": true
+    },
+    {
+     "name": "Backplane",
+     "kind": "Perfect E",
+     "props": {
+      "InfGroundPlane": "False"
+     },
+     "faces": [
+      {
+       "obj": "Cell",
+       "face": 4,
+       "sig": [
+        1.0842021724855047e-19,
+        3.388131789017202e-19,
+        0.0,
+        0.0,
+        0.0,
+        -1.0,
+        0.00022499999999999997
+       ]
+      }
+     ],
+     "objects": [],
+     "edges": [],
+     "enabled": true
+    }
+   ],
+   "excitations": [
+    {
+     "name": "FP1",
+     "kind": "Floquet Port",
+     "props": {
+      "PortNumber": "1",
+      "NumberOfModes": "2",
+      "Permittivity": "1"
+     },
+     "faces": [
+      {
+       "obj": "Cell",
+       "face": 5,
+       "sig": [
+        1.0842021724855047e-19,
+        3.388131789017202e-19,
+        0.03,
+        0.0,
+        0.0,
+        1.0,
+        0.00022499999999999997
+       ]
+      }
+     ],
+     "objects": [],
+     "edges": [],
+     "enabled": true
+    }
+   ],
+   "mesh_ops": [],
+   "setups": [
+    {
+     "name": "Setup1",
+     "props": {
+      "Enabled": "True",
+      "SolutionFrequencyMode": "Single",
+      "Frequency": "10GHz",
+      "MultiFrequencies": "1GHz,2GHz",
+      "LowFrequency": "1GHz",
+      "HighFrequency": "10GHz",
+      "MaximumPasses": "6",
+      "MaximumDeltaS": "0.02",
+      "MaximumDeltaEnergy": "0.001",
+      "UseMatrixConvergence": "False",
+      "MaxDeltaMag": "0.02",
+      "MaxDeltaPhase": "2",
+      "LambdaRefinement": "True",
+      "LambdaTarget": "0.3333",
+      "UseFreeSpaceLambda": "False",
+      "PercentRefinement": "30",
+      "MaximumRefinement": "1000000",
+      "MinimumPasses": "2",
+      "MinimumConvergedPasses": "1",
+      "BasisOrder": "First Order",
+      "CurvedElements": "True",
+      "Solver": "Auto",
+      "ErrorInclusion": "50",
+      "RefinementRatio": "0.6",
+      "GrowthRate": "1.6",
+      "EnforceRefinementPercent": "True",
+      "RefinementMethod": "hzAURA (EMerge)",
+      "SaveFields": "True",
+      "Threads": "0",
+      "_BasisNames": "v2"
+     },
+     "sweeps": [
+      {
+       "name": "Sweep",
+       "props": {
+        "Enabled": "True",
+        "SweepType": "Interpolating",
+        "Distribution": "Linear Count",
+        "Start": "6GHz",
+        "Stop": "14GHz",
+        "Step": "0.1GHz",
+        "Count": "161",
+        "SamplesPerDecade": "20",
+        "Points": "1GHz,2GHz",
+        "SaveFields": "False",
+        "ErrorTolerance": "0.5",
+        "MaxSolutions": "250",
+        "Parallel": "False"
+       }
+      }
+     ],
+     "eigen": false
+    }
+   ],
+   "spheres": [],
+   "reports": [],
+   "field_plots": [],
+   "coord_systems": [],
+   "field_exprs": [],
+   "field_funcs": [],
+   "optimetrics": [],
+   "parametrics": [],
+   "working_cs": "Global",
+   "notes": "Periodic unit cell with Primary / Secondary boundaries and a Floquet port. These can be assigned and saved but are not yet passed to the solver (Validation Check warns): the design is here to test the data model, the dialogs and the MCP server."
+  }
+ ],
+ "variables": {
+  "f0": "2.45GHz",
+  "er_lam": "3.55",
+  "f_mono": "1GHz"
+ },
+ "materials": [
+  {
+   "name": "Showcase_Laminate_DS",
+   "permittivity": "er_lam",
+   "permeability": "1",
+   "conductivity": "0",
+   "loss_tangent": "0.0027",
+   "magnetic_loss_tangent": "0",
+   "color": "#c8a060",
+   "pec": false,
+   "library": "Project",
+   "description": "Laminate with Djordjevic-Sarkar dispersion (values at 10 GHz)",
+   "dispersion": "Djordjevic-Sarkar",
+   "measured_frequency": "10GHz",
+   "eps_static": "4.6",
+   "eps_infinity": "4.2",
+   "relaxation_frequency": "1GHz",
+   "anisotropic": false,
+   "permittivity_tensor": "",
+   "permeability_tensor": "",
+   "loss_tangent_tensor": "",
+   "emsutil_key": ""
+  },
+  {
+   "name": "Showcase_Debye_Absorber",
+   "permittivity": "6",
+   "permeability": "1",
+   "conductivity": "0",
+   "loss_tangent": "0.05",
+   "magnetic_loss_tangent": "0",
+   "color": "#556b2f",
+   "pec": false,
+   "library": "Project",
+   "description": "Debye relaxation material",
+   "dispersion": "Debye",
+   "measured_frequency": "1GHz",
+   "eps_static": "12",
+   "eps_infinity": "4",
+   "relaxation_frequency": "2GHz",
+   "anisotropic": false,
+   "permittivity_tensor": "",
+   "permeability_tensor": "",
+   "loss_tangent_tensor": "",
+   "emsutil_key": ""
+  },
+  {
+   "name": "Showcase_Anisotropic",
+   "permittivity": "9.4",
+   "permeability": "1",
+   "conductivity": "0",
+   "loss_tangent": "0.0002",
+   "magnetic_loss_tangent": "0",
+   "color": "#9fc5e8",
+   "pec": false,
+   "library": "Project",
+   "description": "Uniaxial crystal (diagonal tensor)",
+   "dispersion": "None",
+   "measured_frequency": "1GHz",
+   "eps_static": "4.6",
+   "eps_infinity": "4.2",
+   "relaxation_frequency": "1GHz",
+   "anisotropic": true,
+   "permittivity_tensor": "9.4,9.4,11.6",
+   "permeability_tensor": "1,1,1",
+   "loss_tangent_tensor": "0.0002,0.0002,0.0003",
+   "emsutil_key": ""
+  },
+  {
+   "name": "Showcase_Ferrite",
+   "permittivity": "13",
+   "permeability": "40",
+   "conductivity": "0",
+   "loss_tangent": "0.0005",
+   "magnetic_loss_tangent": "0.02",
+   "color": "#3d3d3d",
+   "pec": false,
+   "library": "Project",
+   "description": "Lossy magnetic material",
+   "dispersion": "None",
+   "measured_frequency": "1GHz",
+   "eps_static": "4.6",
+   "eps_infinity": "4.2",
+   "relaxation_frequency": "1GHz",
+   "anisotropic": false,
+   "permittivity_tensor": "",
+   "permeability_tensor": "",
+   "loss_tangent_tensor": "",
+   "emsutil_key": ""
+  },
+  {
+   "name": "Showcase_Brass",
+   "permittivity": "1",
+   "permeability": "1",
+   "conductivity": "15900000",
+   "loss_tangent": "0",
+   "magnetic_loss_tangent": "0",
+   "color": "#c9a227",
+   "pec": false,
+   "library": "Project",
+   "description": "Conductor",
+   "dispersion": "None",
+   "measured_frequency": "1GHz",
+   "eps_static": "4.6",
+   "eps_infinity": "4.2",
+   "relaxation_frequency": "1GHz",
+   "anisotropic": false,
+   "permittivity_tensor": "",
+   "permeability_tensor": "",
+   "loss_tangent_tensor": "",
+   "emsutil_key": ""
+  },
+  {
+   "name": "Showcase_PEC",
+   "permittivity": "1",
+   "permeability": "1",
+   "conductivity": "0",
+   "loss_tangent": "0",
+   "magnetic_loss_tangent": "0",
+   "color": "#ffd700",
+   "pec": true,
+   "library": "Project",
+   "description": "Perfect conductor (project copy)",
+   "dispersion": "None",
+   "measured_frequency": "1GHz",
+   "eps_static": "4.6",
+   "eps_infinity": "4.2",
+   "relaxation_frequency": "1GHz",
+   "anisotropic": false,
+   "permittivity_tensor": "",
+   "permeability_tensor": "",
+   "loss_tangent_tensor": "",
+   "emsutil_key": ""
+  }
+ ],
+ "format": "hertzon-project",
+ "version": 2
+}

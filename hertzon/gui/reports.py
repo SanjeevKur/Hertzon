@@ -15,7 +15,7 @@ from PySide6.QtWidgets import (QWidget, QHBoxLayout, QVBoxLayout, QComboBox, QLi
                                QTableWidget, QTableWidgetItem, QFileDialog, QSplitter, QFormLayout, QLineEdit,
                                QAbstractItemView, QHeaderView, QMenu, QApplication, QDialog, QDialogButtonBox,
                                QCheckBox, QInputDialog, QColorDialog, QDoubleSpinBox, QPlainTextEdit, QMessageBox,
-                               QListWidgetItem)
+                               QListWidgetItem, QScrollArea, QFrame)
 
 from ..model.design import Report
 from ..solver.results import ResultStore, results_dir
@@ -57,6 +57,104 @@ def ff_trace(tr: str) -> tuple[str, str]:
 
 
 NF_QUANTITIES = ["NearETotal", "NearEX", "NearEY", "NearEZ", "NearHTotal", "NearHX", "NearHY", "NearHZ"]
+
+
+# units of the report quantities (linear); dB of them is "dB", of an area "dBsm"
+_QTY_UNITS = {"S": "", "Y": "S", "Z": "Ω", "VSWR": "", "Gamma": "", "Freq": "Hz", "F": "Hz",
+              "RadiatedPower": "W", "AcceptedPower": "W", "IncidentPower": "W", "MaxU": "W/sr",
+              "ThetaAtMax": "deg", "PhiAtMax": "deg"}
+_PREFIX_UNITS = (("rE", "V"), ("NearE", "V/m"), ("NearH", "A/m"), ("BistaticRCS", "m²"), ("MonostaticRCS", "m²"))
+
+
+def trace_unit(doc, trace: str) -> str | None:
+    """Unit of what a trace plots: 'dB', 'Ω', 'W', 'V/m', '' (dimensionless), None when unknown (an output
+    variable, a sum of different units)."""
+    import ast
+    expr = split_trace(trace)[0]
+    try:
+        tree = ast.parse(expr, mode="eval").body
+    except SyntaxError:
+        return None
+    eqs = {e.name: e.expr for e in doc.design.field_exprs}
+
+    def name_unit(n):
+        if n in eqs:
+            from ..post.calc import lang as L
+            from .calc_bridge import make_env
+            try:
+                return L.unit_label(L.analyze(n, make_env(doc)))
+            except L.CalcError:
+                return None
+        if n in _QTY_UNITS:
+            return _QTY_UNITS[n]
+        for pre, u in _PREFIX_UNITS:
+            if n.startswith(pre):
+                return u
+        if n in ANTENNA_QUANTITIES or n.startswith(("Gain", "Dir", "RealizedGain", "AxialRatio", "Peak")) \
+                or n in ("RadiationEfficiency", "FrontToBackRatio"):
+            return ""
+        return None
+
+    def unit(node):
+        if isinstance(node, ast.Constant):
+            return ""
+        if isinstance(node, ast.Name):
+            return name_unit(node.id)
+        if isinstance(node, ast.UnaryOp):
+            return unit(node.operand)
+        if isinstance(node, ast.BinOp):
+            a, b = unit(node.left), unit(node.right)
+            if isinstance(node.op, (ast.Add, ast.Sub)):
+                return a if a == b else None
+            if isinstance(node.op, (ast.Mult, ast.Div)):
+                if b == "":
+                    return a
+                if a == "" and isinstance(node.op, ast.Mult):
+                    return b
+            return None
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
+            fn, args = node.func.id, node.args
+            if fn in ("S", "Y", "Z", "VSWR"):
+                return _QTY_UNITS[fn]
+            if fn == "GroupDelay":
+                return "s"
+            if not args:
+                return None
+            inner = unit(args[0])
+            if fn in ("dB", "dB10", "dB20"):
+                return "dBsm" if inner == "m²" else "dB"
+            if fn == "dBsm":
+                return "dBsm"
+            if fn in ("ang_deg", "phase_deg"):
+                return "deg"
+            if fn in ("ang_rad", "phase", "angle"):
+                return "rad"
+            if fn in ("mag", "abs", "re", "im", "real", "imag", "conj"):
+                return inner
+        return None
+    return unit(tree)
+
+
+def unit_label(units: list) -> str:
+    """Axis label from the units of its traces: '[dB]', '[Ω] / [S]'; '' when unknown or dimensionless."""
+    known = [u for u in dict.fromkeys(units) if u]
+    return " / ".join(f"[{u}]" for u in known)
+
+
+def with_unit(doc, trace: str) -> str:
+    """'dB(S(1,1)) [dB]': a trace name with its unit (table headers)."""
+    u = trace_unit(doc, trace)
+    return f"{trace} [{u}]" if u else trace
+
+
+def is_fields_report(doc, report: Report) -> bool:
+    """A Fields report (equations computed from the fields), also one made before reports had the flag."""
+    if report.kind not in ("Rectangular", "Data Table"):
+        return False
+    if report.props.get("fields"):
+        return True
+    from .calc_bridge import field_names_in, uses_fields
+    return bool(report.traces) and uses_fields(doc, field_names_in(doc.design, split_trace(report.traces[0])[0]))
 
 
 def solution_list(doc) -> list[str]:
@@ -519,8 +617,26 @@ class ReportWindow(QWidget):
                 e.editingFinished.connect(self._save_nf)
                 form.addRow(label, e)
                 self.nf[key] = e
+        elif is_fields_report(doc, report):
+            # Fields report: the equations computed from the fields, over the frequencies with saved fields
+            from .fields import field_solutions
+            sols = field_solutions(doc)
+            if sols:
+                self.sol.blockSignals(True)
+                self.sol.clear()
+                self.sol.addItems(sols)
+                self.sol.setCurrentText(report.solution if report.solution in sols else sols[0])
+                self.sol.blockSignals(False)
+                report.solution = self.sol.currentText()
+            self.cat.addItem("Equations")
+            self.func.addItems(FUNCS + ["<none>"])
         else:
             self.cat.addItems(CATEGORIES)
+            if report.kind in ("Rectangular", "Data Table"):
+                self.cat.addItem("Equations")       # equations of S parameters (Fields Calculator)
+                from .calc_bridge import field_names_in
+                if report.traces and field_names_in(doc.design, report.traces[0]):
+                    self.cat.setCurrentText("Equations")
             self.func.addItems(FUNCS + ["<none>"])
             self.cat.currentTextChanged.connect(self._fill_qty)
         form.addRow("Category:", self.cat)
@@ -577,7 +693,15 @@ class ReportWindow(QWidget):
                 hint.setWordWrap(True)
                 hint.setStyleSheet("color:#7a6a00")
                 ll.addWidget(hint)
-        split.addWidget(left)
+        # the trace editor scrolls instead of setting a minimum height: its ~430 px (more with display
+        # scaling) would otherwise become the main window's minimum and push a maximized window off screen
+        scroll = QScrollArea()
+        scroll.setWidget(left)
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        scroll.setMinimumWidth(left.minimumSizeHint().width() + scroll.verticalScrollBar().sizeHint().width())
+        split.addWidget(scroll)
         right = QWidget()
         rl = QVBoxLayout(right)
         if report.kind in ("Data Table", "Monostatic RCS Table", "Antenna Parameters Table"):
@@ -609,6 +733,7 @@ class ReportWindow(QWidget):
             rl.addWidget(self.mtable)
         split.addWidget(right)
         split.setSizes([260, 800])
+        split.setCollapsible(0, False)
         self._fill_qty()
         self.refresh()
 
@@ -645,7 +770,11 @@ class ReportWindow(QWidget):
         self.qty.clear()
         n = self._ports()
         cat = self.cat.currentText()
-        if cat == "VSWR":
+        if cat == "Equations":
+            from .calc_bridge import value_names
+            self.qty.addItems(value_names(self.doc, fields=is_fields_report(self.doc, self.report)))
+            self.func.setCurrentText("<none>")       # values in their own unit (W, V, J, ...)
+        elif cat == "VSWR":
             self.qty.addItems([f"VSWR({i})" for i in range(1, n + 1)])
         elif cat == "Gamma":
             self.qty.addItems([f"S({i},{i})" for i in range(1, n + 1)])
@@ -1233,10 +1362,38 @@ class ReportWindow(QWidget):
                 raise RuntimeError(f"No data for '{tr}'")
             return f, y
         expr, sol = split_trace(tr)
+        from .calc_bridge import field_names_in
+        if field_names_in(self.doc.design, expr):
+            return self._field_trace(expr, sol, root)
         data = self._sol_data(sol, root)
         xs, _, _ = x_axis(data)
         v = eval_expr(data, expr, self._outvars())
         return xs, (np.real(v) if np.iscomplexobj(v) else v.astype(float))
+
+    def _field_trace(self, expr: str, sol: str | None, root=None):
+        """A trace with values of the Fields Calculator: each named value at every frequency with saved
+        fields (S, Y, Z of the trace are taken at those frequencies)."""
+        from .calc_bridge import field_names_in, over_frequency
+        cache = self.__dict__.setdefault("_cache", {})
+        key = sol or self.sol.currentText()
+        st, _, data = load_solution(self.doc, key, root)
+        port = int(self.report.props.get("port", "1") or 1)
+        names = dict(_FUNCS)
+        f = None
+        for n in field_names_in(self.doc.design, expr):
+            ck = ("field", n, key, root, port)
+            if ck not in cache:
+                cache[ck] = over_frequency(self.doc, n, key, port, store=st if root is not None else None)
+            f, names[n] = cache[ck]
+        names.update({"Freq": f, "pi": np.pi, "j": 1j})
+        if data is not None and re.search(r"\b(S|Y|Z|VSWR)\s*\(", expr):
+            idx = [int(np.argmin(np.abs(data["freq"] - x))) for x in f]
+            sub = {**data, "freq": data["freq"][idx], **{k: v[idx] for k, v in data.items()
+                                                       if isinstance(v, np.ndarray) and v.shape[:1] == data["freq"].shape}}
+            for k in ("S", "Y", "Z", "VSWR"):
+                names[k] = (lambda k=k: lambda *a: eval_expr(sub, f"{k}({','.join(map(str, a))})"))()
+        v = np.asarray(_ast_eval(expr, names)) * np.ones(len(f))
+        return f / 1e9, (np.real(v) if np.iscomplexobj(v) else v.astype(float))
 
     def _sol_data(self, sol: str | None, root=None):
         cache = self.__dict__.setdefault("_cache", {})
@@ -1313,6 +1470,13 @@ class ReportWindow(QWidget):
         if data is None:
             raise RuntimeError(f"No solution data for '{self.sol.currentText()}'")
         return st, sol, data
+
+    def _units_label(self, traces: list[str]) -> str:
+        """y axis label: the unit of the traces ('[dB]'), the trace itself when it is the only one."""
+        units = [trace_unit(self.doc, t) for t in traces]
+        if len(traces) == 1 and units[0]:
+            return f"{traces[0]} [{units[0]}]"
+        return unit_label(units)
 
     def _draw_markers(self, ax, curves: list, unit: str, xlabel: str) -> None:
         """markers m1, m2, ... (delta markers relative to m1, bandwidth) on the curves
@@ -1425,10 +1589,11 @@ class ReportWindow(QWidget):
             ax.xaxis.set_major_locator(MaxNLocator(integer=True))
         self._apply_axes(ax, ax2)
         ax.set_xlabel(p.get("xlabel") or xlabel)
-        if p.get("ylabel"):
-            ax.set_ylabel(p["ylabel"])
-        if ax2 is not None and p.get("y2label"):
-            ax2.set_ylabel(p["y2label"])
+        y1 = [t for t in self.report.traces if not self._style(t).get("y2")]
+        y2 = [t for t in self.report.traces if self._style(t).get("y2")]
+        ax.set_ylabel(p.get("ylabel") or self._units_label(y1))
+        if ax2 is not None:
+            ax2.set_ylabel(p.get("y2label") or self._units_label(y2))
         ax.grid(True, alpha=0.4)
         if p.get("legend", "True") == "True":
             hs, ls = ax.get_legend_handles_labels()
@@ -1543,6 +1708,7 @@ class ReportWindow(QWidget):
             y = apply_func("dB" if func == "dB" else func, v) if func != "mag" else np.abs(v)
             ax.plot(x, y, label=tr)
         ax.set_xlabel(f"Distance along line [{self.doc.design.units}]")
+        ax.set_ylabel(self.report.props.get("ylabel") or self._units_label(self.report.traces))
         ax.grid(True, alpha=0.4)
         ax.legend(loc="best", fontsize=8)
         ax.set_title(f"{self.report.name}   ({self.sol.currentText()})", fontsize=10)
@@ -1600,8 +1766,10 @@ class ReportWindow(QWidget):
         st, sol, data = self._data()
         cols = self._family_columns()
         f, xlabel, _ = x_axis(data)
+        if self.report.traces and len(cols) and len(cols[0][1]) != len(f):
+            f = self._trace_xy(self.report.traces[0], self._variations()[0][1])[0]   # field values: their freqs
         self.table.setColumnCount(1 + len(cols))
-        self.table.setHorizontalHeaderLabels([xlabel] + [c[0] for c in cols])
+        self.table.setHorizontalHeaderLabels([xlabel] + [with_unit(self.doc, c[0]) for c in cols])
         self.table.setRowCount(len(f))
         for r in range(len(f)):
             self.table.setItem(r, 0, QTableWidgetItem(f"{f[r]:.6g}"))
@@ -1676,7 +1844,9 @@ class ReportWindow(QWidget):
             grid.point_data[tr] = vv.ravel(order="F")
             cam = self.p3.camera_position if getattr(self, "_p3_drawn", False) else None
             self.p3.clear()
-            self.p3.add_mesh(grid, scalars=tr, cmap="jet", show_edges=False)
+            u = trace_unit(self.doc, tr)
+            self.p3.add_mesh(grid, scalars=tr, cmap="jet", show_edges=False,
+                             scalar_bar_args={"title": f"{tr} [{u}]" if u else tr})
             self.p3.add_axes()
             if cam is None:                 # first draw; a redraw (Edit Sources, new solution) keeps the view
                 self.p3.reset_camera()
@@ -1713,9 +1883,13 @@ class ReportWindow(QWidget):
             self._apply_axes(ax, None)
             if self.report.props.get("xlabel"):
                 ax.set_xlabel(self.report.props["xlabel"])
-            if self.report.props.get("ylabel"):
-                ax.set_ylabel(self.report.props["ylabel"])
+            ax.set_ylabel(self.report.props.get("ylabel") or self._units_label(self.report.traces))
             ax.grid(True, alpha=0.4)
+        else:
+            units = [trace_unit(self.doc, t) for t in self.report.traces]
+            if units and units[0] and all(u == units[0] for u in units):
+                u = units[0]                    # the radial axis: values with their unit, e.g. -10 dB
+                ax.yaxis.set_major_formatter(FuncFormatter(lambda v, _p: f"{v:g} {u}"))
         ax.legend(loc="best" if rect else "lower right", fontsize=8)
         ax.set_title(f"{self.report.name}: {cut} = {val:g} deg, {ftxt}", fontsize=10)
         self.canvas.draw_idle()
@@ -1745,4 +1919,5 @@ class ReportWindow(QWidget):
         fc = self._family_columns()
         arr = np.column_stack([data["freq"]] + [c[1] for c in fc])
         xh = "Pass" if data.get("xaxis") == "Pass" else "Freq [Hz]"
-        np.savetxt(path, arr, delimiter=",", header=",".join([xh] + [c[0] for c in fc]), comments="")
+        np.savetxt(path, arr, delimiter=",", header=",".join([xh] + [with_unit(self.doc, c[0]) for c in fc]),
+                   comments="")

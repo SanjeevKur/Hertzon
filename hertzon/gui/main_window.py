@@ -62,6 +62,7 @@ def _point_triangle_dist(P, A, B, C):
 
 AXIS_OF_PLANE = {"XY": "Z", "YZ": "X", "XZ": "Y", "ZX": "Y"}
 FILE_FILTER = "Hertzon project (*.hzn)"
+EQ_FILTER = "Hertzon equations (*.json)"
 EXAMPLES_DIR = Path(__file__).resolve().parents[2] / "examples"   # next to the package in the repo and installs
 
 
@@ -92,6 +93,9 @@ class MainWindow(QMainWindow):
         self.tabs = QTabWidget()
         self.tabs.setTabsClosable(True)
         self.tabs.tabCloseRequested.connect(self._close_tab)
+        self.tabs.currentChanged.connect(self._sync_equation_page)
+        self.calc_window = None                  # the Equations tab (Fields Calculator), made when first opened
+        self._eq_page: int | None = None         # its page of the ribbon, shown while the tab is open
         self.view = ModelerView(self.doc)
         self.model_tree = ModelTree(self.doc)
         split = QSplitter()
@@ -430,6 +434,7 @@ class MainWindow(QMainWindow):
         pf = fm.addMenu("Plot Fields")
         for q in F.QUANTITIES:
             pf.addAction(q, lambda _=False, q=q: self.plot_fields(q))
+        fm.addAction("Fields Calculator...", lambda: self.fields_calculator())
         fm.addAction("Animate Last Field Plot", self.toggle_animation)
         fm.addAction("Export Animation as GIF...", self.export_animation_gif)
         fm.addAction("Clear Field Overlays", self.clear_overlays)
@@ -464,6 +469,8 @@ class MainWindow(QMainWindow):
         m.addAction(self.a_help)
         m.addAction("About Hertzon", self.about)
         m.addAction("Feature Overview", self.show_feature_matrix)
+        m.addSeparator()
+        m.addAction("Check for Updates...", self.check_for_updates)
 
     def _toolbars(self) -> None:
         """Ribbon like the reference tool: Desktop / View / Draw / Model / Simulation / Results."""
@@ -792,12 +799,15 @@ class MainWindow(QMainWindow):
         g.large("Mag E", "field", lambda: self.plot_fields("Mag_E"))
         g.small("Vector E", "field_vec", lambda: self.plot_fields("Vector_E"))
         g.small("Mag H", "field_h", lambda: self.plot_fields("Mag_H"))
-        g.small("More", "field", menu=[(q, (lambda q=q: self.plot_fields(q))) for q in F.QUANTITIES])
+        b = g.small("More", "field", menu=[])
+        b.menu().aboutToShow.connect(lambda mm=b.menu(): self._fill_plot_fields(mm))
         g.small("Animate", "animate", self.toggle_animation)
         g.small("Modify Plot", "variables", lambda: self._on_current_plot(self.modify_field_plot))
         g.small("Attributes", "options", lambda: self._on_current_plot(self.field_plot_attributes))
         g.small("Clear", "clear", self.clear_overlays)
         g.small("Plot Mesh", "plot_mesh", lambda: self.plot_mesh())
+        g.large("Calculator", "calculator", lambda: self.fields_calculator(),
+                tip="Fields Calculator: equations of E, H and J in the Equations tab")
         rb.setCurrentIndex(2)
 
     def _connect(self) -> None:
@@ -2396,14 +2406,13 @@ class MainWindow(QMainWindow):
         self.doc.commit("model")         # integration lines follow by themselves (model.objframe)
 
     def chamfer(self) -> None:
-        if self.doc.selection_mode != "edge" or not self.doc.selection:
-            QMessageBox.information(self, "Chamfer", "Select edges (press E) of one solid first.")
-            return
-        obj = self.doc.selection[0].obj
-        edges = ",".join(str(s.index) for s in self.doc.selection if s.obj == obj)
-        r, ok = QInputDialog.getText(self, "Chamfer", "Distance:", text="0.5")
-        if ok:
-            self._edge_op("Chamfer", {"Distance": r, "Edges": edges}, obj)
+        """Solids: chamfer along the selected edges. Sheets: a chamfer at each selected vertex (corner)."""
+        sel = self._edge_or_vertex_selection("Chamfer", "chamfered")
+        if sel:
+            obj, key, ids = sel
+            r, ok = QInputDialog.getText(self, "Chamfer", "Distance:", text="0.5")
+            if ok:
+                self._edge_op("Chamfer", {"Distance": r, key: ids}, obj)
 
     def _edge_op(self, kind: str, values: dict, obj: str) -> None:
         """Fillet/Chamfer: if the object can not be built with the new operation, it stays unchanged."""
@@ -2526,14 +2535,35 @@ class MainWindow(QMainWindow):
         self.doc.commit("model")
 
     def fillet(self) -> None:
-        if self.doc.selection_mode != "edge" or not self.doc.selection:
-            QMessageBox.information(self, "Fillet", "Select edges (press E) of one solid or sheet first.")
-            return
+        """Solids: fillet along the selected edges. Sheets: a fillet at each selected vertex (corner)."""
+        sel = self._edge_or_vertex_selection("Fillet", "filleted")
+        if sel:
+            obj, key, ids = sel
+            r, ok = QInputDialog.getText(self, "Fillet", "Radius:", text="0.5")
+            if ok:
+                self._edge_op("Fillet", {"Radius": r, key: ids}, obj)
+
+    def _edge_or_vertex_selection(self, title: str, done: str):
+        """Fillet/Chamfer: (object, "Edges" or "Vertices", indices) of the selection, edges of a solid or
+        vertices of a sheet; None (with a hint) otherwise."""
+        mode = self.doc.selection_mode
+        if mode not in ("edge", "vertex") or not self.doc.selection:
+            QMessageBox.information(self, title, "Select edges (press E) of a solid or vertices (press V) "
+                                                 "of a sheet first.")
+            return None
         obj = self.doc.selection[0].obj
-        edges = ",".join(str(s.index) for s in self.doc.selection if s.obj == obj)
-        r, ok = QInputDialog.getText(self, "Fillet", "Radius:", text="0.5")
-        if ok:
-            self._edge_op("Fillet", {"Radius": r, "Edges": edges}, obj)
+        t = self.doc.tess.get(obj)
+        sheet = t is not None and t.dim == 2
+        if mode == "edge" and sheet:
+            QMessageBox.information(self, title, f"A sheet is {done} at its corners: select the vertices "
+                                                 "(press V).")
+            return None
+        if mode == "vertex" and not sheet:
+            QMessageBox.information(self, title, f"Vertices can be {done} on sheets. For a solid select "
+                                                 "the edges (press E).")
+            return None
+        key = "Edges" if mode == "edge" else "Vertices"
+        return obj, key, ",".join(str(s.index) for s in self.doc.selection if s.obj == obj)
 
     def _duplicate(self, objs: list[str], cmds_for_copy) -> None:
         self.doc.checkpoint()
@@ -3465,13 +3495,134 @@ class MainWindow(QMainWindow):
         self._update_checker.available.connect(self._update_available)
         QTimer.singleShot(2000, self._update_checker.start)
 
-    def _update_available(self, version: str, url: str) -> None:
-        self.msgs.add("info", f"Hertzon {version} is available (this is {__version__}). Download: {url}")
-        lab = QLabel(f"<a href='{url}'>Hertzon {version} is available</a>")
-        lab.setOpenExternalLinks(True)
-        lab.setToolTip("Opens the release page with the release notes and the installers.\n"
-                       "The check at start can be switched off in Tools > Options > General.")
-        self.statusBar().addPermanentWidget(lab)
+    def _update_available(self, release: dict) -> None:
+        """Hint in the Message Manager and the status bar; the dialog unless this version was skipped or it
+        came up less than PAUSE_DAYS days ago (the status bar link opens it any time)."""
+        from datetime import date
+        from .update_check import SHOWN_SETTING, SKIP_SETTING, dialog_due, is_skipped
+        version, url = release["version"], release["url"]
+        if getattr(self, "_update_label", None) is None:
+            self.msgs.add("info", f"Hertzon {version} is available (this is {__version__}). To update, click "
+                          f"\"Update to {version}\" in the status bar or use Help > Check for Updates. "
+                          f"Release page: {url}")
+            lab = self._update_label = QLabel(f"Hertzon {version} is available: <a href='#'>Update to {version}...</a>")
+            lab.setToolTip("Shows the release notes; Install there downloads and starts the installer.\n"
+                           "The check at start can be switched off in Tools > Options > General.")
+            lab.linkActivated.connect(lambda _=None, r=release: self._show_update_dialog(r))
+            self.statusBar().addPermanentWidget(lab)
+        if is_skipped(version, self.settings.value(SKIP_SETTING, "", type=str)):
+            return
+        if dialog_due(self.settings.value(SHOWN_SETTING, "", type=str), date.today()):
+            self.settings.setValue(SHOWN_SETTING, date.today().isoformat())
+            self._show_update_dialog(release)
+
+    def check_for_updates(self) -> None:
+        """Help > Check for Updates: the same check on request, with an answer also when there is nothing new."""
+        from .update_check import UpdateChecker, disabled_by_env
+        if disabled_by_env():
+            QMessageBox.information(self, "Check for Updates", "Update checks are switched off on this computer "
+                                    "(environment variable HERTZON_NO_UPDATE_CHECK).")
+            return
+        self.statusBar().showMessage("Checking for a new Hertzon version ...", 10000)
+        c = self._manual_update_checker = UpdateChecker(__version__, self)
+        c.available.connect(self._show_update_dialog)
+        c.up_to_date.connect(lambda: QMessageBox.information(
+            self, "Check for Updates", f"Hertzon {__version__} is the newest version."))
+        c.failed.connect(lambda why: QMessageBox.warning(
+            self, "Check for Updates", f"GitHub could not be reached, so no update check was possible.\n\n{why}"))
+        c.start()
+
+    def _show_update_dialog(self, release: dict) -> None:
+        from .update_check import SKIP_SETTING, UpdateDialog, installed_copy, installer_asset
+        old = getattr(self, "_update_dialog", None)
+        if old is not None:
+            try:
+                old.raise_()
+                return
+            except RuntimeError:  # closed and deleted
+                pass
+        can_install = installed_copy() is not None and installer_asset(release) is not None
+        dlg = self._update_dialog = UpdateDialog(release, __version__, can_install, self)
+        dlg.destroyed.connect(lambda *_: setattr(self, "_update_dialog", None))
+
+        def chosen(c: str) -> None:
+            if c == "skip":
+                self.settings.setValue(SKIP_SETTING, release["version"])
+            elif c == "install" and can_install:
+                QTimer.singleShot(0, lambda: self._install_update(release))
+            elif c == "install":
+                from PySide6.QtGui import QDesktopServices
+                from PySide6.QtCore import QUrl
+                QDesktopServices.openUrl(QUrl(release["url"]))
+        dlg.chosen.connect(chosen)
+        dlg.show()
+        dlg.raise_()
+
+    def _install_update(self, release: dict) -> None:
+        """Download the installer (with progress, cancelable, checksum checked), ask to save open changes,
+        start the installer and close Hertzon so that the installer can replace the program files."""
+        import os
+        import threading
+        from PySide6.QtCore import QObject, Signal
+        from PySide6.QtWidgets import QApplication, QProgressDialog
+        from .update_check import download, download_dir, installer_asset
+        a = installer_asset(release)
+        if self.solver.busy and QMessageBox.question(
+                self, "Install Update", "A solve is running. Installing the update stops it. Continue?",
+                QMessageBox.Yes | QMessageBox.No, QMessageBox.No) != QMessageBox.Yes:
+            return
+
+        class Relay(QObject):
+            progress = Signal(int, int)
+            done = Signal(object, str)
+
+        relay = Relay(self)
+        pd = QProgressDialog(f"Downloading {a['name']} ...", "Cancel", 0, 0, self)
+        pd.setWindowTitle("Install Update")
+        pd.setWindowModality(Qt.WindowModal)
+        pd.setMinimumDuration(0)
+
+        def progress(done: int, total: int) -> None:
+            if total:  # without a size the bar stays a busy indicator
+                pd.setMaximum(total)
+                pd.setValue(done)
+        relay.progress.connect(progress)
+        cancel = threading.Event()
+        pd.canceled.connect(cancel.set)
+        loop = QEventLoop()
+        result: list = [None, ""]
+
+        def finished(path, err) -> None:
+            result[:] = [path, err]
+            loop.quit()
+        relay.done.connect(finished)
+
+        def run() -> None:
+            try:
+                path = download(a["browser_download_url"], download_dir() / a["name"], a.get("digest") or "",
+                                progress=relay.progress.emit, cancelled=cancel.is_set)
+                relay.done.emit(path, "")
+            except Exception as e:  # noqa: BLE001
+                relay.done.emit(None, str(e) or type(e).__name__)
+        threading.Thread(target=run, name="hertzon-update-download", daemon=True).start()
+        loop.exec()
+        pd.close()
+        path, err = result
+        if err:
+            QMessageBox.warning(self, "Install Update", f"The installer could not be downloaded:\n{err}\n\n"
+                                f"It is also on the release page:\n{release['url']}")
+            return
+        if path is None or not self.maybe_save():  # cancelled
+            return
+        self.doc.dirty = False  # answered above; closing must not ask again
+        try:
+            os.startfile(str(path))  # noqa: S606 - the installer that was just downloaded and checked
+        except OSError as e:
+            QMessageBox.warning(self, "Install Update", f"The installer could not be started:\n{e}\n\n{path}")
+            return
+        self.msgs.add("info", f"Installing Hertzon {release['version']}: Hertzon closes for the installer.")
+        self.close()
+        QApplication.quit()
 
     def goto_message(self, text: str) -> None:
         """Select what a message is about: object, boundary/excitation/mesh operation, setup, report."""
@@ -3846,7 +3997,7 @@ class MainWindow(QMainWindow):
         ff = bool(d.spheres) and (ports or pw)
         return {"modal": ports and stype == "Modal", "terminal": ports and stype == "Terminal",
                 "farfield": ff, "antenna": bool(d.spheres) and ports, "rcs": bool(d.spheres) and pw,
-                "near": bool(d.setups) and stype != "Eigenmode"}
+                "near": bool(d.setups) and stype != "Eigenmode", "fields": bool(d.setups)}
 
     def _fill_report_menu(self, m) -> None:
         """Results > Create ... Report, only the categories this design can produce."""
@@ -3867,6 +4018,9 @@ class MainWindow(QMainWindow):
             sub("Create Modal Solution Data Report", plots)
         if av["terminal"]:
             sub("Create Terminal Solution Data Report", plots)
+        if av["fields"]:
+            sub("Create Fields Report", [("Rectangular Plot", lambda: self.field_report()),
+                                         ("Data Table", lambda: self.field_report(kind="Data Table"))])
         if av["farfield"]:
             sub("Create Far Fields Report", [("Radiation Pattern", lambda: self.create_report("Radiation Pattern")),
                                              ("Rectangular Plot", lambda: self.create_report(
@@ -3897,7 +4051,8 @@ class MainWindow(QMainWindow):
     def _fill_results_menu(self, m) -> None:
         self._fill_report_menu(m)
 
-    def create_report(self, kind: str, quiet: bool = False, props: dict | None = None) -> None:
+    def create_report(self, kind: str, quiet: bool = False, props: dict | None = None,
+                      with_traces: list[str] | None = None) -> None:
         sols = solution_list(self.doc)
         sol = next((s for s in sols if not s.endswith("LastAdaptive") and "AdaptivePasses" not in s),
                    sols[0] if sols else
@@ -3942,7 +4097,7 @@ class MainWindow(QMainWindow):
         i = 1
         while f"{prefix} {i}" in names:
             i += 1
-        r = Report(f"{prefix} {i}", kind, sol, traces)
+        r = Report(f"{prefix} {i}", kind, sol, with_traces if with_traces is not None else traces)
         r.props.update(props or {})
         if kind in ("Rectangular", "Smith Chart", "Data Table") and not sols and self.doc.project.path:
             # nominal design not solved: show the variations of a solved parametric setup (families)
@@ -3981,13 +4136,239 @@ class MainWindow(QMainWindow):
         for k, v in list(self.report_tabs.items()):
             if v is w:
                 del self.report_tabs[k]
+        if w is not None and w is self.calc_window:
+            w.closing()
         if idx > 0:
             self.tabs.removeTab(idx)
 
     def _close_reports(self) -> None:
+        """Close the report tabs and the Equations tab (another design is shown)."""
+        if self.calc_window is not None and self.tabs.indexOf(self.calc_window) >= 0:
+            self.calc_window.closing()
+            self.calc_window.new()
         while self.tabs.count() > 1:
             self.tabs.removeTab(1)
         self.report_tabs.clear()
+
+    def prepare_equations(self) -> None:
+        """Make the Equations tab (hidden) before the window is shown. Its formula editor is a web view, drawn
+        by the graphics card like the 3D view: a window gets that way of drawing when it is made, so adding
+        the first such view later rebuilt the whole window (it flickered closed and open) and the start of the
+        web engine held the GUI on the first click."""
+        try:
+            from PySide6.QtOpenGLWidgets import QOpenGLWidget
+            self._gl_marker = QOpenGLWidget(self)        # the window draws with the graphics card from the start
+            self._gl_marker.setFixedSize(0, 0)
+            self._gl_marker.hide()
+        except Exception:  # noqa: BLE001
+            pass
+        self._make_equations()
+
+    def _make_equations(self) -> None:
+        if self.calc_window is None:
+            from .calculator import EquationsTab
+            self.calc_window = EquationsTab(self)
+            self.calc_window.hide()
+            self.calc_window.build_ribbon(self.ribbon.page("Equation"))
+            self._eq_page = self.ribbon.count() - 1
+            self.ribbon.setTabVisible(self._eq_page, False)
+
+    def fields_calculator(self, name: str | None = None, for_plot: bool = False) -> None:
+        """Results > Fields > Calculator: the Equations tab next to the 3D Modeler for equations of E, H and J,
+        with the Equation page of the ribbon."""
+        self._make_equations()
+        w = self.calc_window
+        if self.tabs.indexOf(w) < 0:
+            self.tabs.insertTab(1, w, "Equations")
+        w.refresh()
+        self.tabs.setCurrentWidget(w)
+        if for_plot:
+            w.open_for_plot()
+        elif name:
+            w.load(name)
+        w._dirty_changed()
+        w.focus_editor()
+
+    def _sync_equation_page(self, *_) -> None:
+        """The Equation page of the ribbon is there while the Equations tab is the current one."""
+        if self.tabs.currentIndex() != 0:
+            self.view.reset_interaction()       # a drag in the 3D view does not stay pending behind another tab
+        if self._eq_page is None:
+            return
+        rb, idx = self.ribbon, self._eq_page
+        on = self.calc_window is not None and self.tabs.currentWidget() is self.calc_window
+        if on == rb.isTabVisible(idx):
+            return
+        rb.setTabVisible(idx, on)
+        if on:
+            rb.setCurrentIndex(idx)
+        elif rb.currentIndex() == idx or not rb.isTabVisible(rb.currentIndex()):
+            rb.setCurrentIndex(next(i for i in range(rb.count()) if rb.tabText(i) == "Results"))
+
+    def new_equation(self, library: str | None = None) -> None:
+        self.fields_calculator()
+        if library:
+            self.calc_window._load_library(library)
+        else:
+            self.calc_window.new()
+
+    def rename_equation(self, name: str) -> None:
+        new, ok = QInputDialog.getText(self, "Rename Equation", "Name:", text=name)
+        new = new.strip()
+        if ok and new and new != name:
+            self.fields_calculator(name)
+            self.calc_window.set_name(new)
+            self.calc_window.save()
+
+    def export_equations(self) -> None:
+        """Equations > Export Equations: the equations and functions of the design into a file, to use them in
+        other designs and projects."""
+        des = self.des
+        if not des.field_exprs and not des.field_funcs:
+            QMessageBox.information(self, "Export Equations", "This design has no equations yet.")
+            return
+        start = str(Path(self.doc.project.path).with_name(f"{des.name}_equations.json")) if self.doc.project.path \
+            else f"{des.name}_equations.json"
+        path, _ = QFileDialog.getSaveFileName(self, "Export Equations", start, EQ_FILTER)
+        if not path:
+            return
+        data = {"format": "hertzon-equations", "version": 1,
+                "equations": [{"name": e.name, "expr": e.expr, "description": e.description}
+                              for e in des.field_exprs],
+                "functions": list(des.field_funcs)}
+        try:
+            Path(path).write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+        except OSError as e:
+            QMessageBox.warning(self, "Export Equations", f"Cannot write {path}:\n{e}")
+            return
+        self.msgs.add("info", f"Exported {len(data['equations'])} equations and {len(data['functions'])} "
+                              f"functions to {path}")
+
+    def import_equations(self, path: str | None = None) -> None:
+        """Equations > Import Equations: equations and functions from a file of Export Equations."""
+        if path is None:
+            path, _ = QFileDialog.getOpenFileName(self, "Import Equations", "", EQ_FILTER)
+            if not path:
+                return
+        try:
+            data = json.loads(Path(path).read_text(encoding="utf-8"))
+            eqs = [(str(e["name"]), str(e["expr"]), str(e.get("description", ""))) for e in data.get("equations", [])]
+            funcs = [str(f) for f in data.get("functions", [])]
+        except (OSError, ValueError, KeyError, TypeError, AttributeError) as e:
+            QMessageBox.warning(self, "Import Equations", f"{path} is not a file of equations:\n{e}")
+            return
+        self._add_equations(eqs, funcs, f"from {path}")
+
+    def open_equation_library(self) -> None:
+        """Equations > Open Library: ready-made equations and functions, one or more imported at once."""
+        from .calculator import LibraryDialog
+        dlg = LibraryDialog(self)
+        if dlg.exec() == QDialog.Accepted:
+            self._add_equations(*dlg.chosen(), "from the library")
+
+    def _add_equations(self, eqs: list[tuple[str, str, str]], funcs: list[str], source: str) -> None:
+        """Equations (name, expression, description) and functions into the design; for names it has
+        already, the user chooses whether to replace them."""
+        from ..model.design import FieldExpression
+        des = self.des
+
+        def fname(text):
+            return text.split("(", 1)[0].strip()
+        have = {e.name for e in des.field_exprs} | {fname(f) for f in des.field_funcs}
+        same = [n for n, _, _ in eqs if n in have] + [fname(f) for f in funcs if fname(f) in have]
+        replace = False
+        if same:
+            ans = QMessageBox.question(
+                self, "Import Equations", f"The design has already: {', '.join(same)}.\n\nReplace them with the "
+                "ones from the file? (No keeps those of the design.)",
+                QMessageBox.Yes | QMessageBox.No | QMessageBox.Cancel)
+            if ans == QMessageBox.Cancel:
+                return
+            replace = ans == QMessageBox.Yes
+        self.doc.checkpoint()
+        n = 0
+        for name, expr, desc in eqs:
+            old = next((e for e in des.field_exprs if e.name == name), None)
+            if old is None:
+                des.field_exprs.append(FieldExpression(name, expr, desc))
+            elif replace:
+                old.expr, old.description = expr, desc
+            else:
+                continue
+            n += 1
+        for f in funcs:
+            if fname(f) in {fname(x) for x in des.field_funcs}:
+                if not replace:
+                    continue
+                des.field_funcs = [x for x in des.field_funcs if fname(x) != fname(f)]
+            des.field_funcs.append(f)
+            n += 1
+        self.doc.dirty = True
+        self.doc.changed.emit("fields")
+        self.msgs.add("info", f"Imported {n} equations and functions {source}")
+        if replace:
+            self.redraw_equation_plots()
+
+    def redraw_equation_plots(self, names: list[str] | None = None) -> None:
+        """An equation or function changed: the field plots on screen that use it are drawn again with the
+        new formula. names None: all plots of equations. A plot whose equation is now a value, not a field,
+        is deleted."""
+        from .calc_bridge import dependents, expression_kinds
+        des = self.des
+        eqs = {e.name for e in des.field_exprs}
+        if names is None:
+            used = eqs
+        else:
+            used, todo = set(), list(names)
+            while todo:                          # the changed names and everything that uses them
+                n = todo.pop()
+                if n not in used:
+                    used.add(n)
+                    todo += [d.removesuffix("()") for d in dependents(des, n)]
+        kinds = expression_kinds(self.doc)
+        gone = [p.name for p in des.field_plots if p.quantity in used and kinds.get(p.quantity) in ("value", "vector")]
+        if gone:
+            des.field_plots = [p for p in des.field_plots if p.name not in gone]
+            self._sync_overlays()
+            self.project_tree.rebuild()
+            self.msgs.add("info", f"Deleted the field plot{'s' if len(gone) > 1 else ''} {', '.join(gone)}: the "
+                                  "equation is a value now, not a field")
+        shown = [p.name for p in des.field_plots if p.quantity in used and p.quantity in eqs
+                 and p.name in self.view.overlay_actors]
+        if not shown:
+            return
+        if any(n in self.anim_bar.names for n in shown):
+            self.anim_bar.close_player()         # its frames show the old formula
+        for n in shown:
+            self.show_field_plot(n, focus=False)
+
+    def equation_functions(self, select: str | None = None) -> None:
+        self.fields_calculator()
+        self.calc_window.functions_dialog(select)
+
+    def field_report(self, name: str | None = None, solution: str = "", port: int = 1,
+                     kind: str = "Rectangular") -> None:
+        """A report of a value equation over frequency: a Fields report for one computed from the fields
+        (Results > Create Fields Report: name None, the first such equation), else a solution data report."""
+        from .calc_bridge import uses_fields, value_names
+        if name is not None and not uses_fields(self.doc, [name]):
+            self.create_report(kind, with_traces=[name])
+            return
+        if name is None:
+            name = next(iter(value_names(self.doc, fields=True)), None)
+        sols = F.field_solutions(self.doc)
+        # over frequency: a sweep with saved fields, else the given solution
+        sol = next((s for s in sols if not s.endswith("LastAdaptive")), solution or (sols[0] if sols else ""))
+        prefix = "Fields Plot" if kind == "Rectangular" else "Fields Table"
+        names = {r.name for r in self.des.reports}
+        i = 1
+        while f"{prefix} {i}" in names:
+            i += 1
+        r = Report(f"{prefix} {i}", kind, sol, [name] if name else [], {"port": str(port), "fields": "1"})
+        self.des.reports.append(r)
+        self.doc.dirty = True
+        self.doc.changed.emit("results")
+        self.open_report(r.name)
 
     def plot_fields(self, quantity: str) -> None:
         from .fieldplot_dialogs import FieldPlotDialog, default_attributes
@@ -4001,17 +4382,37 @@ class MainWindow(QMainWindow):
             return
         v = dlg.values()
         quantity, pl = v["quantity"], v["plane"]
-        names = {p.name for p in self.des.field_plots}
-        i = 1
-        while f"{quantity}{i}" in names:
-            i += 1
-        props = {**default_attributes(), **v["props"]}
-        fp = FieldPlot(f"{quantity}{i}", quantity, v["solution"], faces=faces if not pl else [],
-                       objects=objs if not pl else [], plane=pl, props=props)
-        self.des.field_plots.append(fp)
-        self.doc.dirty = True
-        self.doc.changed.emit("fields")
-        self.show_field_plot(fp.name)
+
+        def create(faces, objs):
+            names = {p.name for p in self.des.field_plots}
+            i = 1
+            while f"{quantity}{i}" in names:
+                i += 1
+            props = {**default_attributes(), **v["props"]}
+            fp = FieldPlot(f"{quantity}{i}", quantity, v["solution"], faces=faces if not pl else [],
+                           objects=objs if not pl else [], plane=pl, props=props)
+            self.des.field_plots.append(fp)
+            self.doc.dirty = True
+            self.doc.changed.emit("fields")
+            self.show_field_plot(fp.name)
+        if dlg.needs_pick():
+            self.pick_plot_targets("solids" if v["props"]["Volume"] == "True" else "faces", create)
+        else:
+            create(faces, objs)
+
+    def pick_plot_targets(self, what: str, on_use) -> None:
+        """Plot on a selection with nothing selected: the faces, objects or solids are picked in the 3D view,
+        with a box that says what to pick; Plot calls on_use(faces, objects)."""
+        from .fieldplot_dialogs import PickTargets
+        old = getattr(self, "_pick_bar", None)
+        if old is not None:
+            try:
+                if old.isVisible():
+                    old.reject()
+            except RuntimeError:            # closed and deleted
+                pass
+        self._pick_bar = PickTargets(self, what, on_use)
+        self._pick_bar.show()
 
     def _on_current_plot(self, fn) -> None:
         """Ribbon buttons act on the plot selected in the project tree, else the one on screen."""
@@ -4051,25 +4452,32 @@ class MainWindow(QMainWindow):
         if dlg.exec() != QDialog.Accepted:
             return
         v = dlg.values()
-        new = v["name"] or fp.name
-        if new != fp.name and any(p.name == new for p in self.des.field_plots):
-            QMessageBox.warning(self, "Modify Field Plot", f"A plot named '{new}' already exists.")
-            new = fp.name
-        if self.anim_plot == fp.name:
-            self.anim_plot = new
-        fp.name = new
-        fp.quantity, fp.solution = v["quantity"], v["solution"]
-        fp.props.update(v["props"])
-        if v["plane"]:
-            fp.plane, fp.faces, fp.objects = v["plane"], [], []
-        elif not v["keep"] and (faces or objs):
-            fp.plane, fp.faces, fp.objects = "", faces, objs
-        elif fp.plane and not v["keep"]:
-            fp.plane = ""
-        self.doc.dirty = True
-        self.doc.changed.emit("fields")
-        self.project_tree.rebuild()
-        self.show_field_plot(fp.name)
+
+        def apply(faces, objs):
+            new = v["name"] or fp.name
+            if new != fp.name and any(p.name == new for p in self.des.field_plots):
+                QMessageBox.warning(self, "Modify Field Plot", f"A plot named '{new}' already exists.")
+                new = fp.name
+            if self.anim_plot == fp.name:
+                self.anim_plot = new
+            fp.name = new
+            fp.quantity, fp.solution = v["quantity"], v["solution"]
+            fp.props.update(v["props"])
+            if v["plane"]:
+                fp.plane, fp.faces, fp.objects = v["plane"], [], []
+            elif not v["keep"] and (faces or objs):
+                fp.plane, fp.faces, fp.objects = "", faces, objs
+            elif fp.plane and not v["keep"]:
+                fp.plane = ""
+            self.doc.dirty = True
+            self.doc.changed.emit("fields")
+            self.project_tree.rebuild()
+            self.show_field_plot(fp.name)
+        if dlg.needs_pick():
+            v["keep"] = False
+            self.pick_plot_targets("solids" if v["props"]["Volume"] == "True" else "faces", apply)
+        else:
+            apply(faces, objs)
 
     def field_plot_attributes(self, name: str) -> None:
         mp = next((p for p in self.des.field_plots if p.name == name and p.quantity == "Mesh"), None)
@@ -4107,6 +4515,7 @@ class MainWindow(QMainWindow):
         if not self._draw_field_plot(name, loud=True):
             return
         if focus:
+            self.tabs.setCurrentIndex(0)          # the plot is in the 3D Modeler (e.g. from the Equations tab)
             self.doc.select([])
             self.show_overlays([name])
 
@@ -4328,8 +4737,11 @@ class MainWindow(QMainWindow):
     def plot_mesh(self, objs: list[str] | None = None) -> None:
         """Plot Mesh: listed under Field Overlays; Modify sets the element quality colouring."""
         objs = objs or self.doc.selected_objects()
-        if not objs or not self.des.setups:
-            QMessageBox.information(self, "Plot Mesh", "Select objects and analyze first.")
+        if not self.des.setups:
+            QMessageBox.information(self, "Plot Mesh", "Analyze first.")
+            return
+        if not objs:
+            self.pick_plot_targets("objects", lambda _faces, picked: self.plot_mesh(picked))
             return
         names = {p.name for p in self.des.field_plots}
         i = 1
@@ -4442,6 +4854,10 @@ class MainWindow(QMainWindow):
             self.open_report(data[1])
         elif kind == "fieldplot":
             self.modify_field_plot(data[1])
+        elif kind == "equation":
+            self.fields_calculator(data[1])
+        elif kind == "eqfunc":
+            self.equation_functions(data[1])
         elif kind == "optim":
             self.edit_optimization(data[1])
         elif kind == "param":
@@ -4512,6 +4928,14 @@ class MainWindow(QMainWindow):
                 m.addAction("Export S-Parameters (Touchstone)...", self.export_touchstone)
                 m.addSeparator()
                 m.addAction("Clean Up Solutions...", self.clean_up_solutions)
+            elif g == "Equations":
+                m.addAction("New Equation", self.new_equation)
+                m.addAction("Open Library...", self.open_equation_library)
+                m.addAction("Functions...", self.equation_functions)
+                m.addSeparator()
+                m.addAction("Import Equations...", lambda: self.import_equations())
+                a = m.addAction("Export Equations...", self.export_equations)
+                a.setEnabled(bool(self.des.field_exprs or self.des.field_funcs))
             elif g == "Field Overlays":
                 m.addAction("Clear Overlays", self.clear_overlays)
             elif g == "Radiation":
@@ -4555,6 +4979,20 @@ class MainWindow(QMainWindow):
             m.addAction("Delete", self._delete_project_items)
         elif kind == "report":
             m.addAction("Open", lambda: self.open_report(data[1]))
+            m.addAction("Delete", self._delete_project_items)
+        elif kind == "equation":
+            from .calc_bridge import expression_kinds
+            k = expression_kinds(self.doc).get(data[1], "")
+            m.addAction("Open", lambda: self.fields_calculator(data[1]))
+            if k == "field":
+                m.addAction("Plot Field...", lambda: self.plot_fields(data[1]))
+            elif k == "value":
+                m.addAction("Add to Report", lambda: self.field_report(data[1]))
+            m.addSeparator()
+            m.addAction("Rename...", lambda: self.rename_equation(data[1]))
+            m.addAction("Delete", self._delete_project_items)
+        elif kind == "eqfunc":
+            m.addAction("Edit...", lambda: self.equation_functions(data[1]))
             m.addAction("Delete", self._delete_project_items)
         elif kind == "optim":
             m.addAction("Properties...", lambda: self.edit_optimization(data[1]))
@@ -4762,6 +5200,10 @@ class MainWindow(QMainWindow):
             elif k == "fieldplot":
                 self.des.field_plots = [p for p in self.des.field_plots if p.name != d[1]]
                 self.view.remove_overlay(d[1])
+            elif k == "equation":
+                self.des.field_exprs = [e for e in self.des.field_exprs if e.name != d[1]]
+            elif k == "eqfunc":
+                self.des.field_funcs = [f for f in self.des.field_funcs if f.split("(", 1)[0].strip() != d[1]]
             elif k == "sphere":
                 self.des.spheres = [s for s in self.des.spheres if s.name != d[1]]
             elif k == "optim":
@@ -4871,6 +5313,28 @@ class MainWindow(QMainWindow):
     # ==========================================================================================
     # context menus
     # ==========================================================================================
+    def _plot_fields_menu(self, m: QMenu) -> QMenu:
+        """Plot Fields: the built-in quantities and the field equations of the Fields Calculator."""
+        pf = m.addMenu("Plot Fields")
+        self._fill_plot_fields(pf)
+        return pf
+
+    def _fill_plot_fields(self, pf: QMenu) -> None:
+        pf.clear()
+        for q in F.QUANTITIES:
+            pf.addAction(q, lambda _=False, q=q: self.plot_fields(q))
+        eq = pf.addMenu("Equations")
+        from .calc_bridge import expression_kinds
+        try:
+            fields = [n for n, k in expression_kinds(self.doc).items() if k == "field"]
+        except Exception:  # noqa: BLE001
+            fields = []
+        for n in fields:
+            eq.addAction(n, lambda _=False, n=n: self.plot_fields(n))
+        if fields:
+            eq.addSeparator()
+        eq.addAction("New Equation...", lambda: self.fields_calculator(for_plot=True))
+
     def _view_context(self, pos) -> None:
         m = QMenu(self)
         sel = self.doc.selection
@@ -4888,9 +5352,7 @@ class MainWindow(QMainWindow):
             me = m.addMenu("Assign Mesh Operation")
             for k in schema.MESH_OPS:
                 me.addAction(k, lambda _=False, k=k: self.assign("mesh", k))
-            pf = m.addMenu("Plot Fields")
-            for q in F.QUANTITIES:
-                pf.addAction(q, lambda _=False, q=q: self.plot_fields(q))
+            self._plot_fields_menu(m)
             if mode == "object":
                 m.addAction("Plot Mesh", self.plot_mesh)
                 m.addSeparator()
@@ -4905,6 +5367,9 @@ class MainWindow(QMainWindow):
                 m.addAction("Hide Selection", lambda: self.set_visible(False))
                 m.addAction("Properties...", self.edit_selected_properties)
             elif mode == "edge":
+                m.addAction("Fillet...", self.fillet)
+                m.addAction("Chamfer...", self.chamfer)
+            elif mode == "vertex":
                 m.addAction("Fillet...", self.fillet)
                 m.addAction("Chamfer...", self.chamfer)
             elif mode == "face":
@@ -4922,6 +5387,8 @@ class MainWindow(QMainWindow):
         for w in ("iso", "top", "front", "right"):
             v.addAction(w.capitalize(), lambda _=False, w=w: self.view.view(w))
         self.radiation_menu(m)
+        if not sel:
+            self._plot_fields_menu(m)         # on a cut plane: fields need no selected object
         m.addAction("Clear Field Overlays", self.clear_overlays)
         m.exec(self.view.mapToGlobal(pos))
 

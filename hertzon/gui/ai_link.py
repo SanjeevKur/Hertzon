@@ -185,7 +185,9 @@ class AiLink(QObject):
                     raise RuntimeError("validation failed: " + "; ".join(bad))
             if doc.dirty:
                 w.file_save()
-            job = Job(doc.project.path, des, a["setup"], mesh_only=bool(a.get("mesh_only")), sweep=a.get("sweep") or "")
+            job = Job(doc.project.path, des, a.get("setup") or "", mesh_only=bool(a.get("mesh_only")),
+                      sweep=a.get("sweep") or "", optimization=a.get("optimization") or "",
+                      parametric=a.get("parametric") or "")
             w.solver.submit(job)
             w.project_tree.rebuild()
             return {"key": job.key}

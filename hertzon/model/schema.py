@@ -119,13 +119,15 @@ GEOMETRY: dict[str, list[Prop]] = {
                          choices=("DiscreteTrihedron", "CorrectedFrenet", "Fixed", "Frenet"))],
     "Connect": [P("Tools", "objects", ""), P("Ruled", "bool", "False")],
     "Imprint": [P("Tools", "objects", "")],
-    "Chamfer": [P("Distance", "length", "0.1"), P("Edges", "text", "", help="Edge indices, comma separated")],
+    "Chamfer": [P("Distance", "length", "0.1"), P("Edges", "text", "", help="Edge indices, comma separated"),
+                P("Vertices", "text", "", help="Vertex indices of a sheet, comma separated: a chamfer at each")],
     "UncoverFaces": [P("Faces", "text", "", help="Face indices, comma separated")],
     "KeepFaces": [P("Faces", "text", "", help="Face indices, comma separated")],
     "SweepFacesAlongNormal": [P("Faces", "text", ""), P("Distance", "length", "1")],
     "KeepBody": [P("Body", "int", "0")],
     "Section": [P("Base", "point", "0,0,0"), P("Normal", "vector", "0,0,1")],
-    "Fillet": [P("Radius", "length", "0.1"), P("Edges", "text", "", help="Edge indices, comma separated")],
+    "Fillet": [P("Radius", "length", "0.1"), P("Edges", "text", "", help="Edge indices, comma separated"),
+               P("Vertices", "text", "", help="Vertex indices of a sheet, comma separated: a fillet at each")],
 }
 
 CREATE_COMMANDS = [k for k in GEOMETRY if k.startswith("Create") or k == "Import"]

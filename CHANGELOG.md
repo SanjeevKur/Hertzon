@@ -3,6 +3,142 @@
 All notable changes of each release. The release workflow copies the section of the released version into
 the GitHub release notes.
 
+## 0.2.4 (2026-10-26)
+
+### Added
+- **Showcase project** `examples/Showcase_AllFeatures.hzn` (built by `examples/make_showcase.py`): one
+  project with six designs that uses nearly every modelling, setup and post-processing feature, for testing
+  the GUI, scripts and the MCP server against a single rich file.
+- **Update dialog**: when a new Hertzon version is out, a small dialog after the start shows its version and
+  the release notes of every version since the installed one, with **Install**, **Skip this version** and
+  **Later**. Install downloads the installer from the release (checksum checked), asks to save open changes,
+  closes Hertzon and starts the installer; settings and the Python environment are kept. Because new
+  versions come out often, the dialog comes up by itself at most once every 7 days; in between the status
+  bar says "Hertzon X is available: Update to X..." and opens the dialog on a click. Skip this version asks again
+  only for a newer version, Later after the 7 days. The dialog does not block the start or the
+  work, and nothing is installed without a click on Install. Without the Windows installer (Linux, pip or a
+  source checkout) the button is **Download** and opens the release page. **Help > Check for Updates...**
+  checks on request. The check at start can still be switched off in Tools > Options > General, and the
+  environment variable `HERTZON_NO_UPDATE_CHECK=1` switches off both for managed or offline computers.
+- **Fields Calculator** (Calculator in the Results ribbon): an Equations tab next to the 3D Modeler for
+  equations of the stored fields. An equation is typed with its name in front (`P_in = flux(Port1, re(S))`)
+  and saved under that name. The tab only defines equations and shows their type (scalar or vector, field
+  or value) and unit; saved equations are used in Plot Fields (fields) and in reports (values). While the
+  tab is open the ribbon has an Equation page with fields, symbols, fractions, roots,
+  integrals, large operators, brackets, functions and the library. The formula is typed into a typeset
+  formula editor as in a desktop office program: a command after a backslash turns into its symbol with
+  Space (`\times` gives ×, `\curl` gives ∇×, `\iint` a surface integral). Text shows the same formula as one
+  line of text with units, which is also what is saved. An integral or another operation over a geometry
+  switches to the 3D Modeler and asks for the face, object or line, then comes back with it
+  below the sign. Examples:
+  `flux(Port1, re(S))`, `int_line(Radial, E)`, `max(Dielectric, |E|)` or
+  `int_vol(Dielectric, 0.5*omega*eps0*eps_r*tand*|E|^2)`. Each equation shows its type and unit and a typeset
+  formula while you type; errors are underlined where they are. Integrals over lines,
+  faces and volumes of model and non-model objects, cut planes (`cut_xy(10mm)`), points, components in
+  cylindrical and spherical coordinate systems, curl, divergence and gradient. Values are computed on the
+  solver's elements with their quadrature, curved elements included. Equations and user functions are saved
+  with the design and listed in the project tree under Equations (open, plot, add to a report, rename,
+  delete, and export to or import from a file for other designs); a library has power, loss, energy, Q, voltage and current. A named field can be
+  plotted like E or H (Plot Fields > Quantity). A value computed from the fields is shown over frequency in a
+  Fields report (Results > Create Fields Report). Equations can also use the network data, `S(2,1)`, `Y(1,1)`,
+  `Z(1,1)` and `VSWR(1)`, for example `RL = -dB(S(1,1))`; an equation of these alone needs no fields and is
+  shown in the solution data reports under the category Equations, at every frequency of the solution.
+- **Volume field plots**: Plot on "(selection, inside solids)" (or "Inside the selected solids" in the plot
+  attributes) shows a scalar field through a solid such as a substrate as coloured dots instead of on its
+  surface; vectors keep their arrows inside solids. Works for the built-in quantities and for named
+  equations of the Fields Calculator.
+- **Plot Fields with equations, also without a selection**: the Plot Fields menu (right click in the 3D view,
+  More in the Results ribbon) has an Equations entry with the field equations of the Fields Calculator and
+  New Equation. A right click on empty space in the 3D view offers Plot Fields too; without a selected object
+  the field is plotted on a cut plane.
+
+- **AI assistants (MCP) cover the new features**: `get_geometry(include_edges=true)` lists the edges and
+  vertices with the indices of Fillet and Chamfer (`render_image` can label them), so an assistant can round
+  or cut single corners. New tools: `set_equation` (equations and functions of the Fields Calculator, import
+  and export), `set_report` (all report kinds, also Fields reports), `set_field_plot` (on objects, faces or a
+  cut plane), `set_coordinate_system` (new objects are made in the working coordinate system, as in the
+  window), `set_parametric` and `set_optimization`; `run_simulation`, `get_status`, `abort_simulation` and
+  `get_results` take `parametric=` or `optimization=`. `get_project` lists all of these and `delete` removes
+  them. Equations are evaluated in the window, in field plots and reports.
+
+### Changed
+- **Tutorial: equations** (section 8): the return loss from the S-parameters, the power through both ports
+  of the waveguide as flux integrals (checked against the S-parameters), the power flow along the guide as
+  a field plot, and the library. `examples/WaveguidePost.hzn` has these equations, the reports `Return Loss`
+  and `Port Powers` and the field plot `Sy_Cut`. The README, the feature overview and the tutorial basics
+  also describe the Fields Calculator, Fillet and Chamfer at vertices and the update dialog.
+- **Chamfer of a sheet at its vertices**: like Fillet, a sheet (for example a patch) is now chamfered by
+  selecting its corner vertices (press V, also in the context menu); each selected corner is cut off by the
+  distance. Solids are still chamfered along their edges.
+- **Equation library**: right click on Equations → **Open Library...** opens a window with the ready-made
+  equations and functions; tick one or more (or a whole group) and import them into the design at once.
+  It replaces the From Library submenu.
+- **Surface resistance in the ribbon**: Function → Rₛ inserts `rs(σ)`, the surface resistance of a good
+  conductor (√(ωμ₀/2σ), in Ω), e.g. for conductor losses.
+- **Units on the plot axes**: the y axis of reports shows the unit of the traces (`[dB]`, `[Ω]`, `[W]`, the
+  unit of an equation), with the trace name when there is only one; the radial axis of a polar radiation
+  pattern shows its values with the unit (`-10 dB`). Data tables, the CSV export and the colour bar of the
+  3D polar plot name the unit too. A colour bar of a dimensionless field no longer shows empty brackets.
+- **Field plots on a selection: pick in the 3D view**: Plot on "(selection)" or "(selection, inside solids)"
+  with nothing selected no longer makes an empty plot. After OK a box over the 3D view says what to pick
+  (faces or objects, or the solids), shows what is selected and plots it with Plot. The same for Modify Plot
+  and for Plot Mesh without a selection. The cut position is only shown for cut planes.
+- **Fillet of a sheet at its vertices**: a sheet (for example a patch) is now filleted by selecting its corner
+  vertices (press V) instead of edges; each selected vertex gets one fillet with the radius. Projects that
+  filleted a sheet by its edges in 0.2.3 build as before.
+- **Benchmarks**: the Solver Benchmark re-run on the 32-core workstation with 0.2.3 and hzAURA, compared with
+  the runs of 19 October (patch antenna 2.5 to 3.7 times faster with the same result, microstrip 1.4 to 1.6
+  times), and the hairpin filter added (docs/BENCHMARKS.md). The raw results of both are in
+  examples/benchmark/scaling/results.
+
+### Fixed
+- **Fillet and chamfer on an object in a relative coordinate system** failed with "Could not compute
+  fillet": placing the object in its coordinate system turned its planes and cylinders into general
+  surfaces. It is now rotated and moved, so the surfaces stay exact.
+- Validation Check no longer reports a **Length Based On Edges** mesh operation as "has no assignment" (an
+  error that blocked the analysis): its edges count as its assignment.
+- **Wave port on a metal face found no modes**: a wave port on a face of a PEC solid, for example the
+  bottom of a coax bore in a metal body, failed with "ModalPort could find no modes" (and "k=-2 must be
+  greater than 0"), because the metal also zeroed the field on the port face. Such a solid now backs the
+  port: no field inside and PEC on its surface, with the port face left free. The log says which object
+  backs which port.
+- **Unit dB of equations**: an equation of a level in decibels such as `RL = -dB(S(1,1))` showed the unit 1 in
+  the Equations tab while the report axis said dB. The Equations tab, values, report axes, data tables and
+  colour bars now show dB, also for sums and multiples of levels (`RL + 3`, `2*RL`).
+- **Solutions shown as outdated**: the solutions of projects solved with 0.2.3 or earlier were shown as
+  outdated (and an analysis started the adaptive passes again from the initial mesh), and saving an equation
+  of the Fields Calculator did the same to a current solution. Equations are post-processing and no longer
+  count as a change of the model.
+- **Coarse cylinders next to a helix**: a helix wire (or another swept pipe) in the model made every
+  cylinder, sphere and round hole in the 3D view coarse (8 segments per turn), also in objects not touching
+  the helix. The coarser display sizing now applies only to the pipe surface itself.
+- **Solve failed with a KeyError after a helix wire**: the round profile that a helix wire or a Sweep
+  Along Path is swept from stayed in the model as a loose sheet, and meshing stopped with
+  `KeyError: (n1, n2, n3)`. The profile is removed after the sweep.
+- **Field plots of a changed equation**: saving an equation (or a function it uses) draws its field plots
+  on screen again with the new formula; before, they kept the old field until cleared and plotted again.
+  An equation changed from a field to a value deletes its field plots.
+- **Square root in the formula editor**: `\sqrt(...)` and `sqrt(...)` typed with parentheses (or `sqrt`
+  alone) become the root sign over the argument; before, `\sqrt(...)` stayed as text with parentheses.
+- **Numbers with units in the formula editor**: `5.8·10⁷ S/m`, `5.8e7 S/m` or a unit as a fraction after a
+  number are read as one number with its unit; before, the unit came out as unknown names and the formula
+  showed an error.
+- **Selection rectangle left in the 3D view**: when the mouse release of a box selection did not reach the
+  3D view (for example after switching tabs), the rectangle stayed on screen. It now goes with the next move
+  or click in the view.
+- **Slow update with the Windows installer**: installing a new version over an existing one hung for minutes
+  after copying the files, because the installer took the size for Settings > Apps by walking the whole
+  folder, including the existing Python environment; it now takes the size from the installer itself.
+- **Report tabs push the window off screen**: opening a report (for example an XY plot) raised the main
+  window's minimum height to the full height of the trace editor, so on a 1080p screen with display scaling
+  a maximized window reached below the screen and the status bar with the coordinates was cut off; after
+  maximizing again the panels could be squeezed. The trace editor on the left of a report now scrolls when
+  the window is low.
+- **Analyze a single sweep and continue an adaptive run with hzAURA**: the adaptive mesh refined with hzAURA
+  was not stored with the refinement state, so analyzing only a sweep stopped with "No adaptive solution to
+  reuse", and an interrupted run started again from the initial mesh. The mesh is now stored and rebuilt
+  from it; this also makes the parallel sweep runs of the Solver Benchmark work again.
+
 ## 0.2.3 (2026-10-25)
 
 ### Changed

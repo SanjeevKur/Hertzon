@@ -204,6 +204,7 @@ def _sweep_along(dt: list, path: list, trihedron: str) -> list[tuple[int, int]]:
             _check_profile_crosses(prof, curves)
         out = o.addPipe(prof, o.addWire(curves), trihedron or "DiscreteTrihedron")
         res = [d for d in out if d[0] == dim + 1]
+        o.remove(prof, recursive=True)      # the pipe is a copy, the profile would stay as a loose sheet
     o.remove(path, recursive=True)
     if not res:
         raise GeometryError("Sweep along path failed")
@@ -247,6 +248,9 @@ def _pipe(wire: int, path: np.ndarray, radius: float) -> list[tuple[int, int]]:
     disk = o.addPlaneSurface([o.addCurveLoop([circ])])
     w = o.addWire([wire])
     out = o.addPipe([(2, disk)], w, "DiscreteTrihedron")
+    # the pipe is a copy: the profile disk and the path stayed behind as loose entities, and a loose
+    # face in the solver model has no tetrahedra on either side (KeyError when the mesh is read)
+    o.remove([(2, disk), (1, wire)], recursive=True)
     return [d for d in out if d[0] == 3]
 
 
@@ -563,6 +567,7 @@ def _create(cmd: Command, ctx: BuildContext) -> list[tuple[int, int]]:
             disk = o.addPlaneSurface([o.addCurveLoop([circ])])
             try:
                 out = o.addPipe([(2, disk)], o.addWire(curves), "DiscreteTrihedron")
+                o.remove([(2, disk)] + [(1, c_) for c_ in curves], recursive=True)
                 return [d for d in out if d[0] == 3]
             except Exception:  # noqa: BLE001
                 # OCC cannot pipe some many-corner paths: the smooth curve through the corners is
@@ -1017,20 +1022,41 @@ def _apply(cmd: Command, dt: list[tuple[int, int]], ctx: BuildContext, owner: st
         return [d for d in keep if d[0] == top]
     if k == "Chamfer":
         o.synchronize()
+        d = ev.length(p["Distance"])
+        if d <= 0:
+            raise GeometryError("Chamfer distance must be positive")
+        solid = any(dd == 3 for dd, _ in dt)
+        vids = [int(e) for e in p.get("Vertices", "").split(",") if e.strip()]
+        if vids:
+            if solid:
+                raise GeometryError("Vertices can be chamfered on sheets; select the edges of a solid")
+            verts = object_vertices(dt)
+            corners = {verts[i] for i in vids if 0 <= i < len(verts)}
+            if not corners:
+                raise GeometryError("No valid vertices selected for chamfer")
+            return _fillet_sheet(dt, corners, d, "Chamfer")
         edges = object_edges(dt)
         faces = set(object_faces(dt))
         ids = [int(e) for e in p.get("Edges", "").split(",") if e.strip()]
         curves = [edges[i] for i in ids if 0 <= i < len(edges)]
         if not curves:
             raise GeometryError("No valid edges selected for chamfer")
+        if not solid:
+            return _fillet_sheet(dt, {abs(v) for c in curves
+                                      for _, v in gmsh.model.getBoundary([(1, c)], oriented=False)}, d, "Chamfer")
         surfs = []
         for c in curves:
             adj = [s_ for s_ in gmsh.model.getAdjacencies(1, c)[0] if s_ in faces]
             if not adj:
                 raise GeometryError("Edge has no face on this object")
             surfs.append(adj[0])
-        d = ev.length(p["Distance"])
-        return o.chamfer([t for dd, t in dt if dd == 3], curves, surfs, [d])
+        try:
+            out = o.chamfer([t for dd, t in dt if dd == 3], curves, surfs, [d])
+        except Exception as e:  # noqa: BLE001
+            raise GeometryError(f"Chamfer failed, the distance is probably too large for the selected edges ({e})")
+        if not out:
+            raise GeometryError("Chamfer failed, the distance is probably too large for the selected edges")
+        return out
     if k in ("UncoverFaces", "KeepFaces", "SweepFacesAlongNormal"):
         o.synchronize()
         faces = object_faces(dt)
@@ -1085,16 +1111,28 @@ def _apply(cmd: Command, dt: list[tuple[int, int]], ctx: BuildContext, owner: st
         return res
     if k == "Fillet":
         o.synchronize()
+        r = ev.length(p["Radius"])
+        if r <= 0:
+            raise GeometryError("Fillet radius must be positive")
+        solid = any(d == 3 for d, _ in dt)
+        vids = [int(e) for e in p.get("Vertices", "").split(",") if e.strip()]
+        if vids:
+            if solid:
+                raise GeometryError("Vertices can be filleted on sheets; select the edges of a solid")
+            verts = object_vertices(dt)
+            corners = {verts[i] for i in vids if 0 <= i < len(verts)}
+            if not corners:
+                raise GeometryError("No valid vertices selected for fillet")
+            return _fillet_sheet(dt, corners, r)
         edges = object_edges(dt)
         ids = [int(e) for e in p.get("Edges", "").split(",") if e.strip()]
         curves = [edges[i] for i in ids if 0 <= i < len(edges)]
         if not curves:
             raise GeometryError("No valid edges selected for fillet")
-        r = ev.length(p["Radius"])
-        if r <= 0:
-            raise GeometryError("Fillet radius must be positive")
-        if not any(d == 3 for d, _ in dt):
-            return _fillet_sheet(dt, curves, r)
+        if not solid:
+            # edges of a sheet (projects of 0.2.3): the corners at both ends of each edge
+            return _fillet_sheet(dt, {abs(v) for c in curves
+                                      for _, v in gmsh.model.getBoundary([(1, c)], oriented=False)}, r)
         try:
             out = o.fillet([t for d, t in dt if d == 3], curves, [r])
         except Exception as e:  # noqa: BLE001
@@ -1105,18 +1143,16 @@ def _apply(cmd: Command, dt: list[tuple[int, int]], ctx: BuildContext, owner: st
     raise GeometryError(f"Unknown operation {k}")
 
 
-def _fillet_sheet(dt: list[tuple[int, int]], curves: list[int], r: float) -> list[tuple[int, int]]:
-    """Fillet of a planar sheet: rounds the corners at the end points of the selected edges. Each face is
-    extruded to a temporary solid, its edges through those corners are filleted and the face in the
-    original plane is kept."""
+def _fillet_sheet(dt: list[tuple[int, int]], corners: set[int], r: float,
+                  kind: str = "Fillet") -> list[tuple[int, int]]:
+    """Fillet (or Chamfer) of a planar sheet: rounds (or bevels) the corners (vertex tags). Each face is
+    extruded to a temporary solid, its edges through those corners are filleted (chamfered) and the face in
+    the original plane is kept."""
     o = _occ()
-    corners = set()
-    for c in curves:
-        for _, v in gmsh.model.getBoundary([(1, c)], oriented=False):
-            corners.add(abs(v))
+    what = "radius" if kind == "Fillet" else "distance"
     faces = [t for d, t in dt if d == 2]
     if not faces:
-        raise GeometryError("Fillet needs a solid or a sheet")
+        raise GeometryError(f"{kind} needs a solid or a sheet")
     xmin, ymin, zmin, xmax, ymax, zmax = _bbox(dt)
     diag = max(math.dist((xmin, ymin, zmin), (xmax, ymax, zmax)), 1e-12)
     tol = 1e-6 * diag
@@ -1135,7 +1171,7 @@ def _fillet_sheet(dt: list[tuple[int, int]], curves: list[int], r: float) -> lis
         nrms = np.asarray(gmsh.model.getNormal(f, [x for p in uv for x in p]), float).reshape(-1, 3)
         n = nrms[4] / np.linalg.norm(nrms[4])
         if np.any(np.abs(nrms @ n) < 1 - 1e-6):
-            raise GeometryError("Fillet of a sheet works only on flat sheets")
+            raise GeometryError(f"{kind} of a sheet works only on flat sheets")
         tops = {v: np.asarray(gmsh.model.getValue(0, v, [])) for v in sel}
         cp = o.copy([(2, f)])
         ex = o.extrude(cp, *(n * h))
@@ -1155,12 +1191,17 @@ def _fillet_sheet(dt: list[tuple[int, int]], curves: list[int], r: float) -> lis
                     edges.append(c)
         if len(edges) != len(sel):
             o.remove(vols, recursive=True)
-            raise GeometryError("Fillet of a sheet: the corners of the selected edges were not found")
+            raise GeometryError(f"{kind} of a sheet: the selected corners were not found")
         try:
-            filleted = o.fillet([t for _, t in vols], edges, [r])
+            if kind == "Fillet":
+                filleted = o.fillet([t for _, t in vols], edges, [r])
+            else:
+                # each edge runs along the extrusion, so both its faces are side faces: equal distances
+                side = [gmsh.model.getAdjacencies(1, c)[0][0] for c in edges]
+                filleted = o.chamfer([t for _, t in vols], edges, side, [r])
         except Exception as e:  # noqa: BLE001
             o.remove(vols, recursive=True)
-            raise GeometryError(f"Fillet failed, the radius is probably too large for the selected corners ({e})")
+            raise GeometryError(f"{kind} failed, the {what} is probably too large for the selected corners ({e})")
         o.synchronize()
         p0 = np.asarray(o.getCenterOfMass(2, f))
         keep = []
@@ -1173,7 +1214,7 @@ def _fillet_sheet(dt: list[tuple[int, int]], curves: list[int], r: float) -> lis
                 keep.append(s_)
         if len(keep) != 1:
             o.remove(filleted, recursive=True)
-            raise GeometryError("Fillet of a sheet failed")
+            raise GeometryError(f"{kind} of a sheet failed")
         new = o.copy([(2, keep[0])])
         o.remove(filleted, recursive=True)
         done.append((2, f))
@@ -1209,6 +1250,28 @@ def _bbox(dt) -> tuple[float, float, float, float, float, float]:
     return (*lo, *hi)  # type: ignore[return-value]
 
 
+def _place(dt, O, R) -> None:
+    """Moves dt from a coordinate system (origin O, axes R) to global. A rotation and a translation keep the
+    exact surfaces (planes, cylinders ...); a general affine transform would turn them into B-splines, on
+    which fillets and chamfers fail."""
+    o = _occ()
+    R = np.asarray(R, float)
+    if abs(np.linalg.det(R) - 1) > 1e-9:
+        from ..model import coordsys
+        o.affineTransform(dt, list(coordsys.matrix(O, R)[:3, :].ravel()))
+        return
+    ang = math.acos(max(-1.0, min(1.0, (np.trace(R) - 1) / 2)))
+    if ang > 1e-12:
+        if math.pi - ang > 1e-6:
+            axis = np.array([R[2, 1] - R[1, 2], R[0, 2] - R[2, 0], R[1, 0] - R[0, 1]])
+        else:                                   # half turn: the axis from the symmetric part
+            B = (R + np.eye(3)) / 2
+            axis = B[:, int(np.argmax(np.diag(B)))]
+        o.rotate(dt, 0, 0, 0, *(axis / np.linalg.norm(axis)), ang)
+    if np.linalg.norm(O) > 0:
+        o.translate(dt, *map(float, O))
+
+
 def _build_object(obj: GeoObject, ctx: BuildContext) -> list[tuple[int, int]]:
     if obj.name in ctx.stack:
         raise GeometryError(f"Circular boolean reference through '{obj.name}'")
@@ -1219,8 +1282,7 @@ def _build_object(obj: GeoObject, ctx: BuildContext) -> list[tuple[int, int]]:
             # Orientation: the creation command is given in this coordinate system
             from ..model import coordsys
             O, R = coordsys.frame(ctx.design, obj.orientation, ctx.ev)
-            M = coordsys.matrix(O, R)
-            _occ().affineTransform(dt, list(M[:3, :].ravel()))
+            _place(dt, O, R)
         for cmd in obj.history[1:]:
             if cmd.suppressed:
                 continue
@@ -1659,57 +1721,74 @@ def _resolve_planar_curves(ents, n_turn: float, skip=()) -> None:
 
 
 def _generate_planar_first() -> None:
-    """Display mesh in two passes. Curvature sizing costs time for every face in the model, also for
-    flat ones (a 50-segment sphere has 1250 of them). So plane faces are meshed first without it and
-    their triangles kept; then only the curved faces are meshed with curvature sizing."""
+    """Display mesh in passes. Swept pipes (helix wire, BSpline surfaces) get a coarser curvature
+    sizing: it is isotropic, so the thin tube radius would also set the size along the whole length
+    -> tens of thousands of display triangles. That limit holds only for those faces; cylinders and
+    spheres, also ones fused with the pipe, keep the full sizing (a single helix in the model used
+    to make every cylinder coarse)."""
     _PASS_CACHE.clear()
     S = gmsh.model.getEntities(2)
-    planes = [e for e in S if gmsh.model.getType(*e) == "Plane"]
-    curved = [e for e in S if e not in planes]
     curv = gmsh.option.getNumber("Mesh.MeshSizeFromCurvature")
-    if any(gmsh.model.getType(*e) == "BSpline surface" for e in curved):
-        # swept pipes (helix wire): curvature sizing is isotropic, so the thin tube radius would also
-        # set the size along the whole length -> tens of thousands of display triangles
-        gmsh.option.setNumber("Mesh.MeshSizeFromCurvature", min(curv, 8))
-    if len(planes) < 50 or not curved:
-        try:
-            if not curved:
-                gmsh.option.setNumber("Mesh.MeshSizeFromCurvature", 0)
-                _resolve_planar_curves(gmsh.model.getEntities(1), curv)
-            gmsh.model.mesh.generate(2)
-        finally:
-            gmsh.option.setNumber("Mesh.MeshSizeFromCurvature", curv)
-        return
-    curv_all, curv = curv, gmsh.option.getNumber("Mesh.MeshSizeFromCurvature")
-    everything = gmsh.model.getEntities()
+    swept = [e for e in S if gmsh.model.getType(*e) == "BSpline surface"]
+    rest = [e for e in S if e not in swept]
+    # lines and points outside every face (wires, helix lines) go with the last pass
+    in_faces = set(_closure(S)) if S else set()
+    loose = [e for e in gmsh.model.getEntities(1) + gmsh.model.getEntities(0) if e not in in_faces]
     try:
-        gmsh.option.setNumber("Mesh.MeshSizeFromCurvature", 0)
-        gmsh.model.mesh.removeSizeCallback()    # apex floor only matters with curvature sizing
+        if swept and rest:
+            _mesh_faces(swept, min(curv, 8), last=False)
+            # edges shared with the pipe keep its node count, so both sides of the seam match
+            seam = [e for e in set(_closure(swept)) & set(_closure(rest))
+                    if e[0] == 1 and e in _PASS_CACHE and gmsh.model.getType(*e) != "Line"]
+            for _, t in seam:
+                gmsh.model.mesh.setTransfiniteCurve(t, len(_PASS_CACHE[(1, t)]))
+            _mesh_faces(rest, curv, last=True, loose=loose, fixed=seam)
+        else:
+            _mesh_faces(S, min(curv, 8) if swept else curv, last=True, loose=loose, alone=True)
+    finally:
+        gmsh.option.setNumber("Mesh.MeshSizeFromCurvature", curv)
+        gmsh.option.setNumber("Mesh.MeshOnlyVisible", 0)
+        gmsh.model.setVisibility(gmsh.model.getEntities(), 1)
+        if _APEX_CB is not None:
+            gmsh.model.mesh.setSizeCallback(_APEX_CB)
+
+
+def _mesh_faces(faces: list, curv: float, last: bool, loose: list = (), fixed: list = (),
+                alone: bool = False) -> None:
+    """Display mesh of some faces. Curvature sizing costs time for every face, also for flat ones
+    (a 50-segment sphere has 1250 of them), so with many plane faces these are meshed first without
+    it. The triangles of every pass but the last one are kept in _PASS_CACHE (gmsh holds one mesh)."""
+    planes = [e for e in faces if gmsh.model.getType(*e) == "Plane"]
+    curved = [e for e in faces if e not in planes]
+    if len(planes) >= 50 and curved:
+        passes = [(planes, 0.0), (curved, curv)]
+    else:
+        passes = [(faces, curv if curved else 0.0)]
+    skip = (_closure(curved) if curved else []) + list(fixed)
+    for i, (grp, c) in enumerate(passes):
+        final = last and i == len(passes) - 1
+        gmsh.option.setNumber("Mesh.MeshSizeFromCurvature", c)
+        cl = (_closure(grp) if grp else []) + (list(loose) if final else [])
+        if c == 0:
+            gmsh.model.mesh.removeSizeCallback()    # apex floor only matters with curvature sizing
+            _resolve_planar_curves(cl, curv, skip=skip)
+        elif _APEX_CB is not None:
+            gmsh.model.mesh.setSizeCallback(_APEX_CB)
+        if alone and len(passes) == 1:
+            gmsh.model.mesh.generate(2)       # the whole model in one go
+            return
         gmsh.option.setNumber("Mesh.MeshOnlyVisible", 1)
-        gmsh.model.setVisibility(everything, 0)
-        pc = _closure(planes)
-        _resolve_planar_curves(pc, curv, skip=_closure(curved))
-        gmsh.model.setVisibility(pc, 1)
+        gmsh.model.setVisibility(gmsh.model.getEntities(), 0)
+        gmsh.model.setVisibility(cl, 1)
+        gmsh.model.mesh.clear()
         gmsh.model.mesh.generate(2)
-        for d, t in pc:
-            if d == 2:
+        for d, t in cl:
+            if final:
+                _PASS_CACHE.pop((d, t), None)    # shared edges: take the (finer) last-pass discretisation
+            elif d == 2:
                 _PASS_CACHE[(2, t)] = _entity_tris(2, t)
             elif d == 1:
                 _PASS_CACHE[(1, t)] = _curve_polyline(t)
-        gmsh.option.setNumber("Mesh.MeshSizeFromCurvature", curv)
-        if _APEX_CB is not None:
-            gmsh.model.mesh.setSizeCallback(_APEX_CB)
-        gmsh.model.setVisibility(everything, 0)
-        cc = _closure(curved)
-        gmsh.model.setVisibility(cc, 1)
-        gmsh.model.mesh.clear()
-        gmsh.model.mesh.generate(2)
-        for e in cc:   # shared edges: take the (finer) curved-pass discretisation
-            _PASS_CACHE.pop(e, None)
-    finally:
-        gmsh.option.setNumber("Mesh.MeshSizeFromCurvature", curv_all)
-        gmsh.option.setNumber("Mesh.MeshOnlyVisible", 0)
-        gmsh.model.setVisibility(everything, 1)
 
 
 def _mesh_skipping_bad(ctx: BuildContext) -> None:

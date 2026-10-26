@@ -2,6 +2,7 @@
 import itertools
 
 import numpy as np
+import pytest
 
 from hertzon.model import lumped as LU
 from hertzon.model import objframe as OF
@@ -116,3 +117,34 @@ def test_orientation_is_applied():
     a = Assignment("P1", "Lumped Port", {"IntegrationLine": "0.5,0,0;0.5,2,0"}, objects=["S"])
     assert np.allclose(np.asarray(OF.global_points(d, a, "IntegrationLine", d.evaluator(p))) * 1e3,
                        [[1.5, 2, 3], [1.5, 4, 3]])
+
+
+@pytest.mark.parametrize("mode,props", [
+    ("Axis/Position", {"XAxis": "1,1,0", "YPoint": "-1,1,1"}),
+    ("Euler Angle ZXZ", {"Phi": "30deg", "Theta": "40deg", "Psi": "10deg"}),
+    ("Euler Angle ZYZ", {"Phi": "0deg", "Theta": "180deg", "Psi": "0deg"}),      # a half turn
+])
+def test_fillet_and_chamfer_on_an_object_in_a_relative_cs(mode, props):
+    """An object defined in a relative coordinate system keeps exact planar faces, so its edges can be filleted
+    and chamfered, and it lands where the coordinate system puts it."""
+    from hertzon.kernel import occ as K
+    from hertzon.model import coordsys
+    from hertzon.model.design import CoordSys
+    K.ensure_gmsh("test_objframe")
+    p = Project()
+    d = p.designs[0]
+    cs = CoordSys("CS")
+    cs.props.update(Mode=mode, Origin="3,-2,5", **props)
+    d.coord_systems.append(cs)
+    for name, op in (("F", Command.new("Fillet", Radius="0.5", Edges="0,2,4,6")),
+                     ("C", Command.new("Chamfer", Distance="0.5", Edges="0")), ("B", None)):
+        o = d.add_object("CreateBox", name=name, Position="1,2,0", XSize="10", YSize="20", ZSize="2")
+        o.orientation = "CS"
+        if op is not None:
+            o.history.append(op)
+    ctx = K.build_design(d, d.evaluator(p))
+    assert not ctx.errors
+    O, R = coordsys.frame(d, "CS", d.evaluator(p))
+    verts = np.asarray(K.tessellate(ctx)["B"].vertices)
+    for c in np.array([[1, 2, 0], [11, 22, 2], [11, 2, 0]]) * 1e-3:
+        assert np.min(np.linalg.norm(verts - (O + R @ c), axis=1)) < 1e-9

@@ -42,6 +42,10 @@ def model_key(project, design, setup) -> str:
     d = asdict(design)
     for k in ("reports", "field_plots", "spheres", "notes", "name", "setups", "optimetrics", "parametrics"):
         d.pop(k, None)
+    # equations of the Fields Calculator are post-processing (and left out, the keys of solutions of 0.2.3 and
+    # earlier stay valid)
+    d.pop("field_exprs", None)
+    d.pop("field_funcs", None)
     if isinstance(d.get("settings"), dict):
         d["settings"] = {k: v for k, v in d["settings"].items() if k not in ("OutputVariables", "Sources", "FieldType")}
     objs = []

@@ -509,6 +509,24 @@ def test_projection_keeps_the_model_size():
     assert not cam.GetParallelProjection() and got == [True, False]
 
 
+def test_report_tab_does_not_raise_the_window_minimum_height():
+    """Opening a report tab must not raise the main window's minimum height: the trace editor scrolls, so a
+    maximized window on a 1080p screen with display scaling keeps its status bar on screen."""
+    import os
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    from PySide6.QtWidgets import QApplication, QScrollArea
+    from hertzon.gui.doc import Document
+    from hertzon.gui.reports import ReportWindow
+    from hertzon.model.design import Report
+    app = QApplication.instance() or QApplication([])  # noqa: F841
+    doc = Document(Project.load(EX / "PatchAntenna.hzn"))
+    w = ReportWindow(doc, Report("XY Plot 1", "Rectangular Plot", "Setup1 : LastAdaptive",
+                                 ["dB(S(1,1))", "dB(S(2,1))"]))
+    editor = w.findChild(QScrollArea)
+    assert editor is not None and editor.widget().minimumSizeHint().height() > 300
+    assert w.minimumSizeHint().height() < 200, w.minimumSizeHint()
+
+
 def test_radiation_pattern_of_a_sweep_frequency_and_rectangular(tmp_path):
     """Radiation Pattern of a sweep with fields: the frequency is chosen in the report, and the cut can be
     drawn over the angle (rectangular) with markers."""
@@ -1050,12 +1068,13 @@ def test_open_example_lists_the_shipped_examples(tmp_path):
     assert example_projects(tmp_path / "missing") == []
 
 
-def _fillet_area(kind, radius, edges, **props):
+def _fillet_area(kind, radius, edges="", vertices="", op="Fillet", **props):
     import gmsh
     p = Project()
     d = p.designs[0]
     o = d.add_object(kind, **props)
-    o.history.append(Command.new("Fillet", Radius=radius, Edges=edges))
+    size = {"Radius": radius} if op == "Fillet" else {"Distance": radius}
+    o.history.append(Command.new(op, Edges=edges, Vertices=vertices, **size))
     K.ensure_gmsh("test_fillet")
     gmsh.model.remove()
     gmsh.model.add("test_fillet")
@@ -1063,22 +1082,55 @@ def _fillet_area(kind, radius, edges, **props):
     return sum(gmsh.model.occ.getMass(*x) for x in ctx.built.get(o.name, [])), ctx.errors.get(o.name)
 
 
-def test_fillet_sheet_rounds_corners_of_selected_edges():
-    # a patch is a sheet: the fillet rounds the two corners of the selected edge (was: object vanished)
-    area, err = _fillet_area("CreateRectangle", "0.5", "0", Position="0,0,1", Axis="Z", XSize="10", YSize="8")
+def test_fillet_sheet_rounds_selected_vertices():
+    # a patch is a sheet: one fillet at each selected vertex (was: object vanished)
+    corner = 1 - np.pi / 4
+    area, err = _fillet_area("CreateRectangle", "0.5", vertices="0", Position="0,0,1", Axis="Z", XSize="10",
+                             YSize="8")
     assert err is None
-    assert area == pytest.approx((80 - 2 * 0.25 * (1 - np.pi / 4)) * 1e-6, rel=1e-6)
-    area, err = _fillet_area("CreateRectangle", "1", "0,1,2,3", Position="0,0,0", Axis="X", YSize="10",
+    assert area == pytest.approx((80 - 0.25 * corner) * 1e-6, rel=1e-6)
+    area, err = _fillet_area("CreateRectangle", "1", vertices="0,1,2,3", Position="0,0,0", Axis="X", YSize="10",
                              ZSize="8")
     assert err is None
-    assert area == pytest.approx((80 - 4 * (1 - np.pi / 4)) * 1e-6, rel=1e-6)
+    assert area == pytest.approx((80 - 4 * corner) * 1e-6, rel=1e-6)
+    # projects of 0.2.3 with edges on a sheet: the corners at both ends of the edge
+    area, err = _fillet_area("CreateRectangle", "0.5", edges="0", Position="0,0,0", Axis="Z", XSize="10",
+                             YSize="8")
+    assert err is None
+    assert area == pytest.approx((80 - 2 * 0.25 * corner) * 1e-6, rel=1e-6)
+
+
+def test_chamfer_sheet_cuts_selected_vertices():
+    # a patch is a sheet: one chamfer at each selected vertex, each cuts off a triangle d*d/2
+    area, err = _fillet_area("CreateRectangle", "0.5", vertices="0", op="Chamfer", Position="0,0,1", Axis="Z",
+                             XSize="10", YSize="8")
+    assert err is None
+    assert area == pytest.approx((80 - 0.125) * 1e-6, rel=1e-6)
+    area, err = _fillet_area("CreateRectangle", "1", vertices="0,1,2,3", op="Chamfer", Position="0,0,0",
+                             Axis="X", YSize="10", ZSize="8")
+    assert err is None
+    assert area == pytest.approx((80 - 4 * 0.5) * 1e-6, rel=1e-6)
+    _, err = _fillet_area("CreateRectangle", "6", vertices="0,1", op="Chamfer", Position="0,0,0", Axis="Z",
+                          XSize="10", YSize="8")
+    assert "distance is probably too large" in err
+    # solids keep the edges
+    vol, err = _fillet_area("CreateBox", "0.5", edges="0", op="Chamfer", Position="0,0,0", XSize="10", YSize="8",
+                            ZSize="1")
+    assert err is None and vol < 80e-9
+    _, err = _fillet_area("CreateBox", "0.5", vertices="0", op="Chamfer", Position="0,0,0", XSize="10",
+                          YSize="8", ZSize="1")
+    assert "select the edges" in err
 
 
 def test_fillet_too_large_is_reported():
-    _, err = _fillet_area("CreateRectangle", "6", "0", Position="0,0,0", Axis="Z", XSize="10", YSize="8")
+    _, err = _fillet_area("CreateRectangle", "6", vertices="0,1", Position="0,0,0", Axis="Z", XSize="10",
+                          YSize="8")
     assert "radius is probably too large" in err
-    _, err = _fillet_area("CreateBox", "0.5", "0,1,2,3", Position="0,0,0", XSize="10", YSize="8", ZSize="0.035")
+    _, err = _fillet_area("CreateBox", "0.5", edges="0,1,2,3", Position="0,0,0", XSize="10", YSize="8",
+                          ZSize="0.035")
     assert "radius is probably too large" in err
+    _, err = _fillet_area("CreateBox", "0.5", vertices="0", Position="0,0,0", XSize="10", YSize="8", ZSize="1")
+    assert "select the edges" in err
 
 
 def test_failed_fillet_leaves_object_unchanged(monkeypatch):
@@ -1100,10 +1152,72 @@ def test_failed_fillet_leaves_object_unchanged(monkeypatch):
         _edge_op = MainWindow._edge_op
     win = Win()
     win.doc = doc
-    win._edge_op("Fillet", {"Radius": "6", "Edges": "0"}, "Patch")
+    win._edge_op("Fillet", {"Radius": "6", "Vertices": "0,1"}, "Patch")
     assert [c.kind for c in doc.design.obj("Patch").history] == ["CreateRectangle"]
     assert "Patch" in doc.tess and not doc.errors and not doc.redo_stack
     assert shown and "unchanged" in shown[0]
-    win._edge_op("Fillet", {"Radius": "0.5", "Edges": "0"}, "Patch")
+    win._edge_op("Fillet", {"Radius": "0.5", "Vertices": "0"}, "Patch")
     assert [c.kind for c in doc.design.obj("Patch").history] == ["CreateRectangle", "Fillet"]
     assert "Patch" in doc.tess and len(shown) == 1
+
+
+def test_box_selection_rectangle_does_not_stay():
+    """A selection rectangle whose mouse release went elsewhere (another tab or window) goes with the next
+    move or press in the 3D view instead of staying on screen."""
+    from PySide6.QtWidgets import QApplication
+    app = QApplication.instance() or QApplication([])  # noqa: F841
+    from hertzon.gui.main_window import MainWindow
+    from hertzon.model.design import Project
+    win = MainWindow(Project())
+    v, ren = win.view, win.view.plotter.renderer
+    n0 = ren.GetViewProps().GetNumberOfItems()
+    v._band, v._press_pos = ((10, 10), None, None), (10, 10)
+    v._show_band((80, 60))
+    assert ren.GetViewProps().GetNumberOfItems() == n0 + 2
+    v._on_move(None, None)                       # no button is down: the release was lost
+    assert v._band is None and ren.GetViewProps().GetNumberOfItems() == n0
+    win.doc.dirty = False
+    win.close()
+
+
+@pytest.mark.parametrize("fused", [False, True])
+def test_helix_does_not_coarsen_other_cylinders(fused):
+    # a swept pipe (BSpline surface) limits the curvature sizing, but only for its own faces: with a
+    # helix in the model every cylinder was drawn with 8 segments per turn, also one fused with it
+    def base_circles(helix):
+        p = Project()
+        d = p.designs[0]
+        d.add_object("CreateCylinder", "Base", CenterPosition="0,0,-3", Axis="Z", Radius="6", Height="3.1")
+        if helix:
+            d.add_object("CreateHelix", "Coil", CenterPosition="0,0,0", Axis="Z", Radius="4", Pitch="1",
+                         Turns="5", WireRadius="0.2")
+            if fused:
+                d.obj("Coil").consumed_by = "Base"
+                d.obj("Base").history.append(Command.new("Unite", Tools="Coil", KeepOriginals="False"))
+        K.ensure_gmsh("test_helix_cyl")
+        ctx = K.build_design(d, d.evaluator(p))
+        assert not ctx.errors
+        tess = K.tessellate(ctx)
+        # the two rims of the base: the widest edges
+        E = [e for e in tess["Base"].edges if len(e) > 2]
+        w = max(np.ptp(e[:, 0]) for e in E)
+        return sorted(len(e) for e in E if np.ptp(e[:, 0]) > 0.99 * w)
+    assert base_circles(True) == base_circles(False)
+    assert len(base_circles(True)) == 2 and min(base_circles(True)) >= 30
+
+
+@pytest.mark.parametrize("nseg", ["0", "8"])
+def test_helix_wire_leaves_no_loose_faces(nseg):
+    # the pipe is a copy of the profile disk; the disk left behind had no volume on either side and
+    # the solver mesh failed with a KeyError on its triangles
+    import gmsh
+    p = Project()
+    d = p.designs[0]
+    d.add_object("CreateHelix", "Coil", CenterPosition="0,0,0", Axis="Z", Radius="4", Pitch="1",
+                 Turns="2", WireRadius="0.2", NumberOfSegmentsPerTurn=nseg)
+    K.ensure_gmsh("test_helix_loose")
+    ctx = K.build_design(d, d.evaluator(p))
+    assert ctx.built["Coil"] and not ctx.errors
+    assert all(len(gmsh.model.getAdjacencies(2, s)[0]) for _, s in gmsh.model.getEntities(2))
+    assert len(gmsh.model.getEntities(1)) == len({abs(t) for _, t in gmsh.model.getBoundary(
+        gmsh.model.getEntities(2), combined=False, oriented=False)})

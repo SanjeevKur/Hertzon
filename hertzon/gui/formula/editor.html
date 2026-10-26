@@ -1,0 +1,215 @@
+<!doctype html>
+<!-- The formula editor of the Fields Calculator: one MathLive math field (MIT, bundled in this folder),
+     talking to calculator.py through the Qt web channel. Python sets and reads the LaTeX; typing a command
+     after a backslash and Space replaces it (\times, \iint, \curl, ...), as in a desktop formula editor. -->
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  html, body { margin: 0; height: 100%; background: #ffffff; overflow: hidden }
+  body { display: flex; align-items: center; justify-content: center; font-family: "Segoe UI", sans-serif }
+  math-field { font-size: 30px; min-width: 60%; max-width: calc(100% - 24px); padding: 10px 14px;
+               border: 1px dashed #b9c3d6; border-radius: 4px; outline: none; color: #1f2937;
+               --placeholder-color: #8a94a6; --selection-background-color: #dbe4fb;
+               --contains-highlight-background-color: #f2f5fc; --caret-color: #2f5bd3 }
+  math-field:focus-within { border-color: #2f5bd3 }
+  math-field::part(virtual-keyboard-toggle), math-field::part(menu-toggle) { display: none }
+  #hint { position: fixed; left: 0; right: 0; bottom: 6px; text-align: center; color: #8a94a6; font-size: 12px }
+</style>
+<script src="mathlive.min.js"></script>
+<script src="qrc:///qtwebchannel/qwebchannel.js"></script>
+</head>
+<body>
+<div id="hint"></div>
+<script>
+"use strict";
+const G = "\\placeholder{}";
+let py = null, mf = null, busy = false;
+
+// a command typed after \ and Space: simple replacements and the operations over a geometry
+const SIMPLE = { curl: "\\nabla\\times ", divg: "\\nabla\\cdot ", grad: "\\nabla ", eps0: "\\varepsilon_0",
+  mu0: "\\mu_0", epsr: "\\varepsilon_{r}", mur: "\\mu_{r}", tand: "\\tan\\delta",
+  Re: "\\operatorname{Re}\\left\\{" + G + "\\right\\}", Im: "\\operatorname{Im}\\left\\{" + G + "\\right\\}" };
+// command -> [template, function, dimension of the geometry]
+const GEOMETRY = {
+  int: ["\\int_{" + G + "}#@\\cdot\\mathrm{d}\\mathbf{l}", "int_line", 1],
+  oint: ["\\oint_{" + G + "}#@\\cdot\\mathrm{d}\\mathbf{l}", "circ", 1],
+  iint: ["\\iint_{" + G + "}#@\\,\\mathrm{d}A", "int_surf", 2],
+  flux: ["\\iint_{" + G + "}#@\\cdot\\mathbf{n}\\,\\mathrm{d}A", "flux", 2],
+  oiint: ["\\oiint_{" + G + "}#@\\cdot\\mathbf{n}\\,\\mathrm{d}A", "flux", 2],
+  iiint: ["\\iiint_{" + G + "}#@\\,\\mathrm{d}V", "int_vol", 3],
+  max: ["\\max_{" + G + "}\\left(#@\\right)", "max", -1],
+  min: ["\\min_{" + G + "}\\left(#@\\right)", "min", -1],
+  avg: ["\\operatorname{avg}_{" + G + "}\\left(#@\\right)", "avg", -1],
+  at: ["\\left.#@\\right|_{" + G + "}", "at", 0]
+};
+const NOT_FOLLOWED = "(?![A-Za-z])(?!\\s*(\\\\limits|\\\\nolimits)?\\s*_)(?!\\s*\\\\left)";
+
+function value() { return mf.getValue("latex"); }
+// "P_{\mathrm{in}}=\iint..." -> ["P_{\mathrm{in}}=", "\iint..."]: the name of the equation and its formula
+function splitName(lx) {
+  let depth = 0;
+  for (let i = 0; i < lx.length; i++) {
+    const c = lx[i];
+    if (c === "{") depth++;
+    else if (c === "}") depth--;
+    else if (c === "=" && depth === 0) return [lx.slice(0, i + 1), lx.slice(i + 1)];
+  }
+  return ["", lx];
+}
+function changed() { if (py) py.changed(value()); }
+function hint(t) { document.getElementById("hint").textContent = t || ""; }
+
+function toPlaceholder() {
+  mf.position = 0;
+  if (!mf.executeCommand("moveToNextPlaceholder") || value().indexOf("placeholder") < 0) mf.position = mf.lastOffset;
+}
+
+// a square root typed as a function (sqrt, \sqrt with parentheses): the root sign over its argument
+const SQRT_HEAD = /\\(?:sqrt|operatorname\{sqrt\}|mathrm\{sqrt\})\s*\\left\(/;
+const SQRT_BARE = /\\(?:operatorname\{sqrt\}|mathrm\{sqrt\})(?![A-Za-z])(?!\s*\\left)/;
+function sqrtParen(lx) {
+  const m = SQRT_HEAD.exec(lx);
+  if (!m) return null;
+  const start = m.index + m[0].length, re = /\\(left|right)(?![A-Za-z])/g;
+  re.lastIndex = start;
+  let depth = 1, t;
+  while ((t = re.exec(lx))) {
+    depth += t[1] === "left" ? 1 : -1;
+    if (depth === 0) {
+      if (lx[re.lastIndex] !== ")") return null;
+      const x = lx.slice(start, t.index).trim();
+      return lx.slice(0, m.index) + "\\sqrt{" + (x || G) + "}" + lx.slice(re.lastIndex + 1);
+    }
+  }
+  return null;
+}
+
+function autocorrect() {
+  const lx = value();
+  const sq = sqrtParen(lx);
+  if (sq !== null) {
+    const fromEnd = mf.lastOffset - mf.position;
+    mf.setValue(sq, { silenceNotifications: true });
+    if (value().indexOf("placeholder") >= 0) toPlaceholder(); else mf.position = Math.max(0, mf.lastOffset - fromEnd);
+    return true;
+  }
+  if (SQRT_BARE.test(lx)) {
+    mf.setValue(lx.replace(SQRT_BARE, "\\sqrt{" + G + "}"), { silenceNotifications: true });
+    toPlaceholder();
+    return true;
+  }
+  for (const [k, rep] of Object.entries(SIMPLE)) {
+    const re = new RegExp("\\\\" + k + "(?![A-Za-z])" + (k === "Re" || k === "Im" ? "(?!\\s*\\\\left)(?!\\s*\\()" : ""));
+    if (re.test(lx)) {
+      const fromEnd = mf.lastOffset - mf.position;
+      mf.setValue(lx.replace(re, rep), { silenceNotifications: true });
+      if (k === "Re" || k === "Im") toPlaceholder(); else mf.position = Math.max(0, mf.lastOffset - fromEnd);
+      return true;
+    }
+  }
+  for (const [k, [tpl, fn, dim]] of Object.entries(GEOMETRY)) {
+    const re = new RegExp("\\\\" + (k === "avg" || k === "at" ? "(?:operatorname\\{" + k + "\\}|" + k + ")" : k) + NOT_FOLLOWED);
+    if (k === "at" ? /\\at(?![A-Za-z])/.test(lx) : re.test(lx)) {
+      mf.setValue(lx.replace(k === "at" ? /\\at(?![A-Za-z])/ : re, tpl.replace("#@", G)), { silenceNotifications: true });
+      toPlaceholder();
+      if (py) py.pick(fn, dim);
+      return true;
+    }
+  }
+  return false;
+}
+
+// a backslash that came in as a character (\backslash t i m e s): the command it starts, on Space
+function fixBackslash() {
+  const lx = value(), m = /\\backslash\s*((?:[A-Za-z]\s*)+)$/.exec(lx);
+  if (!m) return false;
+  mf.setValue(lx.slice(0, m.index) + "\\" + m[1].replace(/\s+/g, "") + " ", { silenceNotifications: true });
+  mf.position = mf.lastOffset;
+  onInput();
+  return true;
+}
+
+function onInput() {
+  if (mf.mode === "latex") return;        // a command is being typed: wait for Space
+  if (busy) { changed(); return; }
+  busy = true;
+  try { autocorrect(); } finally { busy = false; }
+  changed();
+}
+
+// ---- called from Python ----
+window.hz = {
+  setLatex(tex) { mf.setValue(tex, { silenceNotifications: true }); mf.position = mf.lastOffset; },
+  setShortcuts(map) { try { mf.inlineShortcuts = map; } catch (e) { /* older MathLive */ } },
+  focus() { mf.focus(); },
+  // a template; #@ is the selection (or an empty box), #? an empty box
+  insert(tpl) {
+    mf.focus();
+    let sel = "";
+    try { if (!mf.selectionIsCollapsed) sel = mf.getValue(mf.selection, "latex"); } catch (e) { sel = ""; }
+    const t = tpl.replace("#@", sel || "#?");
+    mf.insert(t, { format: "latex", selectionMode: t.includes("#?") ? "placeholder" : "after" });
+    changed();
+  },
+  // an operation over a geometry around the selection, or around the whole formula (whole = true)
+  wrap(tpl, whole) {
+    mf.focus();
+    let sel = "";
+    try { if (!mf.selectionIsCollapsed) sel = mf.getValue(mf.selection, "latex"); } catch (e) { sel = ""; }
+    if (!sel && whole && value().trim()) {
+      const [head, body] = splitName(value());     // Name = ... stays in front
+      mf.setValue(head + tpl.replace("#@", body), { silenceNotifications: true });
+      toPlaceholder();
+    } else {
+      mf.insert(tpl.replace("#@", sel || G), { format: "latex", selectionMode: "placeholder" });
+    }
+    changed();
+  },
+  // the picked geometry into the first empty box below a sign (else at the caret)
+  fillGeometry(g) {
+    mf.focus();
+    const lx = value(), key = "_{\\placeholder{}}", i = lx.indexOf(key);
+    if (i >= 0) {
+      mf.setValue(lx.slice(0, i) + "_{" + g + "}" + lx.slice(i + key.length), { silenceNotifications: true });
+      toPlaceholder();
+    } else mf.insert(g, { format: "latex" });
+    changed();
+  },
+  hint
+};
+
+function start() {
+  MathfieldElement.fontsDirectory = "./fonts";
+  MathfieldElement.soundsDirectory = null;
+  MathfieldElement.keypressSound = null;
+  MathfieldElement.plonkSound = null;
+  mf = new MathfieldElement();
+  mf.id = "mf";
+  mf.setAttribute("aria-label", "Formula");
+  document.body.prepend(mf);
+  mf.mathVirtualKeyboardPolicy = "manual";
+  mf.smartFence = true;
+  mf.popoverPolicy = "off";
+  try { mf.menuItems = []; } catch (e) { /* older MathLive */ }
+  mf.inlineShortcuts = {};
+  try { mf.placeholder = "\\text{Name} = \\text{formula}"; } catch (e) { /* older MathLive */ }
+  mf.addEventListener("input", onInput);
+  // a command after \ is committed by Space; MathLive leaves its LaTeX mode right after the input event
+  mf.addEventListener("mode-change", () => setTimeout(onInput, 0));
+  mf.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && mf.mode !== "latex") { e.preventDefault(); e.stopPropagation(); if (py) py.submit(); }
+    // where \\ needs AltGr (Ctrl+Alt) the editor takes it as a shortcut or as a plain backslash
+    // character; the command typed after it is made on Space (fixBackslash)
+    else if (e.key === "\\" && e.ctrlKey && e.altKey && mf.mode !== "latex") {
+      e.preventDefault(); e.stopPropagation();
+      mf.insert("\\backslash", { format: "latex" });
+    }
+    else if (e.key === " " && mf.mode !== "latex" && fixBackslash()) { e.preventDefault(); e.stopPropagation(); }
+  }, true);
+  new QWebChannel(qt.webChannelTransport, (ch) => { py = ch.objects.py; py.ready(); });
+}
+if (window.customElements) customElements.whenDefined("math-field").then(start);
+</script>
+</body>
+</html>
