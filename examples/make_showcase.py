@@ -224,6 +224,7 @@ def design_patch_array(p: Project) -> Design:
                        XSize="Wsub", YSize="Lp+24mm", ZSize="t_rad")
     rad.orientation = "CS_Array"
     rad.transparency = 0.7
+    op(rad, "Fillet", Radius="0.5mm", Edges="0,2,4,6")
 
     # boundaries and excitation
     boundary(d, "Finite Conductivity", "Copper_Traces", objects=["Radiator", "MainA"], UseMaterial="True",

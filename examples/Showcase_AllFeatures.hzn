@@ -474,6 +474,15 @@
         "ZSize": "t_rad"
        },
        "suppressed": false
+      },
+      {
+       "kind": "Fillet",
+       "props": {
+        "Radius": "0.5mm",
+        "Edges": "0,2,4,6",
+        "Vertices": ""
+       },
+       "suppressed": false
       }
      ],
      "material": "PLA",
