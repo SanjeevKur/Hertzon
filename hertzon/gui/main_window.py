@@ -2406,14 +2406,13 @@ class MainWindow(QMainWindow):
         self.doc.commit("model")         # integration lines follow by themselves (model.objframe)
 
     def chamfer(self) -> None:
-        if self.doc.selection_mode != "edge" or not self.doc.selection:
-            QMessageBox.information(self, "Chamfer", "Select edges (press E) of one solid first.")
-            return
-        obj = self.doc.selection[0].obj
-        edges = ",".join(str(s.index) for s in self.doc.selection if s.obj == obj)
-        r, ok = QInputDialog.getText(self, "Chamfer", "Distance:", text="0.5")
-        if ok:
-            self._edge_op("Chamfer", {"Distance": r, "Edges": edges}, obj)
+        """Solids: chamfer along the selected edges. Sheets: a chamfer at each selected vertex (corner)."""
+        sel = self._edge_or_vertex_selection("Chamfer", "chamfered")
+        if sel:
+            obj, key, ids = sel
+            r, ok = QInputDialog.getText(self, "Chamfer", "Distance:", text="0.5")
+            if ok:
+                self._edge_op("Chamfer", {"Distance": r, key: ids}, obj)
 
     def _edge_op(self, kind: str, values: dict, obj: str) -> None:
         """Fillet/Chamfer: if the object can not be built with the new operation, it stays unchanged."""
@@ -2537,27 +2536,34 @@ class MainWindow(QMainWindow):
 
     def fillet(self) -> None:
         """Solids: fillet along the selected edges. Sheets: a fillet at each selected vertex (corner)."""
+        sel = self._edge_or_vertex_selection("Fillet", "filleted")
+        if sel:
+            obj, key, ids = sel
+            r, ok = QInputDialog.getText(self, "Fillet", "Radius:", text="0.5")
+            if ok:
+                self._edge_op("Fillet", {"Radius": r, key: ids}, obj)
+
+    def _edge_or_vertex_selection(self, title: str, done: str):
+        """Fillet/Chamfer: (object, "Edges" or "Vertices", indices) of the selection, edges of a solid or
+        vertices of a sheet; None (with a hint) otherwise."""
         mode = self.doc.selection_mode
         if mode not in ("edge", "vertex") or not self.doc.selection:
-            QMessageBox.information(self, "Fillet", "Select edges (press E) of a solid or vertices (press V) "
-                                                    "of a sheet first.")
-            return
+            QMessageBox.information(self, title, "Select edges (press E) of a solid or vertices (press V) "
+                                                 "of a sheet first.")
+            return None
         obj = self.doc.selection[0].obj
         t = self.doc.tess.get(obj)
         sheet = t is not None and t.dim == 2
         if mode == "edge" and sheet:
-            QMessageBox.information(self, "Fillet", "A sheet is filleted at its corners: select the vertices "
-                                                    "(press V).")
-            return
+            QMessageBox.information(self, title, f"A sheet is {done} at its corners: select the vertices "
+                                                 "(press V).")
+            return None
         if mode == "vertex" and not sheet:
-            QMessageBox.information(self, "Fillet", "Vertices can be filleted on sheets. For a solid select "
-                                                    "the edges (press E).")
-            return
+            QMessageBox.information(self, title, f"Vertices can be {done} on sheets. For a solid select "
+                                                 "the edges (press E).")
+            return None
         key = "Edges" if mode == "edge" else "Vertices"
-        ids = ",".join(str(s.index) for s in self.doc.selection if s.obj == obj)
-        r, ok = QInputDialog.getText(self, "Fillet", "Radius:", text="0.5")
-        if ok:
-            self._edge_op("Fillet", {"Radius": r, key: ids}, obj)
+        return obj, key, ",".join(str(s.index) for s in self.doc.selection if s.obj == obj)
 
     def _duplicate(self, objs: list[str], cmds_for_copy) -> None:
         self.doc.checkpoint()
@@ -5365,6 +5371,7 @@ class MainWindow(QMainWindow):
                 m.addAction("Chamfer...", self.chamfer)
             elif mode == "vertex":
                 m.addAction("Fillet...", self.fillet)
+                m.addAction("Chamfer...", self.chamfer)
             elif mode == "face":
                 m.addAction("Uncover Faces", lambda: self.face_op("UncoverFaces"))
                 m.addAction("Detach Faces", self.detach_faces)

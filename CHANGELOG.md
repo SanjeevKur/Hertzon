@@ -50,6 +50,9 @@ the GitHub release notes.
   the field is plotted on a cut plane.
 
 ### Changed
+- **Chamfer of a sheet at its vertices**: like Fillet, a sheet (for example a patch) is now chamfered by
+  selecting its corner vertices (press V, also in the context menu); each selected corner is cut off by the
+  distance. Solids are still chamfered along their edges.
 - **Equation library**: right click on Equations → **Open Library...** opens a window with the ready-made
   equations and functions; tick one or more (or a whole group) and import them into the design at once.
   It replaces the From Library submenu.
