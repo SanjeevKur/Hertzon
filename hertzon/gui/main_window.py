@@ -797,7 +797,8 @@ class MainWindow(QMainWindow):
         g.large("Mag E", "field", lambda: self.plot_fields("Mag_E"))
         g.small("Vector E", "field_vec", lambda: self.plot_fields("Vector_E"))
         g.small("Mag H", "field_h", lambda: self.plot_fields("Mag_H"))
-        g.small("More", "field", menu=[(q, (lambda q=q: self.plot_fields(q))) for q in F.QUANTITIES])
+        b = g.small("More", "field", menu=[])
+        b.menu().aboutToShow.connect(lambda mm=b.menu(): self._fill_plot_fields(mm))
         g.small("Animate", "animate", self.toggle_animation)
         g.small("Modify Plot", "variables", lambda: self._on_current_plot(self.modify_field_plot))
         g.small("Attributes", "options", lambda: self._on_current_plot(self.field_plot_attributes))
@@ -5096,6 +5097,28 @@ class MainWindow(QMainWindow):
     # ==========================================================================================
     # context menus
     # ==========================================================================================
+    def _plot_fields_menu(self, m: QMenu) -> QMenu:
+        """Plot Fields: the built-in quantities and the field equations of the Fields Calculator."""
+        pf = m.addMenu("Plot Fields")
+        self._fill_plot_fields(pf)
+        return pf
+
+    def _fill_plot_fields(self, pf: QMenu) -> None:
+        pf.clear()
+        for q in F.QUANTITIES:
+            pf.addAction(q, lambda _=False, q=q: self.plot_fields(q))
+        eq = pf.addMenu("Equations")
+        from .calc_bridge import expression_kinds
+        try:
+            fields = [n for n, k in expression_kinds(self.doc).items() if k == "field"]
+        except Exception:  # noqa: BLE001
+            fields = []
+        for n in fields:
+            eq.addAction(n, lambda _=False, n=n: self.plot_fields(n))
+        if fields:
+            eq.addSeparator()
+        eq.addAction("New Equation...", lambda: self.fields_calculator(for_plot=True))
+
     def _view_context(self, pos) -> None:
         m = QMenu(self)
         sel = self.doc.selection
@@ -5113,9 +5136,7 @@ class MainWindow(QMainWindow):
             me = m.addMenu("Assign Mesh Operation")
             for k in schema.MESH_OPS:
                 me.addAction(k, lambda _=False, k=k: self.assign("mesh", k))
-            pf = m.addMenu("Plot Fields")
-            for q in F.QUANTITIES:
-                pf.addAction(q, lambda _=False, q=q: self.plot_fields(q))
+            self._plot_fields_menu(m)
             if mode == "object":
                 m.addAction("Plot Mesh", self.plot_mesh)
                 m.addSeparator()
@@ -5149,6 +5170,8 @@ class MainWindow(QMainWindow):
         for w in ("iso", "top", "front", "right"):
             v.addAction(w.capitalize(), lambda _=False, w=w: self.view.view(w))
         self.radiation_menu(m)
+        if not sel:
+            self._plot_fields_menu(m)         # on a cut plane: fields need no selected object
         m.addAction("Clear Field Overlays", self.clear_overlays)
         m.exec(self.view.mapToGlobal(pos))
 
