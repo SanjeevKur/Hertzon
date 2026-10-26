@@ -1,6 +1,6 @@
 """Update hint: at start Hertzon asks GitHub for the newest release and, when it is newer than the running
 version, says so in the Message Manager and the status bar and shows the update dialog (version, release
-notes, Install / Skip this version / Later). Runs in a background thread, never blocks the start, and stays
+notes, Install / Skip this version / Later), at most once every PAUSE_DAYS days because releases are frequent. Runs in a background thread, never blocks the start, and stays
 silent when there is no network or GitHub does not answer. Switched off in Tools > Options > General or with
 the environment variable HERTZON_NO_UPDATE_CHECK=1 (which also blocks Help > Check for Updates).
 Nothing is installed without a click on Install."""
@@ -14,6 +14,7 @@ import sys
 import tempfile
 import threading
 import urllib.request
+from datetime import date
 from pathlib import Path
 
 from PySide6.QtCore import QObject, Qt, Signal
@@ -24,6 +25,8 @@ RELEASES_API = f"https://api.github.com/repos/{REPO}/releases?per_page=30"
 RELEASES_PAGE = f"https://github.com/{REPO}/releases/latest"
 SETTING = "updates/check_on_start"
 SKIP_SETTING = "updates/skipped_version"   # "Skip this version": no dialog until a newer one is out
+SHOWN_SETTING = "updates/dialog_shown"     # when the dialog came up by itself last (ISO date)
+PAUSE_DAYS = 14   # Hertzon is released often; the dialog comes at most this often, the status bar always says it
 TIMEOUT = 5.0
 
 # Hertzon releases are tagged v<major>.<minor>.<patch>; the same repository also publishes other releases
@@ -79,6 +82,14 @@ def is_skipped(version: str, skipped: str) -> bool:
     """True when the user chose "Skip this version" for `version` or a newer one."""
     v, sk = parse_version(version), parse_version(skipped or "")
     return v is not None and sk is not None and v <= sk
+
+
+def dialog_due(last_shown: str, today: date, days: int = PAUSE_DAYS) -> bool:
+    """True when the dialog at start may come up again: never shown, or at least `days` days ago."""
+    try:
+        return (today - date.fromisoformat(last_shown)).days >= days
+    except (TypeError, ValueError):
+        return True
 
 
 def installer_asset(release: dict) -> dict | None:
@@ -205,7 +216,7 @@ class UpdateDialog(QDialog):
         self.b_skip = bb.addButton("Skip this version", QDialogButtonBox.DestructiveRole)
         self.b_later = bb.addButton("Later", QDialogButtonBox.RejectRole)
         self.b_skip.setToolTip("No more reminders for this version; a newer one is shown again.")
-        self.b_later.setToolTip("Reminds you again at the next start.")
+        self.b_later.setToolTip(f"Reminds you again in {PAUSE_DAYS} days.")
         self.b_install.setDefault(True)
         for b, c in ((self.b_install, "install"), (self.b_skip, "skip"), (self.b_later, "later")):
             b.clicked.connect(lambda _=False, c=c: self._choose(c))

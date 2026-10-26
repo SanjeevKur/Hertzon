@@ -3490,8 +3490,10 @@ class MainWindow(QMainWindow):
         QTimer.singleShot(2000, self._update_checker.start)
 
     def _update_available(self, release: dict) -> None:
-        """Hint in the Message Manager and the status bar; the dialog unless this version was skipped."""
-        from .update_check import SKIP_SETTING, is_skipped
+        """Hint in the Message Manager and the status bar; the dialog unless this version was skipped or it
+        came up less than PAUSE_DAYS days ago (the status bar link opens it any time)."""
+        from datetime import date
+        from .update_check import SHOWN_SETTING, SKIP_SETTING, dialog_due, is_skipped
         version, url = release["version"], release["url"]
         if getattr(self, "_update_label", None) is None:
             self.msgs.add("info", f"Hertzon {version} is available (this is {__version__}). Download: {url}")
@@ -3500,7 +3502,10 @@ class MainWindow(QMainWindow):
                            "The check at start can be switched off in Tools > Options > General.")
             lab.linkActivated.connect(lambda _=None, r=release: self._show_update_dialog(r))
             self.statusBar().addPermanentWidget(lab)
-        if not is_skipped(version, self.settings.value(SKIP_SETTING, "", type=str)):
+        if is_skipped(version, self.settings.value(SKIP_SETTING, "", type=str)):
+            return
+        if dialog_due(self.settings.value(SHOWN_SETTING, "", type=str), date.today()):
+            self.settings.setValue(SHOWN_SETTING, date.today().isoformat())
             self._show_update_dialog(release)
 
     def check_for_updates(self) -> None:
