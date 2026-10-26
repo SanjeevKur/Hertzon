@@ -35,7 +35,7 @@ _cache: dict[str, pv.UnstructuredGrid] = {}
 
 
 def _bar(quantity: str, unit: str) -> dict:
-    return {"title": f"{quantity} [{unit}]\n", "vertical": True, "position_x": 0.86, "position_y": 0.12,
+    return {"title": f"{quantity} [{unit}]\n" if unit else f"{quantity}\n", "vertical": True, "position_x": 0.86, "position_y": 0.12,
             "width": 0.05, "height": 0.55, "fmt": "%.3g", "title_font_size": 14, "label_font_size": 12}
 
 
