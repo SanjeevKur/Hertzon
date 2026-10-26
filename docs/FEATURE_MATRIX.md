@@ -112,16 +112,19 @@ Legend: **✔** implemented and tested · **◐** implemented with limitations �
 |---|---|---|
 | Solution Data: Profile, Convergence (table + plot), Matrix Data S/Y/Z (mag/phase, dB, re/im), Mesh Statistics | ✔ |
 | Rectangular plot, Smith chart, Data table, markers | ✔ |
-| Expressions `dB(S(1,1))`, `VSWR`, `GroupDelay`, `Z`, `Y`, `ang_deg`, `re`, `im` | ✔ |
+| Expressions `dB(S(1,1))`, `VSWR`, `GroupDelay`, `Z`, `Y`, `ang_deg`, `re`, `im` | ✔ (also as named equations, e.g. `RL = -dB(S(1,1))`, category Equations) |
+| Units on report axes, data tables, CSV export and colour bars | ✔ |
 | Radiation: Infinite Sphere, 2D pattern cuts, 3D polar plot, Gain / Directivity / Realized gain, Eθ/Eφ, markers, beamwidth and side lobes | ✔ (half and quarter models with Symmetry boundaries are mirrored) |
-| Field overlays on faces, objects and cut planes: Mag, Complex Mag and Vector of E, H, Jsurf and J (volume current sigma E), phase animation | ✔ |
+| Field overlays on faces, objects and cut planes: Mag, Complex Mag and Vector of E, H, Jsurf and J (volume current sigma E), phase animation | ✔ (with nothing selected, the faces or objects are picked in the 3D view) |
+| Volume field plots (scalar field through a solid as coloured dots) | ✔ Plot on "(selection, inside solids)" |
 | Export Touchstone, CSV, images | ✔ |
 | Export Gerber X2 (copper layers, profile) and Excellon (PTH / NPTH), File > Export > Gerber ([details](GERBER_EXPORT.md)) | ✔ |
 | Optimization: conjugate gradient (projected Polak-Ribiere+), goals on report expressions, error-area or worst-case cost, filter mask, parallel gradient evaluations | ✔ |
 | Parametric sweep | ✔ Optimization > Add Parametric; solved variations can be shown again without solving |
 | Filter design toolkit: Tools > Filter Design > Tapped Hairpin (N = 2 to 9 resonators, design frequency, hfsynpy microstrip synthesis, parametrized geometry, setup, sweep and conjugate gradient optimization on the filter mask) | ✔ |
 | Antenna design toolkit: Tools > Antenna Design > Rectangular Patch (frequency and substrate in; transmission line model, inset feed, setup, sweep, far-field sphere and optimization of length and inset on the return loss) | ✔ |
-| Fields calculator | ✖ |
+| Fields calculator: named equations of E, H, J, Js, S and the network data (S, Y, Z, VSWR), typeset formula editor, units | ✔ Results > Calculator (Equations tab); integrals over lines, faces, volumes and cut planes, flux, circulation, max/min/avg, point values, curl, div, grad, cylindrical and spherical components, on the solver's elements; library of loss, energy, Q, voltage, current and power; import/export ([tutorial](TUTORIAL.md#8-your-own-quantities-with-equations)) |
+| Fields report (values computed from the fields over frequency) | ✔ Results > Create Fields Report (Rectangular Plot, Data Table); frequencies with saved fields |
 | Solve with HPC / distributed | ◐ (threads per solve, parallel sweep points) |
 
 ## Extras

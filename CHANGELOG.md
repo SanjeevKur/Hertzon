@@ -59,6 +59,11 @@ the GitHub release notes.
   them. Equations are evaluated in the window, in field plots and reports.
 
 ### Changed
+- **Tutorial: equations** (section 8): the return loss from the S-parameters, the power through both ports
+  of the waveguide as flux integrals (checked against the S-parameters), the power flow along the guide as
+  a field plot, and the library. `examples/WaveguidePost.hzn` has these equations, the reports `Return Loss`
+  and `Port Powers` and the field plot `Sy_Cut`. The README, the feature overview and the tutorial basics
+  also describe the Fields Calculator, Fillet and Chamfer at vertices and the update dialog.
 - **Chamfer of a sheet at its vertices**: like Fillet, a sheet (for example a patch) is now chamfered by
   selecting its corner vertices (press V, also in the context menu); each selected corner is cut off by the
   distance. Solids are still chamfered along their edges.
@@ -89,6 +94,10 @@ the GitHub release notes.
   greater than 0"), because the metal also zeroed the field on the port face. Such a solid now backs the
   port: no field inside and PEC on its surface, with the port face left free. The log says which object
   backs which port.
+- **Solutions shown as outdated**: the solutions of projects solved with 0.2.3 or earlier were shown as
+  outdated (and an analysis started the adaptive passes again from the initial mesh), and saving an equation
+  of the Fields Calculator did the same to a current solution. Equations are post-processing and no longer
+  count as a change of the model.
 - **Coarse cylinders next to a helix**: a helix wire (or another swept pipe) in the model made every
   cylinder, sphere and round hole in the 3D view coarse (8 segments per turn), also in objects not touching
   the helix. The coarser display sizing now applies only to the pipe surface itself.

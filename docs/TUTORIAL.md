@@ -12,8 +12,10 @@ This guide walks through five complete simulations step by step:
   Lumped RLC, groups)
 
 and shows how to let an AI assistant do the same work for you through
-[Hertzon's MCP server](#5-let-an-ai-assistant-build-and-run-it-mcp), and how to
-[export a printed circuit board as Gerber files](#6-gerber-export-of-a-printed-circuit-board) for manufacturing.
+[Hertzon's MCP server](#5-let-an-ai-assistant-build-and-run-it-mcp), how to
+[export a printed circuit board as Gerber files](#6-gerber-export-of-a-printed-circuit-board) for manufacturing,
+and how to [compute your own quantities with equations](#8-your-own-quantities-with-equations) (return loss,
+power through a port, a field of your own) in the Fields Calculator.
 
 Every finished model is in `examples/` and opens with **File > Open Example**, with its reports and field
 plots ready: **Analyze All** (F5), then double-click a report or a field plot in the project tree.
@@ -71,6 +73,11 @@ Dialog...** asks for all values at once instead.
 positive side of the sheet's main axis (+Z for a sheet in the XY plane), a negative one to the other side.
 While the dialog is open, an arrow on each sheet shows the direction; **Reverse direction** flips it.
 
+**Fillet and chamfer.** **Modeler > Fillet...** rounds corners, **Modeler > Chamfer...** cuts them off. On a
+solid, select its edges (**E**); on a flat sheet such as a patch, select its corner vertices (**V**): each
+selected corner gets one fillet with the radius, or is cut off by the distance. When the radius or distance
+does not fit, the object stays unchanged and a message says why.
+
 **Variables.** Every number accepts expressions with units, such as `a/2`, `lambda0/4` or `2.5mm+t`. Define
 variables in **Project > Design Properties...** and change them later: the model, ports and integration
 lines follow.
@@ -117,6 +124,12 @@ model then shows exactly what is solved, and the geometry is free of overlaps (f
 
 > The very first analysis after installing or updating compiles Hertzon's solver kernels and takes a few
 > minutes longer. The installer already does this once, so normally you do not notice it.
+
+**Updates.** When a new version is out, a small dialog after the start shows what changed since your
+version, with **Install**, **Skip this version** and **Later** (at most once every 7 days; in between the
+status bar names the new version). Install keeps your settings and the Python environment and asks to save
+open changes first. **Help > Check for Updates...** checks at any time; Tools > Options > General switches
+the check at start off.
 
 ---
 
@@ -613,6 +626,117 @@ solution instead of the typical ESL. See [LUMPED_ELEMENTS.md](LUMPED_ELEMENTS.md
 
 ---
 
+## 8. Your own quantities with equations
+
+**Goal:** define your own result quantities in the **Fields Calculator** and show them in reports and
+field plots: the return loss of a port from the S-parameters, the power that flows through each port from
+the fields, and the power flow along the guide as a field of its own. We use the waveguide of
+[section 1](#1-waveguide-with-wave-ports); the equations, reports and the field plot of this section are in
+`examples/WaveguidePost.hzn` as well.
+
+An **equation** has a name and a formula, for example `RL = -dB(S(1,1))`. Hertzon works out its type from
+the formula:
+
+| Type | Example | Where it is shown |
+|---|---|---|
+| Value of the S-parameters (no fields needed) | `RL = -dB(S(1,1))` | Solution data reports, category **Equations**, at every frequency of the solution |
+| Value from the fields (an integral, a maximum, a point value) | `P_in = flux(Port1Sheet, re(S))` | **Fields reports**, at every frequency with saved fields |
+| Field (a value at every point) | `Sy = y(re(S))` | **Plot Fields**, like Mag E, on faces, objects or cut planes |
+
+Equations are saved with the design and listed in the project tree under **Equations**.
+
+### 8.1 Return loss from the S-parameters
+
+1. Open `examples/WaveguidePost.hzn` (or your model from section 1) and solve it (**Analyze All**, F5).
+2. **Results > Calculator**. The **Equations** tab opens next to the 3D Modeler, and the ribbon shows the
+   **Equation** page with fields, symbols, fractions, integrals and functions.
+3. Type `RL = -dB(S(1,1))` and press **Save** (optionally with a description above the formula). While you
+   type, the formula is shown typeset; on the right, the type (**Scalar value**), the unit and where to
+   use it. An error is underlined where it is.
+4. Right-click `RL` under **Equations** in the project tree > **Add to Report**. The report shows the return
+   loss over the whole interpolating sweep from 8 to 12 GHz: an equation of S-parameters needs no fields,
+   so it is computed at every frequency of the sweep. In an existing report, choose the category
+   **Equations** and the quantity `RL`.
+
+![The Equations tab with the return loss](tutorial/eq_rl.png)
+*The Equations tab: the formula typeset in the middle, the same as one line of text below it, the type and unit on the right. The ribbon shows the Equation page while the tab is open.*
+
+![Return loss over the sweep](tutorial/eq_rl_report.png)
+*`RL` over the interpolating sweep (report `Return Loss` in the example): from 0.13 dB at 8 GHz over 0.41 dB at 10 GHz to 0.92 dB at 12 GHz. The post reflects most of the power, so the return loss is small.*
+
+Equations can combine the network data in any way: `Y(1,1)`, `Z(1,1)` and `VSWR(1)` work as well, for
+example `mismatch = 1 - |S(1,1)|^2` for the share of the power that enters the guide.
+
+### 8.2 Power through the ports from the fields
+
+The ports are fed with 1 W. The active power that flows through the port sheet is the flux of the real part
+of the Poynting vector `S` through it.
+
+1. In the Equations tab, type `P_in = ` and open **Integral > Flux through a face** on the ribbon. Hertzon
+   switches to the 3D Modeler and a box asks for the face: click the sheet of port 1 at y = 0 (or choose
+   `Port1Sheet` in the box) and press **Use**. Back in the Equations tab the name stands below the
+   integral sign. Fill the box with **Function > Re** and the field **S**. As text this is
+   `P_in = flux(Port1Sheet, re(S))`, which you can also type directly. **Save**.
+2. The same for port 2: `P_out = flux(Port2Sheet, re(S))`. The flux counts along the normal of the sheet,
+   here +y for both sheets, so both values are positive. `flip(Port2Sheet)` would count the other way.
+3. **Results > Create Report > Create Fields Report > Data Table**, then add `P_out` next to `P_in`
+   (category **Equations**). A Fields report computes its values from the saved fields, so it has the
+   frequencies with fields: here the adaptive solution at 10 GHz, because the interpolating sweep stores
+   only S-parameters. With a discrete or fast sweep with **Save fields**, a Fields report shows the value
+   over frequency.
+
+![The power through port 1 as a flux integral](tutorial/eq_pin.png)
+*`P_in` typeset: the face below the integral sign, Re{S}·n dA. Type: scalar value, unit W, computed in the direction of the normal of `Port1Sheet`.*
+
+![Power through both ports](tutorial/eq_power_table.png)
+*Fields report `Port Powers` at 10 GHz: 91.8 mW enter at port 1 and 91.5 mW leave at port 2.*
+
+> **What you should get:** with 1 W incident, the power that enters the guide is 1 W · (1 − |S11|²) =
+> 89.8 mW, and the power that leaves at port 2 is 1 W · |S21|² = 89.8 mW. The flux integrals give 91.8 mW
+> and 91.5 mW: the guide is lossless, so in and out agree to 0.4 %, and both agree with the S-parameters to
+> 2 % on this coarse mesh of 1 376 tetrahedra. A tighter Maximum Delta S brings them closer.
+
+### 8.3 A field of your own
+
+1. Type `Sy = y(re(S))`, the y component of the active power density, and **Save**. Its type is
+   **Scalar field** with the unit W/m².
+2. **Results > More > Equations > Sy** (or right-click `Sy` in the project tree > **Plot Field...**): set
+   **Plot on** to `XY` and **Cut position** to `b/2`, as for the Mag E plot of section 1.
+3. **View > Orientation > Top**. The plot shows how the power flows from port 1 around the post to port 2.
+   It is drawn on screen again whenever you change and save the equation.
+
+![The power flow along the guide](tutorial/eq_sy_field.png)
+*`Sy` on the cut plane halfway up the guide at 10 GHz (field plot `Sy_Cut` in the example): the power passes the post on both sides, up to 880 W/m².*
+
+### 8.4 The library, functions and other designs
+
+Right-click **Equations** in the project tree > **Open Library...** for ready-made equations and functions:
+loss densities, energy densities, the RMS and instantaneous field, and functions such as `power(A)`,
+`voltage(L)`, `current(C)`, `loss_diel(V)`, `loss_wall(A, sig)`, `energy_e(V)` and `q_diel(V)` (quality
+factor from the dielectric loss). Tick one or more, or a whole group, and **Import**; they are copied into
+the design and can be changed there. With the function `power`, `P_out = power(Port2Sheet)` gives the same
+as above.
+
+![The equation library](tutorial/eq_library.png)
+*Open Library: the ready-made equations (field densities) and functions (integrals over a geometry passed as argument).*
+
+A few more examples of what the language covers:
+
+| Equation | Meaning |
+|---|---|
+| `W = energy_e(Waveguide) + energy_m(Waveguide)` | Stored energy in the guide (J), with functions of the library |
+| `E_peak = max(Waveguide, \|E\|)` | Peak field strength in a volume (V/m) |
+| `V = int_line(Radial, E)` | Voltage along a drawn line, e.g. between inner and outer conductor of a coax |
+| `P_mid = flux(cut_xz(L/2), re(S))` | Power through a cut plane at y = L/2, no sheet needed |
+| `p_wall = 0.5*rs(5.8e7 S/m)*\|Js\|^2` | Wall loss density of a copper surface (W/m²), with the surface resistance `rs(σ)` |
+
+Numbers can carry units (`5.8e7 S/m`, `2mm`), and design variables can be used. Right-click **Equations** >
+**Export Equations...** writes all equations and functions of a design into a file; **Import
+Equations...** reads them into another design or project. AI assistants can create equations, reports
+and field plots of them as well (MCP tools `set_equation`, `set_report`, `set_field_plot`).
+
+---
+
 ## Where to go next
 
 * `examples/` has thirteen finished projects, from a microstrip line to a Rotman lens, all with hzAURA
@@ -620,6 +744,8 @@ solution instead of the typical ESL. See [LUMPED_ELEMENTS.md](LUMPED_ELEMENTS.md
   [README](../README.md#examples).
 * **Tools > Antenna Design > Rectangular Patch...** and **Tools > Filter Design > Tapped Hairpin...** create
   complete, parametrized designs with setup, sweep and optimization from a few specifications.
+* **Results > Calculator** computes your own quantities from the fields and S-parameters
+  ([section 8](#8-your-own-quantities-with-equations)); **Open Library...** under Equations has ready-made ones.
 * [MESHER.md](MESHER.md) explains how adaptive meshing works. [FEATURE_MATRIX.md](FEATURE_MATRIX.md)
   shows what is implemented.
 * **Tools > Solver Benchmark** times the projects of `examples/benchmark/scaling` on your computer and
