@@ -49,6 +49,15 @@ the GitHub release notes.
   New Equation. A right click on empty space in the 3D view offers Plot Fields too; without a selected object
   the field is plotted on a cut plane.
 
+- **AI assistants (MCP) cover the new features**: `get_geometry(include_edges=true)` lists the edges and
+  vertices with the indices of Fillet and Chamfer (`render_image` can label them), so an assistant can round
+  or cut single corners. New tools: `set_equation` (equations and functions of the Fields Calculator, import
+  and export), `set_report` (all report kinds, also Fields reports), `set_field_plot` (on objects, faces or a
+  cut plane), `set_coordinate_system` (new objects are made in the working coordinate system, as in the
+  window), `set_parametric` and `set_optimization`; `run_simulation`, `get_status`, `abort_simulation` and
+  `get_results` take `parametric=` or `optimization=`. `get_project` lists all of these and `delete` removes
+  them. Equations are evaluated in the window, in field plots and reports.
+
 ### Changed
 - **Chamfer of a sheet at its vertices**: like Fillet, a sheet (for example a patch) is now chamfered by
   selecting its corner vertices (press V, also in the context menu); each selected corner is cut off by the
@@ -104,13 +113,6 @@ the GitHub release notes.
   was not stored with the refinement state, so analyzing only a sweep stopped with "No adaptive solution to
   reuse", and an interrupted run started again from the initial mesh. The mesh is now stored and rebuilt
   from it; this also makes the parallel sweep runs of the Solver Benchmark work again.
-
-### Known limitations
-- **MCP server**: the tools for AI assistants do not cover the new features of this release yet. They list
-  no edge or vertex indices (Fillet and Chamfer by vertices or edges), and they cannot create, import,
-  export or evaluate Fields Calculator equations (also S-parameter equations), create field plots or
-  Fields reports. Reports, coordinate systems, parametric sweeps and optimizations are still only reachable
-  through `run_python`.
 
 ## 0.2.3 (2026-10-25)
 

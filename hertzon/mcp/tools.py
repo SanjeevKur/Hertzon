@@ -20,8 +20,8 @@ from pathlib import Path
 import numpy as np
 
 from ..model import schema
-from ..model.design import (Project, Design, Command, Assignment, FaceRef, Setup, Sweep, InfiniteSphere,
-                            project_from_dict)
+from ..model.design import (Project, Design, Command, Assignment, FaceRef, Setup, Sweep, InfiniteSphere, CoordSys,
+                            Report, FieldPlot, FieldExpression, Optimization, ParametricSetup, project_from_dict)
 from ..model.expr import LENGTH_UNITS
 from ..model.materials import parse_color
 from . import live
@@ -49,6 +49,8 @@ Workflow
 5. assign boundaries, excitations (ports, plane wave) and mesh operations to objects or faces.
 6. set_setup (solution frequency, passes) with sweeps; set_far_field_sphere for gain/RCS.
 7. validate, then run_simulation; get_status(wait_seconds=...) until done; get_results.
+8. Optional: set_report and set_field_plot (shown in the window), set_equation (Fields Calculator),
+   set_parametric / set_optimization, run with run_simulation(parametric=... or optimization=...).
 
 Conventions
 - All values are expression strings with units: "10mm", "2.45GHz", "a/2+1mm", "-w/2,0,h". Lengths
@@ -70,6 +72,9 @@ Conventions
 - Solution frequency: the operating frequency (antennas) or the highest frequency of interest (filters).
   Keep MaximumPasses and MaximumRefinement moderate at first; large models take minutes to hours.
 - Objects consumed by a boolean (Subtract tools ...) disappear from the model but stay in the history.
+- Fillet and Chamfer take edge indices (Edges) of solids, or vertex indices (Vertices) of sheets:
+  get_geometry(include_edges=true) lists them; render_image(label_faces_of=..., label_what="edges") shows them.
+- Coordinate systems: set_coordinate_system makes one the working CS; new objects are created in it.
 """
 
 
@@ -275,6 +280,8 @@ def _obj_summary(o) -> dict:
         d["model"] = False
     if not o.solve_inside:
         d["solve_inside"] = False
+    if o.orientation != "Global":
+        d["orientation"] = o.orientation
     return d
 
 
@@ -314,6 +321,20 @@ def summary(ctx: Ctx) -> dict:
                     "sweeps": [{"name": w.name, "props": w.props} for w in s.sweeps]} for s in d.setups],
         "far_field_spheres": [{"name": s.name, "props": s.props} for s in d.spheres],
         "project_materials": [m.name for m in p.materials],
+        **({"coordinate_systems": [{"name": c.name, "kind": c.kind, "reference": c.reference, "props": c.props}
+                                   for c in d.coord_systems], "working_cs": d.working_cs} if d.coord_systems else {}),
+        **(_equations_summary(d) if d.field_exprs or d.field_funcs else {}),
+        **({"reports": [{"name": r.name, "kind": r.kind, "solution": r.solution, "traces": r.traces,
+                         **({"props": r.props} if r.props else {})} for r in d.reports]} if d.reports else {}),
+        **({"field_plots": [{"name": f.name, "quantity": f.quantity, "solution": f.solution,
+                             **({"plane": f.plane} if f.plane else {"objects": f.objects,
+                                                                    "faces": [{"object": x.obj, "face": x.face}
+                                                                              for x in f.faces]})}
+                            for f in d.field_plots]} if d.field_plots else {}),
+        **({"parametrics": [{"name": o.name, "sweeps": o.sweeps, "setups": o.setups, "calcs": o.calcs,
+                             "props": o.props} for o in d.parametrics]} if d.parametrics else {}),
+        **({"optimizations": [{"name": o.name, "solution": o.solution, "variables": o.variables, "goals": o.goals,
+                               "props": o.props} for o in d.optimetrics]} if d.optimetrics else {}),
     }
 
 
@@ -368,7 +389,27 @@ def _face_list(t, scale: float, limit: int) -> list[dict]:
     return faces
 
 
-def geometry_report(proj: Project, des: Design, names: list[str] | None, max_faces: int = 60) -> dict:
+def _edge_list(t, scale: float, limit: int) -> list[dict]:
+    """Edges in the order of the Edges property of Fillet and Chamfer: end points, midpoint and length."""
+    out = []
+    for i, e in enumerate(t.edges[:limit]):
+        P = np.asarray(e, float) / scale
+        if len(P) == 0:
+            continue
+        L = float(np.sum(np.linalg.norm(np.diff(P, axis=0), axis=1))) if len(P) > 1 else 0.0
+        out.append({"edge": i, "start": [_r(x, 5) for x in P[0]], "end": [_r(x, 5) for x in P[-1]],
+                    "mid": [_r(x, 5) for x in P[len(P) // 2]], "length": _r(L, 5)})
+    return out
+
+
+def _vertex_list(t, scale: float, limit: int) -> list[dict]:
+    """Vertices in the order of the Vertices property of Fillet and Chamfer on sheets."""
+    V = np.asarray(t.vertices, float).reshape(-1, 3) / scale
+    return [{"vertex": i, "position": [_r(x, 5) for x in v]} for i, v in enumerate(V[:limit])]
+
+
+def geometry_report(proj: Project, des: Design, names: list[str] | None, max_faces: int = 60,
+                    edges: bool = False) -> dict:
     tess, errors = tessellate(proj, des, names)
     sc = _unit(des)
     objs = {}
@@ -381,6 +422,11 @@ def geometry_report(proj: Project, des: Design, names: list[str] | None, max_fac
         d["faces"] = _face_list(t, sc, max_faces)
         if len(t.face_area) > max_faces:
             d["note"] = f"only the first {max_faces} faces listed; raise max_faces for more"
+        if edges:
+            d["edges"] = _edge_list(t, sc, max_faces * 3)
+            d["vertices"] = _vertex_list(t, sc, max_faces * 3)
+            if len(t.edges) > max_faces * 3:
+                d["edges_note"] = f"only the first {max_faces * 3} edges and vertices listed; raise max_faces"
         objs[n] = d
     return {"units": des.units, "objects": objs, "errors": errors}
 
@@ -488,6 +534,8 @@ def t_get_schema(args):
         "setup": {"Setup": schema.SETUP}, "eigen_setup": {"Eigen Setup": schema.EIGEN_SETUP},
         "sweep": {"Sweep": schema.SWEEP}, "design_settings": {"Design": schema.DESIGN_SETTINGS},
         "far_field_sphere": {"Infinite Sphere": schema.INFINITE_SPHERE},
+        "coordinate_system": {"Relative CS": schema.COORDINATE_SYSTEM},
+        "parametric": {"Parametric": schema.PARAMETRIC}, "optimization": {"Optimization": schema.OPTIMIZATION},
     }
     if sec not in tables:
         raise ToolError(f"section must be one of {sorted(tables)}")
@@ -513,6 +561,12 @@ def t_get_schema(args):
                                f"{p.visible_if[1].lstrip('!')}"
             props.append(d)
         out[k] = props
+        if sec == "parametric":
+            out["sweep_types"] = list(schema.PARAMETRIC_SWEEP_TYPES)
+            out["calc_functions"] = list(schema.CALC_FUNCTIONS)
+        if sec == "optimization":
+            out["goal_conditions"] = list(schema.GOAL_CONDITIONS)
+            out["cost_functions"] = list(schema.COST_FUNCTIONS)
         if sec == "boundaries" and k in schema.UNSUPPORTED_BOUNDARIES:
             out[k + " (note)"] = schema.UNSUPPORTED_BOUNDARIES[k]
     return out
@@ -594,10 +648,10 @@ def t_set_design(args):
 # tools: geometry
 # ------------------------------------------------------------------------------------------------
 _ATTRS = {"color": "color", "transparency": "transparency", "solve_inside": "solve_inside", "model": "model",
-          "group": "group", "wireframe": "wireframe", "visible": "visible"}
+          "group": "group", "wireframe": "wireframe", "visible": "visible", "orientation": "orientation"}
 
 
-def _apply_attrs(o, a: dict | None) -> None:
+def _apply_attrs(o, a: dict | None, d: Design) -> None:
     for k, v in (a or {}).items():
         if k not in _ATTRS:
             raise ToolError(f"Unknown attribute '{k}'; use {sorted(_ATTRS)}")
@@ -605,6 +659,9 @@ def _apply_attrs(o, a: dict | None) -> None:
             v = bool(v) if not isinstance(v, str) else v == "True"
         elif k == "transparency":
             v = float(v)
+        elif k == "orientation":
+            if v not in d.cs_names():
+                raise ToolError(f"Unknown coordinate system '{v}'; coordinate systems: {d.cs_names()}")
         elif k == "color":
             c = parse_color(v)
             if c is None:
@@ -680,7 +737,8 @@ def t_add_object(args):
         raise ToolError(f"An object named '{name}' exists")
     o = d.add_object(kind, name=name, material=mat)
     o.history[0].props = props
-    _apply_attrs(o, args.get("attributes"))
+    o.orientation = d.working_cs               # as in the window: new objects are made in the working CS
+    _apply_attrs(o, args.get("attributes"), d)
     for op in args.get("operations") or []:
         _append_operation(d, o.name, op["kind"], op.get("props"))
     errors = commit(ctx, f"add {o.name}")
@@ -756,7 +814,7 @@ def t_modify_object(args):
         except KeyError:
             raise ToolError(f"Unknown material '{args['material']}'") from None
         o.material = args["material"]
-    _apply_attrs(o, args.get("attributes"))
+    _apply_attrs(o, args.get("attributes"), d)
     if args.get("new_name"):
         new = args["new_name"]
         if d.has_obj(new):
@@ -821,11 +879,23 @@ def t_delete(args):
             done.append(n + (f" (also removed: {', '.join(dropped)})" if dropped else ""))
             continue
         hit = False
-        for attr in ("boundaries", "excitations", "mesh_ops", "setups", "spheres", "reports", "field_plots"):
+        if any(c.name == n for c in d.coord_systems):
+            users = [o.name for o in d.objects if o.orientation == n] + \
+                    [c.name for c in d.coord_systems if c.reference == n]
+            if users:
+                raise ToolError(f"Coordinate system '{n}' is used by {', '.join(users)}")
+            if d.working_cs == n:
+                d.working_cs = "Global"
+        for attr in ("boundaries", "excitations", "mesh_ops", "setups", "spheres", "reports", "field_plots",
+                     "coord_systems", "field_exprs", "parametrics", "optimetrics"):
             lst = getattr(d, attr)
             if any(x.name == n for x in lst):
                 setattr(d, attr, [x for x in lst if x.name != n])
                 hit = True
+        fn = n.removesuffix("()")
+        if any(_fname(f) == fn for f in d.field_funcs):
+            d.field_funcs = [f for f in d.field_funcs if _fname(f) != fn]
+            hit = True
         for s in d.setups:
             if any(w.name == n for w in s.sweeps) and args.get("setup") in (None, s.name):
                 s.sweeps = [w for w in s.sweeps if w.name != n]
@@ -840,7 +910,8 @@ def t_get_geometry(args):
     names = args.get("objects")
     if names:
         _check_objects(ctx.des, names)
-    return geometry_report(ctx.proj, ctx.des, names, int(args.get("max_faces", 60)))
+    return geometry_report(ctx.proj, ctx.des, names, int(args.get("max_faces", 60)),
+                           bool(args.get("include_edges")))
 
 
 # ------------------------------------------------------------------------------------------------
@@ -979,6 +1050,372 @@ def t_set_far_field_sphere(args):
     return {"name": name, "props": sp.props}
 
 
+# ------------------------------------------------------------------------------------------------
+# tools: coordinate systems
+# ------------------------------------------------------------------------------------------------
+def t_set_coordinate_system(args):
+    ctx = load(args)
+    d = ctx.des
+    name = args.get("name") or d.unique_name("RelativeCS1", set(d.cs_names()) | d.all_names())
+    if name == "Global":
+        if not args.get("set_working") or args.get("props") or args.get("reference"):
+            raise ToolError("The Global coordinate system cannot be changed; set_working=true works in it again")
+        d.working_cs = "Global"
+        commit(ctx, "working coordinate system Global")
+        return {"working_cs": "Global"}
+    cs = next((c for c in d.coord_systems if c.name == name), None)
+    created = cs is None
+    ref = args.get("reference")
+    if ref is not None and ref not in d.cs_names():
+        raise ToolError(f"Unknown reference '{ref}'; coordinate systems: {d.cs_names()}")
+    if ref == name:
+        raise ToolError("A coordinate system cannot be its own reference")
+    if created:
+        if name in d.all_names():
+            raise ToolError(f"'{name}' exists")
+        cs = CoordSys(name, "Relative", ref or d.working_cs)
+        d.coord_systems.append(cs)
+    elif ref is not None:
+        cs.reference = ref
+    cs.props = _props_in("Coordinate System", schema.COORDINATE_SYSTEM, args.get("props"), cs.props)
+    if args.get("set_working", created):
+        d.working_cs = name
+    commit(ctx, f"coordinate system {name}")
+    return {"name": name, "created": created, "kind": cs.kind, "reference": cs.reference, "props": cs.props,
+            "working_cs": d.working_cs}
+
+
+# ------------------------------------------------------------------------------------------------
+# tools: equations (Fields Calculator)
+# ------------------------------------------------------------------------------------------------
+def _fname(text: str) -> str:
+    return text.split("(", 1)[0].strip()
+
+
+def _check_equation(name: str, expr: str) -> None:
+    from ..post.calc import lang as L
+    if not name.isidentifier():
+        raise ToolError(f"Equation name '{name}' must be a name (letters, digits, _), e.g. P_loss")
+    try:
+        L.parse(expr)
+    except L.CalcError as e:
+        raise ToolError(f"{name}: {e}") from None
+
+
+def _check_function(text: str) -> None:
+    from ..post.calc import lang as L
+    try:
+        L.parse_function(text)
+    except L.CalcError as e:
+        raise ToolError(f"{text}: {e}") from None
+
+
+def _equations_summary(d: Design) -> dict:
+    return {"equations": [{"name": e.name, "expr": e.expr, **({"description": e.description} if e.description else {})}
+                          for e in d.field_exprs], "functions": list(d.field_funcs)}
+
+
+def t_set_equation(args):
+    ctx = load(args)
+    d = ctx.des
+    eqs = list(args.get("equations") or [])
+    if args.get("name"):
+        eqs.append({"name": args["name"], "expr": args.get("expr", ""), "description": args.get("description")})
+    funcs = [str(f) for f in args.get("functions") or []]
+    if args.get("import_file"):
+        f = _abspath(args["import_file"])
+        try:
+            data = json.loads(Path(f).read_text(encoding="utf-8"))
+            eqs += [{"name": str(e["name"]), "expr": str(e["expr"]), "description": str(e.get("description", ""))}
+                    for e in data.get("equations", [])]
+            funcs += [str(x) for x in data.get("functions", [])]
+        except (OSError, ValueError, KeyError, TypeError, AttributeError) as e:
+            raise ToolError(f"{f} is not a file of equations: {e}") from None
+    replace = args.get("replace", True)
+    changed, kept = [], []
+    for e in eqs:
+        name, expr = str(e.get("name", "")).strip(), str(e.get("expr", "")).strip()
+        if "=" in expr and not name:                       # "P_in = flux(Port1, re(S))"
+            name, _, expr = (x.strip() for x in expr.partition("="))
+        _check_equation(name, expr)
+        old = next((x for x in d.field_exprs if x.name == name), None)
+        if old is None:
+            if name in d.all_names() or name in {_fname(x) for x in d.field_funcs}:
+                raise ToolError(f"'{name}' is already used in the design")
+            d.field_exprs.append(FieldExpression(name, expr, str(e.get("description") or "")))
+        elif replace:
+            old.expr = expr
+            if e.get("description") is not None:
+                old.description = str(e["description"])
+        else:
+            kept.append(name)
+            continue
+        changed.append(name)
+    for f in funcs:
+        _check_function(f)
+        n = _fname(f)
+        if n in {_fname(x) for x in d.field_funcs}:
+            if not replace:
+                kept.append(n + "()")
+                continue
+            d.field_funcs = [x for x in d.field_funcs if _fname(x) != n]
+        d.field_funcs.append(f)
+        changed.append(n + "()")
+    if changed:
+        commit(ctx, "equations " + ", ".join(changed))
+    out = {"changed": changed, **({"kept_existing": kept} if kept else {})}
+    if args.get("export_file"):
+        f = _abspath(args["export_file"])
+        data = {"format": "hertzon-equations", "version": 1,
+                "equations": [{"name": e.name, "expr": e.expr, "description": e.description} for e in d.field_exprs],
+                "functions": list(d.field_funcs)}
+        try:
+            Path(f).write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+        except OSError as e:
+            raise ToolError(f"Cannot write {f}: {e}") from None
+        out["exported"] = f
+    return {**out, **_equations_summary(d)}
+
+
+# ------------------------------------------------------------------------------------------------
+# tools: reports and field plots
+# ------------------------------------------------------------------------------------------------
+REPORT_KINDS = {"Rectangular": "XY Plot", "Smith Chart": "Smith Chart", "Data Table": "Data Table",
+                "Radiation Pattern": "Radiation Pattern", "3D Polar Plot": "3D Polar Plot",
+                "Near Field Line": "Near Field", "Monostatic RCS": "Monostatic RCS",
+                "Monostatic RCS Table": "Monostatic RCS Table", "Antenna Parameters": "Antenna Parameters Plot",
+                "Antenna Parameters Table": "Antenna Parameters Table"}
+
+
+def _solution(d: Design, sol: str | None, fallback_sweep: bool = True) -> str:
+    """'Setup1 : Sweep' (or 'Setup1 : LastAdaptive'); default: the first sweep of the first setup."""
+    if not sol:
+        if not d.setups:
+            raise ToolError("The design has no analysis setup (set_setup)")
+        s = d.setups[0]
+        return f"{s.name} : {s.sweeps[0].name}" if fallback_sweep and s.sweeps else f"{s.name} : LastAdaptive"
+    setup, _, label = (x.strip() for x in sol.partition(":"))
+    if not any(s.name == setup for s in d.setups) or not label:
+        raise ToolError(f"Solution '{sol}' must be 'Setup : Sweep' or 'Setup : LastAdaptive' of an existing setup")
+    return f"{setup} : {label}"
+
+
+def _next_name(taken, prefix: str, sep: str = " ") -> str:
+    i = 1
+    while f"{prefix}{sep}{i}" in taken:
+        i += 1
+    return f"{prefix}{sep}{i}"
+
+
+def t_set_report(args):
+    ctx = load(args)
+    d = ctx.des
+    name = args.get("name")
+    r = next((x for x in d.reports if x.name == name), None) if name else None
+    created = r is None
+    fields = bool(args.get("fields"))
+    if created:
+        kind = args.get("kind") or "Rectangular"
+        if kind not in REPORT_KINDS:
+            raise ToolError(f"kind must be one of {list(REPORT_KINDS)}")
+        if fields and kind not in ("Rectangular", "Data Table"):
+            raise ToolError("A Fields report is a Rectangular plot or a Data Table")
+        prefix = ("Fields Plot" if kind == "Rectangular" else "Fields Table") if fields else REPORT_KINDS[kind]
+        name = name or _next_name({x.name for x in d.reports}, prefix)
+        sol = _solution(d, args.get("solution"))
+        r = Report(name, kind, sol, [])
+        if fields:
+            r.props.update(fields="1", port="1")
+        d.reports.append(r)
+    elif args.get("kind") and args["kind"] != r.kind:
+        raise ToolError(f"'{r.name}' is a {r.kind} report; delete it and create a new one to change the kind")
+    if args.get("solution"):
+        r.solution = _solution(d, args["solution"])
+    if "traces" in args:
+        r.traces = [str(t) for t in args["traces"]]
+    elif created and not fields:
+        n = max(1, len(d.ports()))
+        r.traces = ["dB(GainTotal)"] if r.kind in ("Radiation Pattern", "3D Polar Plot") else \
+            ["dBsm(MonostaticRCSTotal)"] if r.kind.startswith("Monostatic") else \
+            ["dB(PeakGain)", "dB(PeakRealizedGain)", "dB(PeakDirectivity)"] if r.kind.startswith("Antenna") else \
+            ["mag(NearETotal)"] if r.kind == "Near Field Line" else [f"dB(S({i},1))" for i in range(1, n + 1)][:4]
+    if created and fields and not r.traces:
+        r.traces = [e.name for e in d.field_exprs][:1]
+    if args.get("port") is not None:
+        r.props["port"] = str(int(args["port"]))
+    for k, v in (args.get("props") or {}).items():
+        if v is None:
+            r.props.pop(k, None)
+        else:
+            r.props[k] = _s(v)
+    if args.get("new_name"):
+        if any(x.name == args["new_name"] for x in d.reports):
+            raise ToolError(f"A report '{args['new_name']}' exists")
+        r.name = args["new_name"]
+    commit(ctx, f"report {r.name}")
+    return {"name": r.name, "created": created, "kind": r.kind, "solution": r.solution, "traces": r.traces,
+            "props": r.props, "note": "Open the report in the Hertzon window to see it (it is evaluated there)."}
+
+
+def t_set_field_plot(args):
+    from ..gui.fields import ATTR_DEFAULTS, QUANTITIES
+    ctx = load(args)
+    d = ctx.des
+    name = args.get("name")
+    fp = next((x for x in d.field_plots if x.name == name), None) if name else None
+    created = fp is None
+    eqs = [e.name for e in d.field_exprs]
+    q = args.get("quantity")
+    if q is not None and q not in QUANTITIES and q not in eqs:
+        raise ToolError(f"quantity must be one of {QUANTITIES} or an equation of the design {eqs}")
+    if created:
+        q = q or "Mag_E"
+        name = name or _next_name({x.name for x in d.field_plots}, q, "")
+        fp = FieldPlot(name, q, _solution(d, args.get("solution"), fallback_sweep=False))
+        d.field_plots.append(fp)
+    elif q:
+        fp.quantity = q
+    if args.get("solution"):
+        fp.solution = _solution(d, args["solution"], fallback_sweep=False)
+    if "objects" in args or "faces" in args or "plane" in args:
+        objs = list(args.get("objects") or [])
+        faces = _faces(args.get("faces"))
+        _check_objects(d, objs + [f.obj for f in faces])
+        plane = (args.get("plane") or "").strip()
+        if plane:
+            ax, _, pos = plane.partition("@")
+            if ax.strip().upper() not in ("XY", "YZ", "XZ"):
+                raise ToolError("plane is 'XY', 'YZ' or 'XZ', optionally with a position: 'XY@1.5mm'")
+            plane = f"{ax.strip().upper()}@{pos.strip()}"
+            objs, faces = [], []
+        elif not objs and not faces:
+            raise ToolError("Give objects, faces or a cut plane to plot on")
+        fp.objects, fp.faces, fp.plane = objs, faces, plane
+    elif created:
+        fp.plane = "XY@"
+    if "volume" in args:
+        fp.props["Volume"] = str(bool(args["volume"]))
+    for key, prop in (("port", "port"), ("freq_index", "freq"), ("phase_deg", "phase")):
+        if args.get(key) is not None:
+            fp.props[prop] = f"{float(args[key]):g}" if key == "phase_deg" else str(int(args[key]))
+    for k, v in (args.get("attributes") or {}).items():
+        if k not in ATTR_DEFAULTS:
+            raise ToolError(f"Unknown plot attribute '{k}'; attributes: {sorted(ATTR_DEFAULTS)}")
+        fp.props[k] = _s(v)
+    if args.get("new_name"):
+        if any(x.name == args["new_name"] for x in d.field_plots):
+            raise ToolError(f"A field plot '{args['new_name']}' exists")
+        fp.name = args["new_name"]
+    commit(ctx, f"field plot {fp.name}")
+    out = {"name": fp.name, "created": created, "quantity": fp.quantity, "solution": fp.solution,
+           "props": fp.props, "note": "The plot is drawn in the Hertzon window (project tree > Field Overlays)."}
+    if fp.plane:
+        out["plane"] = fp.plane
+    else:
+        out["objects"], out["faces"] = fp.objects, [{"object": f.obj, "face": f.face} for f in fp.faces]
+    return out
+
+
+# ------------------------------------------------------------------------------------------------
+# tools: parametric sweeps and optimizations
+# ------------------------------------------------------------------------------------------------
+_SWEEP_KEYS = ("variable", "type", "start", "stop", "step", "sync")
+_CALC_KEYS = ("calc", "solution", "func", "start", "stop")
+_VAR_KEYS = ("name", "include", "min", "max")
+_GOAL_KEYS = ("calc", "start", "stop", "cond", "value", "weight")
+
+
+def _rows(rows, keys: tuple, what: str) -> list[dict]:
+    out = []
+    for r in rows or []:
+        bad = [k for k in r if k not in keys]
+        if bad:
+            raise ToolError(f"{what}: unknown keys {bad}; keys: {list(keys)}")
+        out.append({k: (v if isinstance(v, bool) else _s(v)) for k, v in r.items()})
+    return out
+
+
+def _study_names(d: Design) -> set[str]:
+    return {o.name for o in d.parametrics} | {o.name for o in d.optimetrics}
+
+
+def t_set_parametric(args):
+    from ..solver.parametric import sweepable, variation_table
+    ctx = load(args)
+    d = ctx.des
+    name = args.get("name") or _next_name(_study_names(d), "ParametricSetup", "")
+    ps = next((x for x in d.parametrics if x.name == name), None)
+    created = ps is None
+    if created:
+        if name in _study_names(d):
+            raise ToolError(f"'{name}' is an optimization")
+        ps = ParametricSetup(name, setups=[s.name for s in d.setups if not s.eigen][:1])
+        d.parametrics.append(ps)
+    if "sweeps" in args:
+        ps.sweeps = _rows(args["sweeps"], _SWEEP_KEYS, "sweeps")
+        ok = sweepable(ctx.proj, d)
+        for e in ps.sweeps:
+            if e.get("variable") not in ok:
+                raise ToolError(f"'{e.get('variable')}' is not a variable with a plain value; sweepable: {sorted(ok)}")
+            if e.get("type", "Linear step") not in schema.PARAMETRIC_SWEEP_TYPES:
+                raise ToolError(f"type must be one of {list(schema.PARAMETRIC_SWEEP_TYPES)}")
+    if "setups" in args:
+        bad = [s for s in args["setups"] if not any(x.name == s for x in d.setups)]
+        if bad:
+            raise ToolError(f"Unknown setups {bad}")
+        ps.setups = list(args["setups"])
+    if "calcs" in args:
+        ps.calcs = _rows(args["calcs"], _CALC_KEYS, "calcs")
+        for c in ps.calcs:
+            if c.get("func", "Value") not in schema.CALC_FUNCTIONS:
+                raise ToolError(f"func must be one of {list(schema.CALC_FUNCTIONS)}")
+    ps.props = _props_in("Parametric", schema.PARAMETRIC, args.get("props"), ps.props)
+    try:
+        n = len(variation_table(ps, d.evaluator(ctx.proj)))
+    except Exception as e:  # noqa: BLE001
+        raise ToolError(f"Sweep definitions: {e}") from None
+    commit(ctx, f"parametric {name}")
+    return {"name": name, "created": created, "sweeps": ps.sweeps, "setups": ps.setups, "calcs": ps.calcs,
+            "props": ps.props, "variations": n,
+            "next": "run_simulation(parametric=name), then get_results(parametric=name)"}
+
+
+def t_set_optimization(args):
+    from ..solver.optimetrics import Variables
+    ctx = load(args)
+    d = ctx.des
+    name = args.get("name") or _next_name(_study_names(d), "Optimization", "")
+    op = next((x for x in d.optimetrics if x.name == name), None)
+    created = op is None
+    if created:
+        if name in _study_names(d):
+            raise ToolError(f"'{name}' is a parametric setup")
+        op = Optimization(name)
+        d.optimetrics.append(op)
+    if args.get("solution") or created:
+        op.solution = _solution(d, args.get("solution"))
+    if "variables" in args:
+        op.variables = _rows(args["variables"], _VAR_KEYS, "variables")
+        for v in op.variables:
+            v.setdefault("include", True)
+    if "goals" in args:
+        op.goals = _rows(args["goals"], _GOAL_KEYS, "goals")
+        for g in op.goals:
+            if g.get("cond", "<=") not in schema.GOAL_CONDITIONS:
+                raise ToolError(f"cond must be one of {list(schema.GOAL_CONDITIONS)}")
+            g.setdefault("cond", "<=")
+            g.setdefault("weight", "1")
+    op.props = _props_in("Optimization", schema.OPTIMIZATION, args.get("props"), op.props)
+    try:
+        Variables(d, op, d.evaluator(ctx.proj))
+    except Exception as e:  # noqa: BLE001
+        raise ToolError(f"Variables: {e}") from None
+    commit(ctx, f"optimization {name}")
+    return {"name": name, "created": created, "solution": op.solution, "variables": op.variables,
+            "goals": op.goals, "props": op.props,
+            "next": "run_simulation(optimization=name), then get_results(optimization=name)"}
+
+
 def t_validate(args):
     from ..model.validate import validate
     ctx = load(args)
@@ -1000,10 +1437,84 @@ def _job_key(ctx: Ctx, setup: str, sweep: str = "") -> str:
     return f"{Path(ctx.proj.path).stem} - {ctx.des.name} - {setup}" + (f" : {sweep}" if sweep else "")
 
 
+def _study(ctx: Ctx, args) -> tuple[str, str] | None:
+    """(name, 'parametric' | 'optimization') when the call is about a parametric setup or an optimization."""
+    for kind, attr in (("parametric", "parametrics"), ("optimization", "optimetrics")):
+        name = args.get(kind)
+        if name:
+            if not any(o.name == name for o in getattr(ctx.des, attr)):
+                raise ToolError(f"No {kind} named '{name}'; {kind}s: {[o.name for o in getattr(ctx.des, attr)]}")
+            return name, kind
+    return None
+
+
+def _study_dir(ctx: Ctx, name: str) -> Path:
+    from ..solver.results import _safe, studies_dir
+    return studies_dir(ctx.proj.path, ctx.des.name) / _safe(name)
+
+
+def _run_study(ctx: Ctx, name: str, kind: str, args) -> dict:
+    """Solve the variations of a parametric setup or run an optimization (window queue or background)."""
+    from ..model.validate import validate
+    d = ctx.des
+    ev = d.evaluator(ctx.proj)
+    try:
+        if kind == "parametric":
+            from ..solver.parametric import variation_table
+            ps = next(o for o in d.parametrics if o.name == name)
+            if not variation_table(ps, ev):
+                raise ValueError("Add a sweep definition first (set_parametric sweeps)")
+            if not any(any(s.name == x for s in d.setups) for x in ps.setups):
+                raise ValueError("Choose a setup to simulate (set_parametric setups)")
+        else:
+            from ..solver.optimetrics import Variables
+            op = next(o for o in d.optimetrics if o.name == name)
+            Variables(d, op, ev)
+            if not op.goals:
+                raise ValueError("The optimization has no goal (set_optimization goals)")
+    except ValueError as e:
+        raise ToolError(f"{name}: {e}") from None
+    if ctx.gui is not None:
+        r = ctx.gui.call("solve", design=d.name, setup="", **{kind: name})
+        return {"started": True, "in_window": True, **(r or {}),
+                "next": f"get_status({kind}=...) with wait_seconds; get_results({kind}=...)"}
+    if not ctx.proj.path:
+        raise ToolError("Save the project first")
+    if not args.get("skip_validation"):
+        tess, errors = tessellate(ctx.proj, d)
+        bad = [c.message for c in validate(ctx.proj, d, tess, errors) if c.level == "error"]
+        if bad:
+            raise ToolError("Validation failed:\n- " + "\n- ".join(bad))
+    out = _study_dir(ctx, name)
+    p = S.procs.get(str(out))
+    if p is not None and p.poll() is None:
+        raise ToolError(f"'{name}' is already running (abort_simulation to stop it)")
+    out.mkdir(parents=True, exist_ok=True)
+    (out / "ABORT").unlink(missing_ok=True)
+    env = dict(os.environ)
+    env["PYTHONPATH"] = str(ROOT) + os.pathsep + env.get("PYTHONPATH", "")
+    env.update(PYTHONUNBUFFERED="1", PYTHONIOENCODING="utf-8", PYTHONUTF8="1")
+    n = int(args.get("cores") or 0) or (os.cpu_count() or 1)
+    env["HERTZON_CORES"] = str(n)
+    from .clients import python_exe
+    log = open(out / "solver.log", "wb")
+    kw = {"creationflags": 0x08000000} if os.name == "nt" else {"start_new_session": True}
+    mod = "hertzon.solver.parametric" if kind == "parametric" else "hertzon.solver.optimize"
+    S.procs[str(out)] = subprocess.Popen([python_exe(), "-m", mod, ctx.proj.path, d.name, name, str(out)],
+                                         stdout=log, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, env=env,
+                                         cwd=str(Path(ctx.proj.path).parent), **kw)
+    log.close()
+    return {"started": True, "in_window": False, kind: name, "results": str(out), "cores": n,
+            "next": f"get_status({kind}=...) with wait_seconds; get_results({kind}=...)"}
+
+
 def t_run_simulation(args):
     from ..model.validate import validate
     ctx = load(args)
     d = ctx.des
+    study = _study(ctx, args)
+    if study:
+        return _run_study(ctx, *study, args)
     if not d.setups:
         raise ToolError("The design has no analysis setup (set_setup)")
     setup = args.get("setup") or d.setups[0].name
@@ -1137,9 +1648,65 @@ def _status(ctx: Ctx, setup: str, sweep: str = "") -> dict:
     return res
 
 
+def _study_status(ctx: Ctx, name: str, kind: str) -> dict:
+    from ..solver.results import ResultStore
+    out = _study_dir(ctx, name)
+    st = ResultStore(out) if out.exists() else None
+    status = (st.read_json("status.json") if st else None) or {}
+    state = status.get("state", "not solved")
+    res = {kind: name}
+    p = S.procs.get(str(out))
+    if p is not None:
+        rc = p.poll()
+        if rc is None:
+            state = "running"
+        elif state == "running":
+            state = "failed" if rc != 0 else state
+            res["exit_code"] = rc
+    if ctx.gui is not None:
+        try:
+            q = ctx.gui.call("queue", timeout=10)
+        except live.LinkError:
+            q = {}
+        key = f"{Path(ctx.proj.path).stem} - {ctx.des.name} - {name}"
+        if q.get("running") == key:
+            state = "running"
+        elif key in (q.get("queued") or []):
+            state = "queued"
+    res["state"] = state
+    if status.get("error"):
+        res["error"] = status["error"]
+    if st is not None:
+        if kind == "parametric":
+            rows = (st.read_json("table.json") or {}).get("variations", [])
+            res["variations"] = len(rows)
+            res["variations_done"] = sum(1 for r in rows if (r.get("state") or {})
+                                         and all(v == "done" for v in r["state"].values()))
+        else:
+            hist = (st.read_json("history.json") or {}).get("evaluations", [])
+            best = st.read_json("best.json")
+            res["evaluations"] = len(hist)
+            if best:
+                res["best_cost"] = best.get("cost")
+        if p is not None or state in ("failed", "running"):
+            res["log"] = _log_tail(out)
+    return res
+
+
 def t_get_status(args):
     ctx = load(args)
     d = ctx.des
+    study = _study(ctx, args)
+    if study:
+        if not ctx.proj.path:
+            raise ToolError("The project is not saved yet")
+        wait = min(float(args.get("wait_seconds") or 0), 600.0)
+        t0 = time.time()
+        while True:
+            s = _study_status(ctx, *study)
+            if s["state"] not in ("running", "queued") or time.time() - t0 >= wait:
+                return s
+            time.sleep(min(3.0, max(0.2, wait - (time.time() - t0))))
     if not d.setups:
         raise ToolError("The design has no analysis setup")
     if not ctx.proj.path:
@@ -1156,6 +1723,14 @@ def t_get_status(args):
 
 def t_abort_simulation(args):
     ctx = load(args)
+    study = _study(ctx, args)
+    if study:
+        if ctx.gui is not None:
+            return ctx.gui.call("abort", key=f"{Path(ctx.proj.path).stem} - {ctx.des.name} - {study[0]}")
+        out = _study_dir(ctx, study[0])
+        out.mkdir(parents=True, exist_ok=True)
+        (out / "ABORT").write_text("1", encoding="utf-8")      # the run stops its solver processes itself
+        return {"aborting": True}
     setup = args.get("setup") or ctx.des.setups[0].name
     if ctx.gui is not None:
         return ctx.gui.call("abort", key=_job_key(ctx, setup, args.get("sweep") or ""))
@@ -1259,12 +1834,35 @@ def _cut(q: dict, name: str, phi_deg: float, to_db, n: int):
             name + "_dB": [_r(to_db(v[i]), 4) for i in idx]}
 
 
+def _study_results(ctx: Ctx, name: str, kind: str, args) -> dict:
+    from ..solver.results import ResultStore
+    st = ResultStore(_study_dir(ctx, name))
+    n = int(args.get("max_points", 50))
+    if kind == "parametric":
+        t = st.read_json("table.json")
+        if not t:
+            raise ToolError(f"No results for '{name}' yet (run_simulation(parametric=...))")
+        rows = t.get("variations", [])
+        return {"parametric": name, "variables": t.get("variables"), "setups": t.get("setups"),
+                "calcs": t.get("calcs"), "variations": rows[:n],
+                **({"note": f"first {n} of {len(rows)} variations; raise max_points"} if len(rows) > n else {})}
+    hist = (st.read_json("history.json") or {}).get("evaluations", [])
+    if not hist:
+        raise ToolError(f"No results for '{name}' yet (run_simulation(optimization=...))")
+    return {"optimization": name, "best": st.read_json("best.json"), "summary": st.read_json("summary.json"),
+            "evaluations": len(hist), "last": hist[-min(n, 10):],
+            "note": "Apply the best values with set_design variables when they are good."}
+
+
 def t_get_results(args):
     from ..solver.results import ResultStore
     ctx = load(args)
     d = ctx.des
     if not ctx.proj.path:
         raise ToolError("The project is not saved yet")
+    study = _study(ctx, args)
+    if study:
+        return _study_results(ctx, *study, args)
     setup = args.get("setup") or (d.setups[0].name if d.setups else None)
     if setup is None:
         raise ToolError("No setup")
@@ -1397,9 +1995,19 @@ def t_render_image(args):
         for e in lines[:4000]:
             pl.add_mesh(pv.lines_from_points(np.asarray(e) / sc), color="#202020", line_width=1)
         if label == o.name:
-            C = np.asarray(t.face_center) / sc
-            pl.add_point_labels(C, [str(i) for i in range(len(C))], font_size=14, point_size=6,
-                                text_color="black", shape_opacity=0.6, always_visible=True)
+            what = args.get("label_what", "faces")
+            if what == "edges":
+                idx = [i for i, e in enumerate(t.edges) if len(e)]
+                C = np.array([np.asarray(t.edges[i])[len(t.edges[i]) // 2] for i in idx]).reshape(-1, 3) / sc
+            elif what == "vertices":
+                C = np.asarray(t.vertices, float).reshape(-1, 3) / sc
+                idx = list(range(len(C)))
+            else:
+                C = np.asarray(t.face_center).reshape(-1, 3) / sc
+                idx = list(range(len(C)))
+            if len(C):
+                pl.add_point_labels(C, [str(i) for i in idx], font_size=14, point_size=6,
+                                    text_color="black", shape_opacity=0.6, always_visible=True)
     for a in d.excitations + d.boundaries:
         if not args.get("show_assignments", True):
             break
@@ -1493,7 +2101,8 @@ TOOLS = [
     Tool("get_schema", "Available kinds and their properties (type, default, choices, help).",
          _schema({"section": {"type": "string", "enum": ["geometry", "operations", "boundaries", "excitations",
                                                          "mesh_operations", "setup", "eigen_setup", "sweep",
-                                                         "design_settings", "far_field_sphere"]},
+                                                         "design_settings", "far_field_sphere", "coordinate_system",
+                                                         "parametric", "optimization"]},
                   "kind": {"type": "string"}}, ["section"], False), t_get_schema, True),
     Tool("list_materials", "Materials of the project and the system library.",
          _schema({"filter": {"type": "string"}}), t_list_materials, True),
@@ -1534,13 +2143,17 @@ TOOLS = [
                   "kind": {"type": "string"}, "props": OBJ, "check": {"type": "boolean"}}, ["kind"]),
          t_add_operation),
     Tool("delete", "Delete objects (with their consumed tools), boundaries, excitations, mesh operations, "
-         "setups, sweeps or far-field spheres by name.",
+         "setups, sweeps, far-field spheres, coordinate systems, equations, functions, reports, field plots, "
+         "parametric setups or optimizations by name.",
          _schema({"names": {"type": "array", "items": {"type": "string"}}, "setup": {"type": "string"}},
                  ["names"]), t_delete),
     Tool("get_geometry", "Build the model and list per object: dimension, bounding box, volume and faces "
          "(index, centre, normal, area, planar) in design units. Use the face indices in assign.",
          _schema({"objects": {"type": "array", "items": {"type": "string"}},
-                  "max_faces": {"type": "integer"}}), t_get_geometry, True),
+                  "max_faces": {"type": "integer"},
+                  "include_edges": {"type": "boolean", "description": "also list edges (start, end, mid, length) "
+                                    "and vertices with the indices of Fillet/Chamfer Edges and Vertices"}}),
+         t_get_geometry, True),
     Tool("assign", "Assign a boundary (Perfect E, Finite Conductivity, Radiation, PML, Symmetry ...), an "
          "excitation (Wave Port, Lumped Port, Incident Plane Wave ...) or a mesh operation to objects or faces.",
          _schema({"category": {"type": "string", "enum": list(_CATS)}, "kind": {"type": "string"},
@@ -1562,6 +2175,53 @@ TOOLS = [
          _schema({"setup": {"type": "string"}, "name": {"type": "string"}, "props": OBJ}), t_set_sweep),
     Tool("set_far_field_sphere", "Create or change an infinite sphere for far fields (gain, RCS).",
          _schema({"name": {"type": "string"}, "props": OBJ}), t_set_far_field_sphere),
+    Tool("set_coordinate_system", "Create or change a relative coordinate system (Origin, XAxis, YPoint or "
+         "Euler angles, relative to reference). A new one becomes the working CS: objects created afterwards are "
+         "defined in it (set_working=false keeps the current one; name 'Global' with set_working goes back).",
+         _schema({"name": {"type": "string"}, "reference": {"type": "string"}, "props": OBJ,
+                  "set_working": {"type": "boolean"}}), t_set_coordinate_system),
+    Tool("set_equation", "Fields Calculator: define or change named equations of the design (fields such as "
+         "loss densities, values such as flux(Port1, re(S)), int_vol(obj, ...), max(obj, |E|), or network "
+         "values like -dB(S(1,1))) and functions 'name(a, b) = body'; import or export them as a file. They are "
+         "evaluated in the window (field plots, reports).",
+         _schema({"name": {"type": "string"}, "expr": {"type": "string"}, "description": {"type": "string"},
+                  "equations": {"type": "array", "items": {"type": "object", "properties": {
+                      "name": {"type": "string"}, "expr": {"type": "string"}, "description": {"type": "string"}}}},
+                  "functions": {"type": "array", "items": {"type": "string"}},
+                  "replace": {"type": "boolean", "description": "replace equations of the same name (default true)"},
+                  "import_file": {"type": "string"}, "export_file": {"type": "string"}}), t_set_equation),
+    Tool("set_report", "Create or change a report (kind Rectangular, Smith Chart, Data Table, Radiation Pattern, "
+         "3D Polar Plot, Antenna Parameters, Monostatic RCS ...) with traces like dB(S(2,1)) or an equation; "
+         "fields=true makes a Fields report of value equations over frequency. Shown in the window.",
+         _schema({"name": {"type": "string"}, "kind": {"type": "string", "enum": list(REPORT_KINDS)},
+                  "solution": {"type": "string", "description": "'Setup1 : Sweep' or 'Setup1 : LastAdaptive'"},
+                  "traces": {"type": "array", "items": {"type": "string"}}, "fields": {"type": "boolean"},
+                  "port": {"type": "integer", "description": "excited port of a Fields report"},
+                  "props": OBJ, "new_name": {"type": "string"}}), t_set_report),
+    Tool("set_field_plot", "Create or change a field plot (Mag_E, Vector_E, Mag_H, Mag_Jsurf, Vector_J ... or a "
+         "field equation) on objects, faces or a cut plane; drawn in the window.",
+         _schema({"name": {"type": "string"}, "quantity": {"type": "string"},
+                  "solution": {"type": "string", "description": "'Setup1 : LastAdaptive' or a sweep with fields"},
+                  "objects": {"type": "array", "items": {"type": "string"}}, "faces": FACES,
+                  "plane": {"type": "string", "description": "cut plane 'XY', 'YZ' or 'XZ' with position: 'XY@1mm'"},
+                  "volume": {"type": "boolean", "description": "inside the objects (dots or arrows), not on "
+                                                               "their surface"},
+                  "port": {"type": "integer"}, "freq_index": {"type": "integer"}, "phase_deg": {"type": "number"},
+                  "attributes": {"type": "object", "description": "ColorMap, Scale ('Use Limits'), Min, Max, dB, "
+                                                                  "Log, Transparency, PlotType, ArrowCount ..."},
+                  "new_name": {"type": "string"}}), t_set_field_plot),
+    Tool("set_parametric", "Create or change a parametric sweep: sweeps [{variable, type (Linear step, Linear "
+         "count, Single value ...), start, stop, step, sync}], setups to solve, calcs [{calc, solution, func, "
+         "start, stop}] and props (SaveFields, ParallelVariations).",
+         _schema({"name": {"type": "string"}, "sweeps": {"type": "array", "items": {"type": "object"}},
+                  "setups": {"type": "array", "items": {"type": "string"}},
+                  "calcs": {"type": "array", "items": {"type": "object"}}, "props": OBJ}), t_set_parametric),
+    Tool("set_optimization", "Create or change an optimization: variables [{name, include, min, max}], goals "
+         "[{calc like dB(S(1,1)), start, stop (frequencies), cond (<=, >=, =, Ripple <=), value, weight}] on a "
+         "solution, and optimizer props.",
+         _schema({"name": {"type": "string"}, "solution": {"type": "string"},
+                  "variables": {"type": "array", "items": {"type": "object"}},
+                  "goals": {"type": "array", "items": {"type": "object"}}, "props": OBJ}), t_set_optimization),
     Tool("validate", "Run the validation check (geometry, materials, boundaries, ports, setup).",
          _schema({}), t_validate, True),
     Tool("run_simulation", "Analyze a setup (adaptive passes, sweeps, far fields). Runs in the Hertzon window "
@@ -1569,29 +2229,36 @@ TOOLS = [
          _schema({"setup": {"type": "string"}, "sweep": {"type": "string", "description": "only this sweep, "
                                                          "reusing the adaptive mesh"},
                   "mesh_only": {"type": "boolean"}, "cores": {"type": "integer"},
-                  "skip_validation": {"type": "boolean"}}), t_run_simulation),
+                  "skip_validation": {"type": "boolean"}, "parametric": {"type": "string", "description": "a parametric setup instead of a setup"},
+                  "optimization": {"type": "string", "description": "an optimization instead of a setup"}}), t_run_simulation),
     Tool("get_status", "State of a setup's analysis (queued, running, done, failed), adaptive passes with "
          "tetrahedra and Delta S, and the last log lines. wait_seconds waits (up to 600 s) while it runs.",
          _schema({"setup": {"type": "string"}, "sweep": {"type": "string"},
-                  "wait_seconds": {"type": "number"}}), t_get_status, True),
-    Tool("abort_simulation", "Stop a running analysis.", _schema({"setup": {"type": "string"},
-                                                                  "sweep": {"type": "string"}}), t_abort_simulation),
+                  "wait_seconds": {"type": "number"}, "parametric": {"type": "string", "description": "a parametric setup instead of a setup"},
+                  "optimization": {"type": "string", "description": "an optimization instead of a setup"}}), t_get_status, True),
+    Tool("abort_simulation", "Stop a running analysis.",
+         _schema({"setup": {"type": "string"}, "sweep": {"type": "string"}, "parametric": {"type": "string", "description": "a parametric setup instead of a setup"},
+                  "optimization": {"type": "string", "description": "an optimization instead of a setup"}}), t_abort_simulation),
     Tool("get_results", "Results of a setup. kind: summary (all solutions: resonances, -10 dB bands, peak "
          "gain or RCS), sparameters (table in dB/deg; params like ['S11','S21'], frequencies or max_points), "
          "convergence, farfield (antenna parameters and pattern cuts; quantity GainTotal, DirTotal, "
-         "RealizedGainTotal ...), rcs (monostatic over frequency and bistatic cuts).",
+         "RealizedGainTotal ...), rcs (monostatic over frequency and bistatic cuts). With parametric=...: the "
+         "variations and their calculations; with optimization=...: best values, cost and the last evaluations.",
          _schema({"setup": {"type": "string"}, "kind": {"type": "string", "enum": ["summary", "sparameters",
                                                                                  "convergence", "farfield", "rcs"]},
                   "solution": {"type": "string"}, "params": {"type": "array", "items": {"type": "string"}},
                   "frequencies": {"type": "array", "items": {"type": ["string", "number"]}},
                   "max_points": {"type": "integer"}, "sphere": {"type": "string"},
                   "quantity": {"type": "string"}, "port": {"type": "integer"}, "freq_index": {"type": "integer"},
-                  "phi_cuts": {"type": "array", "items": {"type": "number"}}}), t_get_results, True),
+                  "phi_cuts": {"type": "array", "items": {"type": "number"}}, "parametric": {"type": "string", "description": "a parametric setup instead of a setup"},
+                  "optimization": {"type": "string", "description": "an optimization instead of a setup"}}), t_get_results, True),
     Tool("render_image", "Picture of the model (PNG): objects in their colours, ports and boundaries on faces, "
          "optionally the face indices of one object.",
          _schema({"view": {"type": "string", "enum": ["iso", "top", "bottom", "front", "back", "left", "right"]},
                   "objects": {"type": "array", "items": {"type": "string"}},
-                  "label_faces_of": {"type": "string"}, "show_assignments": {"type": "boolean"},
+                  "label_faces_of": {"type": "string", "description": "object whose indices are drawn"},
+                  "label_what": {"type": "string", "enum": ["faces", "edges", "vertices"]},
+                  "show_assignments": {"type": "boolean"},
                   "azimuth": {"type": "number"}, "elevation": {"type": "number"},
                   "width": {"type": "integer"}, "height": {"type": "integer"}}), t_render_image, True),
     Tool("run_python", "Edit the design with Python for repetitive work (arrays, parametric layouts). Names: "
