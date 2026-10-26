@@ -374,6 +374,11 @@ def test_changed_equation_redraws_its_plots():
     drawn.clear()
     win.redraw_equation_plots()
     assert [n for n, _ in drawn] == ["W", "W2", "H"]
+    win.des.field_exprs[0].expr = "1"                     # w is a value now: its plots and W2's go
+    drawn.clear()
+    win.redraw_equation_plots(["w"])
+    assert [p.name for p in win.des.field_plots] == ["H"] and drawn == []
+    assert "W" not in win.view.overlay_actors
     win.view.overlay_actors.clear()
     win.doc.dirty = False
     win.close()
