@@ -204,6 +204,7 @@ def _sweep_along(dt: list, path: list, trihedron: str) -> list[tuple[int, int]]:
             _check_profile_crosses(prof, curves)
         out = o.addPipe(prof, o.addWire(curves), trihedron or "DiscreteTrihedron")
         res = [d for d in out if d[0] == dim + 1]
+        o.remove(prof, recursive=True)      # the pipe is a copy, the profile would stay as a loose sheet
     o.remove(path, recursive=True)
     if not res:
         raise GeometryError("Sweep along path failed")
@@ -247,6 +248,9 @@ def _pipe(wire: int, path: np.ndarray, radius: float) -> list[tuple[int, int]]:
     disk = o.addPlaneSurface([o.addCurveLoop([circ])])
     w = o.addWire([wire])
     out = o.addPipe([(2, disk)], w, "DiscreteTrihedron")
+    # the pipe is a copy: the profile disk and the path stayed behind as loose entities, and a loose
+    # face in the solver model has no tetrahedra on either side (KeyError when the mesh is read)
+    o.remove([(2, disk), (1, wire)], recursive=True)
     return [d for d in out if d[0] == 3]
 
 
@@ -563,6 +567,7 @@ def _create(cmd: Command, ctx: BuildContext) -> list[tuple[int, int]]:
             disk = o.addPlaneSurface([o.addCurveLoop([circ])])
             try:
                 out = o.addPipe([(2, disk)], o.addWire(curves), "DiscreteTrihedron")
+                o.remove([(2, disk)] + [(1, c_) for c_ in curves], recursive=True)
                 return [d for d in out if d[0] == 3]
             except Exception:  # noqa: BLE001
                 # OCC cannot pipe some many-corner paths: the smooth curve through the corners is
@@ -1666,57 +1671,74 @@ def _resolve_planar_curves(ents, n_turn: float, skip=()) -> None:
 
 
 def _generate_planar_first() -> None:
-    """Display mesh in two passes. Curvature sizing costs time for every face in the model, also for
-    flat ones (a 50-segment sphere has 1250 of them). So plane faces are meshed first without it and
-    their triangles kept; then only the curved faces are meshed with curvature sizing."""
+    """Display mesh in passes. Swept pipes (helix wire, BSpline surfaces) get a coarser curvature
+    sizing: it is isotropic, so the thin tube radius would also set the size along the whole length
+    -> tens of thousands of display triangles. That limit holds only for those faces; cylinders and
+    spheres, also ones fused with the pipe, keep the full sizing (a single helix in the model used
+    to make every cylinder coarse)."""
     _PASS_CACHE.clear()
     S = gmsh.model.getEntities(2)
-    planes = [e for e in S if gmsh.model.getType(*e) == "Plane"]
-    curved = [e for e in S if e not in planes]
     curv = gmsh.option.getNumber("Mesh.MeshSizeFromCurvature")
-    if any(gmsh.model.getType(*e) == "BSpline surface" for e in curved):
-        # swept pipes (helix wire): curvature sizing is isotropic, so the thin tube radius would also
-        # set the size along the whole length -> tens of thousands of display triangles
-        gmsh.option.setNumber("Mesh.MeshSizeFromCurvature", min(curv, 8))
-    if len(planes) < 50 or not curved:
-        try:
-            if not curved:
-                gmsh.option.setNumber("Mesh.MeshSizeFromCurvature", 0)
-                _resolve_planar_curves(gmsh.model.getEntities(1), curv)
-            gmsh.model.mesh.generate(2)
-        finally:
-            gmsh.option.setNumber("Mesh.MeshSizeFromCurvature", curv)
-        return
-    curv_all, curv = curv, gmsh.option.getNumber("Mesh.MeshSizeFromCurvature")
-    everything = gmsh.model.getEntities()
+    swept = [e for e in S if gmsh.model.getType(*e) == "BSpline surface"]
+    rest = [e for e in S if e not in swept]
+    # lines and points outside every face (wires, helix lines) go with the last pass
+    in_faces = set(_closure(S)) if S else set()
+    loose = [e for e in gmsh.model.getEntities(1) + gmsh.model.getEntities(0) if e not in in_faces]
     try:
-        gmsh.option.setNumber("Mesh.MeshSizeFromCurvature", 0)
-        gmsh.model.mesh.removeSizeCallback()    # apex floor only matters with curvature sizing
+        if swept and rest:
+            _mesh_faces(swept, min(curv, 8), last=False)
+            # edges shared with the pipe keep its node count, so both sides of the seam match
+            seam = [e for e in set(_closure(swept)) & set(_closure(rest))
+                    if e[0] == 1 and e in _PASS_CACHE and gmsh.model.getType(*e) != "Line"]
+            for _, t in seam:
+                gmsh.model.mesh.setTransfiniteCurve(t, len(_PASS_CACHE[(1, t)]))
+            _mesh_faces(rest, curv, last=True, loose=loose, fixed=seam)
+        else:
+            _mesh_faces(S, min(curv, 8) if swept else curv, last=True, loose=loose, alone=True)
+    finally:
+        gmsh.option.setNumber("Mesh.MeshSizeFromCurvature", curv)
+        gmsh.option.setNumber("Mesh.MeshOnlyVisible", 0)
+        gmsh.model.setVisibility(gmsh.model.getEntities(), 1)
+        if _APEX_CB is not None:
+            gmsh.model.mesh.setSizeCallback(_APEX_CB)
+
+
+def _mesh_faces(faces: list, curv: float, last: bool, loose: list = (), fixed: list = (),
+                alone: bool = False) -> None:
+    """Display mesh of some faces. Curvature sizing costs time for every face, also for flat ones
+    (a 50-segment sphere has 1250 of them), so with many plane faces these are meshed first without
+    it. The triangles of every pass but the last one are kept in _PASS_CACHE (gmsh holds one mesh)."""
+    planes = [e for e in faces if gmsh.model.getType(*e) == "Plane"]
+    curved = [e for e in faces if e not in planes]
+    if len(planes) >= 50 and curved:
+        passes = [(planes, 0.0), (curved, curv)]
+    else:
+        passes = [(faces, curv if curved else 0.0)]
+    skip = (_closure(curved) if curved else []) + list(fixed)
+    for i, (grp, c) in enumerate(passes):
+        final = last and i == len(passes) - 1
+        gmsh.option.setNumber("Mesh.MeshSizeFromCurvature", c)
+        cl = (_closure(grp) if grp else []) + (list(loose) if final else [])
+        if c == 0:
+            gmsh.model.mesh.removeSizeCallback()    # apex floor only matters with curvature sizing
+            _resolve_planar_curves(cl, curv, skip=skip)
+        elif _APEX_CB is not None:
+            gmsh.model.mesh.setSizeCallback(_APEX_CB)
+        if alone and len(passes) == 1:
+            gmsh.model.mesh.generate(2)       # the whole model in one go
+            return
         gmsh.option.setNumber("Mesh.MeshOnlyVisible", 1)
-        gmsh.model.setVisibility(everything, 0)
-        pc = _closure(planes)
-        _resolve_planar_curves(pc, curv, skip=_closure(curved))
-        gmsh.model.setVisibility(pc, 1)
+        gmsh.model.setVisibility(gmsh.model.getEntities(), 0)
+        gmsh.model.setVisibility(cl, 1)
+        gmsh.model.mesh.clear()
         gmsh.model.mesh.generate(2)
-        for d, t in pc:
-            if d == 2:
+        for d, t in cl:
+            if final:
+                _PASS_CACHE.pop((d, t), None)    # shared edges: take the (finer) last-pass discretisation
+            elif d == 2:
                 _PASS_CACHE[(2, t)] = _entity_tris(2, t)
             elif d == 1:
                 _PASS_CACHE[(1, t)] = _curve_polyline(t)
-        gmsh.option.setNumber("Mesh.MeshSizeFromCurvature", curv)
-        if _APEX_CB is not None:
-            gmsh.model.mesh.setSizeCallback(_APEX_CB)
-        gmsh.model.setVisibility(everything, 0)
-        cc = _closure(curved)
-        gmsh.model.setVisibility(cc, 1)
-        gmsh.model.mesh.clear()
-        gmsh.model.mesh.generate(2)
-        for e in cc:   # shared edges: take the (finer) curved-pass discretisation
-            _PASS_CACHE.pop(e, None)
-    finally:
-        gmsh.option.setNumber("Mesh.MeshSizeFromCurvature", curv_all)
-        gmsh.option.setNumber("Mesh.MeshOnlyVisible", 0)
-        gmsh.model.setVisibility(everything, 1)
 
 
 def _mesh_skipping_bad(ctx: BuildContext) -> None:
