@@ -42,6 +42,9 @@ the GitHub release notes.
   examples/benchmark/scaling/results.
 
 ### Fixed
+- **Slow update with the Windows installer**: installing a new version over an existing one hung for minutes
+  after copying the files, because the installer took the size for Settings > Apps by walking the whole
+  folder, including the existing Python environment; it now takes the size from the installer itself.
 - **Report tabs push the window off screen**: opening a report (for example an XY plot) raised the main
   window's minimum height to the full height of the trace editor, so on a 1080p screen with display scaling
   a maximized window reached below the screen and the status bar with the coordinates was cut off; after
