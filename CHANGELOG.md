@@ -68,6 +68,8 @@ the GitHub release notes.
 - **Field plots of a changed equation**: saving an equation (or a function it uses) draws its field plots
   on screen again with the new formula; before, they kept the old field until cleared and plotted again.
   An equation changed from a field to a value deletes its field plots.
+- **Square root in the formula editor**: `\sqrt(...)` and `sqrt(...)` typed with parentheses (or `sqrt`
+  alone) become the root sign over the argument; before, `\sqrt(...)` stayed as text with parentheses.
 - **Selection rectangle left in the 3D view**: when the mouse release of a box selection did not reach the
   3D view (for example after switching tabs), the rectangle stayed on screen. It now goes with the next move
   or click in the view.

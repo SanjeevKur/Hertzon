@@ -195,6 +195,8 @@ def test_formula_editor_round_trip(src):
     (r"10\,\mathrm{mm}", "10mm"),
     (r"45^{\circ}", "45deg"),
     (r"\operatorname{Re}\left\{S\right\}", "re(S)"),
+    (r"\sqrt\left(x\right)", "sqrt(x)"),
+    (r"\sqrt{x}", "sqrt(x)"),
 ])
 def test_formula_editor_reads_what_is_typed(tex, src):
     from hertzon.post.calc import latex as TX

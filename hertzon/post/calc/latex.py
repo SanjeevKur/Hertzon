@@ -362,6 +362,24 @@ def to_text(tex: str, env: L.Env | None = None) -> str:
         if v == "sqrt":
             if is_ch("["):
                 fail("Only square roots are supported")
+            if is_cmd("left") and tok(p + 1) is not None and tok(p + 1).v == "(":
+                # \sqrt\left(x\right): the parentheses are the argument
+                q, depth = p + 2, 1
+                while q < len(T):
+                    if is_cmd("left", q):
+                        depth += 1
+                    elif is_cmd("right", q):
+                        depth -= 1
+                        if depth == 0:
+                            break
+                    q += 1
+                p += 2
+                inner = []
+                while p < q:
+                    atom(inner)
+                p = q + 2
+                atoms.append({"t": "v", "s": "sqrt(" + join(inner) + ")"})
+                return
             atoms.append({"t": "v", "s": "sqrt(" + arg() + ")"})
             return
         if v in ("left", "right", "bigl", "bigr", "Bigl", "Bigr", "big", "Big"):
