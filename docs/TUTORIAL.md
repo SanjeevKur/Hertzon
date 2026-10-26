@@ -523,10 +523,11 @@ The assistant works step by step with the same building blocks you used above, a
 |---|---|
 | Projects | `create_project`, `open_project`, `get_project`, `save_project`, `get_context` |
 | Settings and materials | `set_design` (units, variables, solution type, Auto Open), `list_materials`, `add_material`, `get_schema` |
-| Geometry | `add_object`, `import_geometry`, `modify_object`, `add_operation` (subtract, unite, ...), `delete`, `get_geometry` (faces with index, centre, normal) |
+| Geometry | `add_object`, `import_geometry`, `modify_object`, `add_operation` (subtract, unite, ...), `delete`, `get_geometry` (faces with index, centre, normal; edges and vertices for Fillet/Chamfer), `set_coordinate_system` |
 | Boundaries and ports | `assign`, `modify_assignment` (boundaries, wave/lumped ports, plane waves, mesh operations) |
 | Analysis | `set_setup`, `set_sweep`, `set_far_field_sphere`, `validate`, `run_simulation`, `get_status`, `abort_simulation` |
-| Results | `get_results` (S-parameters, impedances, gain, RCS, convergence), `render_image` (a picture of the model) |
+| Results | `get_results` (S-parameters, impedances, gain, RCS, convergence), `render_image` (a picture of the model), `set_report`, `set_field_plot`, `set_equation` (Fields Calculator) |
+| Parametric and optimization | `set_parametric`, `set_optimization`, run and read with `run_simulation`, `get_status`, `get_results` |
 | Scripting | `run_python` for anything else, with the Hertzon model API |
 
 Simulation results can be wrong, whether you or an assistant set the model up. Check them as described in
