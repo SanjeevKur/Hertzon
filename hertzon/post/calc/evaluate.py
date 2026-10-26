@@ -103,6 +103,8 @@ class Result:
                 (f" {UN.label(self.unit)}" if UN.label(self.unit) else "")
         if self.is_zero():
             return "≈ 0" + (f" {UN.label(self.unit)}" if UN.label(self.unit) else "")
+        if self.info.log:
+            return _ctext(complex(self.value), UN.ONE, digits, False) + " " + self.info.log
         return _ctext(complex(self.value), self.unit, digits, True)
 
 

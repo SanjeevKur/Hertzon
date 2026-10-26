@@ -102,6 +102,9 @@ the GitHub release notes.
   greater than 0"), because the metal also zeroed the field on the port face. Such a solid now backs the
   port: no field inside and PEC on its surface, with the port face left free. The log says which object
   backs which port.
+- **Unit dB of equations**: an equation of a level in decibels such as `RL = -dB(S(1,1))` showed the unit 1 in
+  the Equations tab while the report axis said dB. The Equations tab, values, report axes, data tables and
+  colour bars now show dB, also for sums and multiples of levels (`RL + 3`, `2*RL`).
 - **Solutions shown as outdated**: the solutions of projects solved with 0.2.3 or earlier were shown as
   outdated (and an analysis started the adaptive passes again from the initial mesh), and saving an equation
   of the Fields Calculator did the same to a current solution. Equations are post-processing and no longer

@@ -80,6 +80,22 @@ def test_units_and_kinds():
     assert UN.fmt(9.634e-3, UN.U(V=1, A=1)) == "9.634 mW"
 
 
+def test_levels_in_db_keep_their_unit():
+    """dB() is dimensionless but shown as dB: in the Equations tab, on report axes, colour bars and values; sums
+    and multiples of a level stay in dB, other functions of it do not."""
+    from hertzon.post.calc.evaluate import Evaluator
+    from hertzon.gui.calc_bridge import NetSource
+    env = L.Env(named={"RL": "-dB(S(1,1))"})
+    for src in ("RL", "dB(S(2,1))", "dB10(VSWR(1))", "RL + 3", "2*RL", "RL - dB(S(2,1))", "|RL|"):
+        assert L.unit_label(L.analyze(src, env)) == "dB", src
+    for src in ("RL*RL", "sqrt(RL)", "|S(1,1)|", "10^2"):
+        assert L.unit_label(L.analyze(src, env)) == "", src
+    assert L.unit_label(L.analyze("flux(Guide, re(S))", L.Env(geometry={"Guide": L.GeoInfo(frozenset({3, 2}), True)}))) \
+        == "W"
+    data = {"freq": np.array([1e9]), "S": np.array([[[0.1]]], complex), "z0": np.array([50.0])}
+    assert Evaluator(env, NetSource(data, 0)).value("RL").text() == "20 dB"
+
+
 @pytest.mark.parametrize("src, where", [("E + H", "E + H"), ("flux(Nowhere, re(S))", "Nowhere"),
                                          ("max(Guide |E|)", "|E|"), ("E · ", None)])
 def test_errors_point_at_the_text(src, where):
