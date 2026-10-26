@@ -79,15 +79,10 @@ def trace_unit(doc, trace: str) -> str | None:
 
     def name_unit(n):
         if n in eqs:
-            from ..post.calc import lang as L, units as UN
+            from ..post.calc import lang as L
             from .calc_bridge import make_env
             try:
-                node = L.parse(eqs[n])
-                while node.t in ("neg", "par"):
-                    node = node.a
-                if node.t == "call" and node.fn in ("dB", "dB10"):
-                    return "dB"
-                return UN.label(L.analyze(n, make_env(doc)).unit)
+                return L.unit_label(L.analyze(n, make_env(doc)))
             except L.CalcError:
                 return None
         if n in _QTY_UNITS:

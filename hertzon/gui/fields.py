@@ -958,9 +958,9 @@ def prepare_overlay(doc, view, quantity: str, solution: str, freq_index: int = 0
     if calc is not None:
         # a named expression of the Fields Calculator, evaluated at every field node of the solution
         from .calc_bridge import field_values_at_grid
-        from ..post.calc import units as UN
+        from ..post.calc import lang as L
         vals, cinfo, _ = field_values_at_grid(doc, calc, solution, freq_index, port)
-        jsurf, vector, unit = False, cinfo.vec, UN.label(cinfo.unit)
+        jsurf, vector, unit = False, cinfo.vec, L.unit_label(cinfo)
         if cinfo.vec:
             vec = vals
         else:

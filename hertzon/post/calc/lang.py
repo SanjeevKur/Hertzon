@@ -468,6 +468,7 @@ class Info:
     geo: tuple = ()                 # GeoItems of a geometry reduction
     userfns: tuple = ()
     uses: frozenset = frozenset()   # the data it needs: "fields" (E, H, the mesh) and/or "net" (S, Y, Z)
+    log: str = ""                   # "dB": a level in decibels (dimensionless, shown as dB)
 
     @property
     def kind(self) -> str:
@@ -483,6 +484,22 @@ def _wrap(r: Info, p: int) -> Info:
 def _merge(a: Info, b: Info) -> dict:
     return dict(surf=a.surf or b.surf, deps=a.deps + b.deps, conv=a.conv | b.conv, normals=a.normals + b.normals,
                 userfns=a.userfns + b.userfns, uses=a.uses | b.uses)
+
+
+def unit_label(i: Info) -> str:
+    """The unit of an expression as shown: 'W', 'V/m', 'dB' for a level in decibels, '' when dimensionless."""
+    return i.log or UN.label(i.unit)
+
+
+def _log(op: str, a: Info, b: Info) -> str:
+    """dB of a sum or difference of levels, or of a level and a number (RL + 3, 2*RL); else no dB."""
+    if op in ("+", "-"):
+        return a.log if a.log == b.log or (a.log and b.num is not None) else b.log if a.num is not None else ""
+    if op == "*":
+        return a.log if b.num is not None and not b.log else b.log if a.num is not None and not a.log else ""
+    if op == "/":
+        return a.log if b.num is not None and not b.log else ""
+    return ""
 
 
 def _tex_name(n: str) -> str:
@@ -522,8 +539,12 @@ def _an0(node: Node, env: Env) -> Info:
         r = _wrap(_an(node.a, env), 2)
         return replace(r, tex="-" + r.tex, p=2, num=-r.num if r.num is not None else None)
     if t == "bin":
-        return _an_bin(node.op, _an(node.a, env), _an(node.b, env))
-    return _an_call(node, env)
+        a, b = _an(node.a, env), _an(node.b, env)
+        return replace(_an_bin(node.op, a, b), log=_log(node.op, a, b))
+    r = _an_call(node, env)
+    # a level stays in dB through these, any other function of it (sqrt, exp, ...) is a plain number
+    return r if not r.log or node.fn in ("dB", "dB10", "re", "im", "mag", "conj", "max", "min", "avg", "at") \
+        else replace(r, log="")
 
 
 def _an_id(node: Node, env: Env) -> Info:
@@ -811,7 +832,7 @@ def _an_call(node: Node, env: Env) -> Info:
         a = one()
         if a.vec:
             raise CalcError(f"{fn}() needs a scalar")
-        return replace(a, unit=ONE, cx=False, p=9, num=None, inner="",
+        return replace(a, unit=ONE, cx=False, p=9, num=None, inner="", log="dB",
                        tex=("20" if fn == "dB" else "10") + r"\log_{10}\left|" + a.tex + r"\right|")
     if fn == "rs":
         a = one()

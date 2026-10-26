@@ -24,7 +24,6 @@ from PySide6.QtWidgets import (QCheckBox, QComboBox, QCompleter, QDialog, QDialo
 from ..post.calc import lang as L
 from ..post.calc import latex as TX
 from ..post.calc import library as LIB
-from ..post.calc import units as UN
 from . import calc_bridge as CB
 from . import fields as F
 from . import formula_editor as FE
@@ -899,7 +898,7 @@ class EquationsTab(QWidget):
             "One number per frequency: show it in a Fields report (Results > Create Fields Report)."
             if "fields" in i.uses else
             "One number per frequency: show it in a solution data report (category Equations).")
-        self.unit.setText(UN.label(i.unit) or "1")
+        self.unit.setText(L.unit_label(i) or "1")
         det = ["complex" if i.cx else "real"] + list(L.conventions_text(i))
         if i.normals:
             det.append("direction: " + ", ".join(dict.fromkeys(g.label() for g in i.normals)))
