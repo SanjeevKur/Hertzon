@@ -84,6 +84,11 @@ the GitHub release notes.
   examples/benchmark/scaling/results.
 
 ### Fixed
+- **Wave port on a metal face found no modes**: a wave port on a face of a PEC solid, for example the
+  bottom of a coax bore in a metal body, failed with "ModalPort could find no modes" (and "k=-2 must be
+  greater than 0"), because the metal also zeroed the field on the port face. Such a solid now backs the
+  port: no field inside and PEC on its surface, with the port face left free. The log says which object
+  backs which port.
 - **Coarse cylinders next to a helix**: a helix wire (or another swept pipe) in the model made every
   cylinder, sphere and round hole in the 3D view coarse (8 segments per turn), also in objects not touching
   the helix. The coarser display sizing now applies only to the pipe surface itself.
