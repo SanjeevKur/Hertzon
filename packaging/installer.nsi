@@ -11,7 +11,6 @@ SetCompressor /SOLID lzma
 RequestExecutionLevel user
 
 !include "MUI2.nsh"
-!include "FileFunc.nsh"
 
 !define APP "Hertzon"
 !define UNINST_KEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\Hertzon"
@@ -99,8 +98,10 @@ Section "!$(SecApp)" SEC_APP
     WriteRegStr HKCU "${UNINST_KEY}" "QuietUninstallString" '"$INSTDIR\Uninstall.exe" /S'
     WriteRegDWORD HKCU "${UNINST_KEY}" "NoModify" 1
     WriteRegDWORD HKCU "${UNINST_KEY}" "NoRepair" 1
-    ; size without the Python environment, which is downloaded afterwards (about 1 GB)
-    ${GetSize} "$INSTDIR" "/S=0K" $0 $1 $2
+    ; size of the program files plus about 1 GB for the Python environment, which is downloaded afterwards;
+    ; taken from the installer itself, not by walking $INSTDIR: on an update that walk went through the whole
+    ; existing .venv and took minutes
+    SectionGetSize ${SEC_APP} $0
     IntOp $0 $0 + 1048576
     WriteRegDWORD HKCU "${UNINST_KEY}" "EstimatedSize" $0
 SectionEnd

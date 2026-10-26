@@ -45,6 +45,9 @@ the GitHub release notes.
 - **Selection rectangle left in the 3D view**: when the mouse release of a box selection did not reach the
   3D view (for example after switching tabs), the rectangle stayed on screen. It now goes with the next move
   or click in the view.
+- **Slow update with the Windows installer**: installing a new version over an existing one hung for minutes
+  after copying the files, because the installer took the size for Settings > Apps by walking the whole
+  folder, including the existing Python environment; it now takes the size from the installer itself.
 - **Report tabs push the window off screen**: opening a report (for example an XY plot) raised the main
   window's minimum height to the full height of the trace editor, so on a 1080p screen with display scaling
   a maximized window reached below the screen and the status bar with the coordinates was cut off; after
