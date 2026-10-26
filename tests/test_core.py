@@ -1155,3 +1155,46 @@ def test_box_selection_rectangle_does_not_stay():
     assert v._band is None and ren.GetViewProps().GetNumberOfItems() == n0
     win.doc.dirty = False
     win.close()
+
+
+@pytest.mark.parametrize("fused", [False, True])
+def test_helix_does_not_coarsen_other_cylinders(fused):
+    # a swept pipe (BSpline surface) limits the curvature sizing, but only for its own faces: with a
+    # helix in the model every cylinder was drawn with 8 segments per turn, also one fused with it
+    def base_circles(helix):
+        p = Project()
+        d = p.designs[0]
+        d.add_object("CreateCylinder", "Base", CenterPosition="0,0,-3", Axis="Z", Radius="6", Height="3.1")
+        if helix:
+            d.add_object("CreateHelix", "Coil", CenterPosition="0,0,0", Axis="Z", Radius="4", Pitch="1",
+                         Turns="5", WireRadius="0.2")
+            if fused:
+                d.obj("Coil").consumed_by = "Base"
+                d.obj("Base").history.append(Command.new("Unite", Tools="Coil", KeepOriginals="False"))
+        K.ensure_gmsh("test_helix_cyl")
+        ctx = K.build_design(d, d.evaluator(p))
+        assert not ctx.errors
+        tess = K.tessellate(ctx)
+        # the two rims of the base: the widest edges
+        E = [e for e in tess["Base"].edges if len(e) > 2]
+        w = max(np.ptp(e[:, 0]) for e in E)
+        return sorted(len(e) for e in E if np.ptp(e[:, 0]) > 0.99 * w)
+    assert base_circles(True) == base_circles(False)
+    assert len(base_circles(True)) == 2 and min(base_circles(True)) >= 30
+
+
+@pytest.mark.parametrize("nseg", ["0", "8"])
+def test_helix_wire_leaves_no_loose_faces(nseg):
+    # the pipe is a copy of the profile disk; the disk left behind had no volume on either side and
+    # the solver mesh failed with a KeyError on its triangles
+    import gmsh
+    p = Project()
+    d = p.designs[0]
+    d.add_object("CreateHelix", "Coil", CenterPosition="0,0,0", Axis="Z", Radius="4", Pitch="1",
+                 Turns="2", WireRadius="0.2", NumberOfSegmentsPerTurn=nseg)
+    K.ensure_gmsh("test_helix_loose")
+    ctx = K.build_design(d, d.evaluator(p))
+    assert ctx.built["Coil"] and not ctx.errors
+    assert all(len(gmsh.model.getAdjacencies(2, s)[0]) for _, s in gmsh.model.getEntities(2))
+    assert len(gmsh.model.getEntities(1)) == len({abs(t) for _, t in gmsh.model.getBoundary(
+        gmsh.model.getEntities(2), combined=False, oriented=False)})

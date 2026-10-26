@@ -72,6 +72,12 @@ the GitHub release notes.
   examples/benchmark/scaling/results.
 
 ### Fixed
+- **Coarse cylinders next to a helix**: a helix wire (or another swept pipe) in the model made every
+  cylinder, sphere and round hole in the 3D view coarse (8 segments per turn), also in objects not touching
+  the helix. The coarser display sizing now applies only to the pipe surface itself.
+- **Solve failed with a KeyError after a helix wire**: the round profile that a helix wire or a Sweep
+  Along Path is swept from stayed in the model as a loose sheet, and meshing stopped with
+  `KeyError: (n1, n2, n3)`. The profile is removed after the sweep.
 - **Field plots of a changed equation**: saving an equation (or a function it uses) draws its field plots
   on screen again with the new formula; before, they kept the old field until cleared and plotted again.
   An equation changed from a field to a value deletes its field plots.
