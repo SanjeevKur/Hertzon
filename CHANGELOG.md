@@ -70,6 +70,13 @@ the GitHub release notes.
   reuse", and an interrupted run started again from the initial mesh. The mesh is now stored and rebuilt
   from it; this also makes the parallel sweep runs of the Solver Benchmark work again.
 
+### Known limitations
+- **MCP server**: the tools for AI assistants do not cover the new features of this release yet. They list
+  no edge or vertex indices (Fillet and Chamfer by vertices or edges), and they cannot create, import,
+  export or evaluate Fields Calculator equations (also S-parameter equations), create field plots or
+  Fields reports. Reports, coordinate systems, parametric sweeps and optimizations are still only reachable
+  through `run_python`.
+
 ## 0.2.3 (2026-10-25)
 
 ### Changed
