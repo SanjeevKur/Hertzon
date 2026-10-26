@@ -65,8 +65,40 @@ function toPlaceholder() {
   if (!mf.executeCommand("moveToNextPlaceholder") || value().indexOf("placeholder") < 0) mf.position = mf.lastOffset;
 }
 
+// a square root typed as a function (sqrt, \sqrt with parentheses): the root sign over its argument
+const SQRT_HEAD = /\\(?:sqrt|operatorname\{sqrt\}|mathrm\{sqrt\})\s*\\left\(/;
+const SQRT_BARE = /\\(?:operatorname\{sqrt\}|mathrm\{sqrt\})(?![A-Za-z])(?!\s*\\left)/;
+function sqrtParen(lx) {
+  const m = SQRT_HEAD.exec(lx);
+  if (!m) return null;
+  const start = m.index + m[0].length, re = /\\(left|right)(?![A-Za-z])/g;
+  re.lastIndex = start;
+  let depth = 1, t;
+  while ((t = re.exec(lx))) {
+    depth += t[1] === "left" ? 1 : -1;
+    if (depth === 0) {
+      if (lx[re.lastIndex] !== ")") return null;
+      const x = lx.slice(start, t.index).trim();
+      return lx.slice(0, m.index) + "\\sqrt{" + (x || G) + "}" + lx.slice(re.lastIndex + 1);
+    }
+  }
+  return null;
+}
+
 function autocorrect() {
   const lx = value();
+  const sq = sqrtParen(lx);
+  if (sq !== null) {
+    const fromEnd = mf.lastOffset - mf.position;
+    mf.setValue(sq, { silenceNotifications: true });
+    if (value().indexOf("placeholder") >= 0) toPlaceholder(); else mf.position = Math.max(0, mf.lastOffset - fromEnd);
+    return true;
+  }
+  if (SQRT_BARE.test(lx)) {
+    mf.setValue(lx.replace(SQRT_BARE, "\\sqrt{" + G + "}"), { silenceNotifications: true });
+    toPlaceholder();
+    return true;
+  }
   for (const [k, rep] of Object.entries(SIMPLE)) {
     const re = new RegExp("\\\\" + k + "(?![A-Za-z])" + (k === "Re" || k === "Im" ? "(?!\\s*\\\\left)(?!\\s*\\()" : ""));
     if (re.test(lx)) {

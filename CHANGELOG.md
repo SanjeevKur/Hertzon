@@ -50,6 +50,11 @@ the GitHub release notes.
   the field is plotted on a cut plane.
 
 ### Changed
+- **Equation library**: right click on Equations → **Open Library...** opens a window with the ready-made
+  equations and functions; tick one or more (or a whole group) and import them into the design at once.
+  It replaces the From Library submenu.
+- **Surface resistance in the ribbon**: Function → Rₛ inserts `rs(σ)`, the surface resistance of a good
+  conductor (√(ωμ₀/2σ), in Ω), e.g. for conductor losses.
 - **Units on the plot axes**: the y axis of reports shows the unit of the traces (`[dB]`, `[Ω]`, `[W]`, the
   unit of an equation), with the trace name when there is only one; the radial axis of a polar radiation
   pattern shows its values with the unit (`-10 dB`). Data tables, the CSV export and the colour bar of the
@@ -70,6 +75,11 @@ the GitHub release notes.
 - **Field plots of a changed equation**: saving an equation (or a function it uses) draws its field plots
   on screen again with the new formula; before, they kept the old field until cleared and plotted again.
   An equation changed from a field to a value deletes its field plots.
+- **Square root in the formula editor**: `\sqrt(...)` and `sqrt(...)` typed with parentheses (or `sqrt`
+  alone) become the root sign over the argument; before, `\sqrt(...)` stayed as text with parentheses.
+- **Numbers with units in the formula editor**: `5.8·10⁷ S/m`, `5.8e7 S/m` or a unit as a fraction after a
+  number are read as one number with its unit; before, the unit came out as unknown names and the formula
+  showed an error.
 - **Selection rectangle left in the 3D view**: when the mouse release of a box selection did not reach the
   3D view (for example after switching tabs), the rectangle stayed on screen. It now goes with the next move
   or click in the view.

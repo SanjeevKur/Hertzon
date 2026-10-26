@@ -18,7 +18,8 @@ from PySide6.QtGui import QColor, QFont, QIcon, QPainter, QPixmap, QTextCharForm
 from PySide6.QtWidgets import (QCheckBox, QComboBox, QCompleter, QDialog, QDialogButtonBox,
                                QFormLayout, QGridLayout, QHBoxLayout, QLabel, QLineEdit,
                                QListWidget, QMenu, QMessageBox, QPlainTextEdit, QPushButton, QSizePolicy,
-                               QSplitter, QStackedWidget, QTextEdit, QToolButton, QVBoxLayout, QWidget)
+                               QSplitter, QStackedWidget, QTextEdit, QToolButton, QTreeWidget, QTreeWidgetItem,
+                               QVBoxLayout, QWidget)
 
 from ..post.calc import lang as L
 from ..post.calc import latex as TX
@@ -239,6 +240,8 @@ STRUCTURES = [
                         ("∠   Phase angle", r"\operatorname{phase}\left(#@\right)", "phase(", ""),
                         ("dB   20·log₁₀|x|", r"\operatorname{dB}\left(#@\right)", "dB(", ""),
                         ("eˣ   Exponential", r"\exp\left(#@\right)", "exp(", ""),
+                        ("Rₛ   Surface resistance", r"\operatorname{rs}\left(#@\right)", "rs(",
+                         "√(ωμ₀/2σ) of a good conductor in Ω, e.g. rs(5.8e7S/m) for copper"),
                         ("sin   Sine", r"\sin\left(#@\right)", "sin(", ""),
                         ("cos   Cosine", r"\cos\left(#@\right)", "cos(", ""),
                         ("F̂   Unit vector F/|F|", r"\operatorname{unit}\left(#@\right)", "unit(", "")]),
@@ -1164,6 +1167,76 @@ class ComponentDialog(QDialog):
         cs = self.cs.currentText()
         c = f"{self.comp.currentData() or 'x'}({v}{'' if cs == 'Global' else ', ' + cs})"
         return [c, f"re({c})", f"im({c})", f"|{c}|", f"phase({c})", f"inst({c})"][self.rep.currentIndex()]
+
+
+class LibraryDialog(QDialog):
+    """Equations > Open Library: ready-made equations and functions, ticked to import them into the design."""
+
+    def __init__(self, parent: QWidget | None = None):
+        super().__init__(parent)
+        self.setWindowTitle("Equation Library")
+        self.resize(820, 460)
+        lay = QVBoxLayout(self)
+        lay.addWidget(QLabel("Tick the equations and functions to import into the design. They can be changed "
+                             "there afterwards."))
+        self.tree = QTreeWidget()
+        self.tree.setHeaderLabels(["Name", "Formula", "Description"])
+        self.tree.setRootIsDecorated(True)
+        self.tree.setAlternatingRowColors(True)
+        tri = Qt.ItemIsUserCheckable | Qt.ItemIsEnabled | Qt.ItemIsAutoTristate
+        self.groups = {}
+        for group, rows in (("Equations", [(n, t, d) for n, t, d in LIB.EXPRESSIONS]),
+                            ("Functions", [(f.split("=", 1)[0].strip(), f.split("=", 1)[1].strip(), d)
+                                           for f, d in LIB.FUNCTIONS])):
+            top = QTreeWidgetItem(self.tree, [group])
+            top.setFlags(tri)
+            top.setCheckState(0, Qt.Unchecked)
+            f = top.font(0)
+            f.setBold(True)
+            top.setFont(0, f)
+            for name, text, desc in rows:
+                it = QTreeWidgetItem(top, [name, text, desc])
+                it.setFlags(Qt.ItemIsUserCheckable | Qt.ItemIsEnabled | Qt.ItemIsSelectable)
+                it.setCheckState(0, Qt.Unchecked)
+                it.setToolTip(1, text)
+                it.setToolTip(2, desc)
+            top.setExpanded(True)
+            self.groups[group] = top
+        for c in range(3):
+            self.tree.resizeColumnToContents(c)
+        self.tree.itemChanged.connect(lambda *_: self._count())
+        # a double click ticks or unticks the row
+        self.tree.itemDoubleClicked.connect(
+            lambda it, _c: it.setCheckState(0, Qt.Unchecked if it.checkState(0) == Qt.Checked else Qt.Checked))
+        lay.addWidget(self.tree, 1)
+        bb = QDialogButtonBox(QDialogButtonBox.Cancel)
+        self.ok = bb.addButton("Import", QDialogButtonBox.AcceptRole)
+        bb.accepted.connect(self.accept)
+        bb.rejected.connect(self.reject)
+        lay.addWidget(bb)
+        self._count()
+
+    def _ticked(self, group: str) -> list[QTreeWidgetItem]:
+        top = self.groups[group]
+        return [top.child(i) for i in range(top.childCount()) if top.child(i).checkState(0) == Qt.Checked]
+
+    def _count(self) -> None:
+        n = len(self._ticked("Equations")) + len(self._ticked("Functions"))
+        self.ok.setEnabled(n > 0)
+        self.ok.setText(f"Import ({n})" if n else "Import")
+
+    def tick(self, names: list[str]) -> None:
+        for top in self.groups.values():
+            for i in range(top.childCount()):
+                it = top.child(i)
+                if it.text(0) in names or it.text(0).split("(")[0] in names:
+                    it.setCheckState(0, Qt.Checked)
+
+    def chosen(self) -> tuple[list[tuple[str, str, str]], list[str]]:
+        """(equations as (name, expression, description), functions as "name(params) = body")."""
+        eqs = [(it.text(0), it.text(1), it.text(2)) for it in self._ticked("Equations")]
+        funcs = [f"{it.text(0)} = {it.text(1)}" for it in self._ticked("Functions")]
+        return eqs, funcs
 
 
 class FunctionsDialog(QDialog):
