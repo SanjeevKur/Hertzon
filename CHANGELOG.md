@@ -48,6 +48,9 @@ the GitHub release notes.
   the field is plotted on a cut plane.
 
 ### Changed
+- **Equation library**: right click on Equations → **Open Library...** opens a window with the ready-made
+  equations and functions; tick one or more (or a whole group) and import them into the design at once.
+  It replaces the From Library submenu.
 - **Surface resistance in the ribbon**: Function → Rₛ inserts `rs(σ)`, the surface resistance of a good
   conductor (√(ωμ₀/2σ), in Ω), e.g. for conductor losses.
 - **Units on the plot axes**: the y axis of reports shows the unit of the traces (`[dB]`, `[Ω]`, `[W]`, the

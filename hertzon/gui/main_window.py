@@ -4244,6 +4244,18 @@ class MainWindow(QMainWindow):
         except (OSError, ValueError, KeyError, TypeError, AttributeError) as e:
             QMessageBox.warning(self, "Import Equations", f"{path} is not a file of equations:\n{e}")
             return
+        self._add_equations(eqs, funcs, f"from {path}")
+
+    def open_equation_library(self) -> None:
+        """Equations > Open Library: ready-made equations and functions, one or more imported at once."""
+        from .calculator import LibraryDialog
+        dlg = LibraryDialog(self)
+        if dlg.exec() == QDialog.Accepted:
+            self._add_equations(*dlg.chosen(), "from the library")
+
+    def _add_equations(self, eqs: list[tuple[str, str, str]], funcs: list[str], source: str) -> None:
+        """Equations (name, expression, description) and functions into the design; for names it has
+        already, the user chooses whether to replace them."""
         from ..model.design import FieldExpression
         des = self.des
 
@@ -4280,7 +4292,7 @@ class MainWindow(QMainWindow):
             n += 1
         self.doc.dirty = True
         self.doc.changed.emit("fields")
-        self.msgs.add("info", f"Imported {n} equations and functions from {path}")
+        self.msgs.add("info", f"Imported {n} equations and functions {source}")
         if replace:
             self.redraw_equation_plots()
 
@@ -4905,10 +4917,7 @@ class MainWindow(QMainWindow):
                 m.addAction("Clean Up Solutions...", self.clean_up_solutions)
             elif g == "Equations":
                 m.addAction("New Equation", self.new_equation)
-                lib = m.addMenu("From Library")
-                from ..post.calc import library as LIB
-                for key, _text, desc in LIB.EXPRESSIONS:
-                    lib.addAction(desc.split(" (")[0], lambda _=False, k=key: self.new_equation(k))
+                m.addAction("Open Library...", self.open_equation_library)
                 m.addAction("Functions...", self.equation_functions)
                 m.addSeparator()
                 m.addAction("Import Equations...", lambda: self.import_equations())

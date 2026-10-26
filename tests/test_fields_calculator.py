@@ -543,3 +543,37 @@ def test_report_axes_show_units():
     assert unit_label(["dB", "dB"]) == "[dB]" and unit_label(["dB", "Ω", None]) == "[dB] / [Ω]"
     assert unit_label(["", None]) == ""
     assert with_unit(doc, "Pin") == "Pin [W]" and with_unit(doc, "VSWR(1)") == "VSWR(1)"
+
+
+def test_open_library_imports_ticked_equations():
+    """Equations > Open Library: the ticked equations and functions go into the design at once."""
+    from PySide6.QtCore import Qt
+    from PySide6.QtWidgets import QApplication, QDialog
+    app = QApplication.instance() or QApplication([])  # noqa: F841
+    from hertzon.gui import calculator as C
+    from hertzon.gui.main_window import MainWindow
+    from hertzon.model.design import Project
+    dlg = C.LibraryDialog()
+    assert not dlg.ok.isEnabled()
+    dlg.tick(["w_e", "p_wall_cu", "voltage"])
+    assert dlg.ok.isEnabled() and dlg.ok.text() == "Import (3)"
+    eqs, funcs = dlg.chosen()
+    assert [e[0] for e in eqs] == ["w_e", "p_wall_cu"]
+    assert funcs == ["voltage(L) = int_line(L, E)"]
+    dlg.groups["Functions"].setCheckState(0, Qt.Checked)        # the whole group
+    assert len(dlg.chosen()[1]) == len(C.LIB.FUNCTIONS)
+    win = MainWindow(Project())
+    exec_ = C.LibraryDialog.exec
+
+    def fake_exec(self):
+        self.tick(["w_e", "emax"])
+        return QDialog.Accepted
+    C.LibraryDialog.exec = fake_exec
+    try:
+        win.open_equation_library()
+    finally:
+        C.LibraryDialog.exec = exec_
+    assert [(e.name, e.expr) for e in win.des.field_exprs] == [("w_e", "0.25*eps0*eps_r*|E|^2")]
+    assert win.des.field_funcs == ["emax(G) = max(G, |E|)"]
+    win.doc.dirty = False
+    win.close()
