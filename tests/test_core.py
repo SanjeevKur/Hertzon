@@ -1068,12 +1068,13 @@ def test_open_example_lists_the_shipped_examples(tmp_path):
     assert example_projects(tmp_path / "missing") == []
 
 
-def _fillet_area(kind, radius, edges="", vertices="", **props):
+def _fillet_area(kind, radius, edges="", vertices="", op="Fillet", **props):
     import gmsh
     p = Project()
     d = p.designs[0]
     o = d.add_object(kind, **props)
-    o.history.append(Command.new("Fillet", Radius=radius, Edges=edges, Vertices=vertices))
+    size = {"Radius": radius} if op == "Fillet" else {"Distance": radius}
+    o.history.append(Command.new(op, Edges=edges, Vertices=vertices, **size))
     K.ensure_gmsh("test_fillet")
     gmsh.model.remove()
     gmsh.model.add("test_fillet")
@@ -1097,6 +1098,28 @@ def test_fillet_sheet_rounds_selected_vertices():
                              YSize="8")
     assert err is None
     assert area == pytest.approx((80 - 2 * 0.25 * corner) * 1e-6, rel=1e-6)
+
+
+def test_chamfer_sheet_cuts_selected_vertices():
+    # a patch is a sheet: one chamfer at each selected vertex, each cuts off a triangle d*d/2
+    area, err = _fillet_area("CreateRectangle", "0.5", vertices="0", op="Chamfer", Position="0,0,1", Axis="Z",
+                             XSize="10", YSize="8")
+    assert err is None
+    assert area == pytest.approx((80 - 0.125) * 1e-6, rel=1e-6)
+    area, err = _fillet_area("CreateRectangle", "1", vertices="0,1,2,3", op="Chamfer", Position="0,0,0",
+                             Axis="X", YSize="10", ZSize="8")
+    assert err is None
+    assert area == pytest.approx((80 - 4 * 0.5) * 1e-6, rel=1e-6)
+    _, err = _fillet_area("CreateRectangle", "6", vertices="0,1", op="Chamfer", Position="0,0,0", Axis="Z",
+                          XSize="10", YSize="8")
+    assert "distance is probably too large" in err
+    # solids keep the edges
+    vol, err = _fillet_area("CreateBox", "0.5", edges="0", op="Chamfer", Position="0,0,0", XSize="10", YSize="8",
+                            ZSize="1")
+    assert err is None and vol < 80e-9
+    _, err = _fillet_area("CreateBox", "0.5", vertices="0", op="Chamfer", Position="0,0,0", XSize="10",
+                          YSize="8", ZSize="1")
+    assert "select the edges" in err
 
 
 def test_fillet_too_large_is_reported():

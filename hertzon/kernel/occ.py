@@ -1022,20 +1022,41 @@ def _apply(cmd: Command, dt: list[tuple[int, int]], ctx: BuildContext, owner: st
         return [d for d in keep if d[0] == top]
     if k == "Chamfer":
         o.synchronize()
+        d = ev.length(p["Distance"])
+        if d <= 0:
+            raise GeometryError("Chamfer distance must be positive")
+        solid = any(dd == 3 for dd, _ in dt)
+        vids = [int(e) for e in p.get("Vertices", "").split(",") if e.strip()]
+        if vids:
+            if solid:
+                raise GeometryError("Vertices can be chamfered on sheets; select the edges of a solid")
+            verts = object_vertices(dt)
+            corners = {verts[i] for i in vids if 0 <= i < len(verts)}
+            if not corners:
+                raise GeometryError("No valid vertices selected for chamfer")
+            return _fillet_sheet(dt, corners, d, "Chamfer")
         edges = object_edges(dt)
         faces = set(object_faces(dt))
         ids = [int(e) for e in p.get("Edges", "").split(",") if e.strip()]
         curves = [edges[i] for i in ids if 0 <= i < len(edges)]
         if not curves:
             raise GeometryError("No valid edges selected for chamfer")
+        if not solid:
+            return _fillet_sheet(dt, {abs(v) for c in curves
+                                      for _, v in gmsh.model.getBoundary([(1, c)], oriented=False)}, d, "Chamfer")
         surfs = []
         for c in curves:
             adj = [s_ for s_ in gmsh.model.getAdjacencies(1, c)[0] if s_ in faces]
             if not adj:
                 raise GeometryError("Edge has no face on this object")
             surfs.append(adj[0])
-        d = ev.length(p["Distance"])
-        return o.chamfer([t for dd, t in dt if dd == 3], curves, surfs, [d])
+        try:
+            out = o.chamfer([t for dd, t in dt if dd == 3], curves, surfs, [d])
+        except Exception as e:  # noqa: BLE001
+            raise GeometryError(f"Chamfer failed, the distance is probably too large for the selected edges ({e})")
+        if not out:
+            raise GeometryError("Chamfer failed, the distance is probably too large for the selected edges")
+        return out
     if k in ("UncoverFaces", "KeepFaces", "SweepFacesAlongNormal"):
         o.synchronize()
         faces = object_faces(dt)
@@ -1122,13 +1143,16 @@ def _apply(cmd: Command, dt: list[tuple[int, int]], ctx: BuildContext, owner: st
     raise GeometryError(f"Unknown operation {k}")
 
 
-def _fillet_sheet(dt: list[tuple[int, int]], corners: set[int], r: float) -> list[tuple[int, int]]:
-    """Fillet of a planar sheet: rounds the corners (vertex tags). Each face is extruded to a temporary
-    solid, its edges through those corners are filleted and the face in the original plane is kept."""
+def _fillet_sheet(dt: list[tuple[int, int]], corners: set[int], r: float,
+                  kind: str = "Fillet") -> list[tuple[int, int]]:
+    """Fillet (or Chamfer) of a planar sheet: rounds (or bevels) the corners (vertex tags). Each face is
+    extruded to a temporary solid, its edges through those corners are filleted (chamfered) and the face in
+    the original plane is kept."""
     o = _occ()
+    what = "radius" if kind == "Fillet" else "distance"
     faces = [t for d, t in dt if d == 2]
     if not faces:
-        raise GeometryError("Fillet needs a solid or a sheet")
+        raise GeometryError(f"{kind} needs a solid or a sheet")
     xmin, ymin, zmin, xmax, ymax, zmax = _bbox(dt)
     diag = max(math.dist((xmin, ymin, zmin), (xmax, ymax, zmax)), 1e-12)
     tol = 1e-6 * diag
@@ -1147,7 +1171,7 @@ def _fillet_sheet(dt: list[tuple[int, int]], corners: set[int], r: float) -> lis
         nrms = np.asarray(gmsh.model.getNormal(f, [x for p in uv for x in p]), float).reshape(-1, 3)
         n = nrms[4] / np.linalg.norm(nrms[4])
         if np.any(np.abs(nrms @ n) < 1 - 1e-6):
-            raise GeometryError("Fillet of a sheet works only on flat sheets")
+            raise GeometryError(f"{kind} of a sheet works only on flat sheets")
         tops = {v: np.asarray(gmsh.model.getValue(0, v, [])) for v in sel}
         cp = o.copy([(2, f)])
         ex = o.extrude(cp, *(n * h))
@@ -1167,12 +1191,17 @@ def _fillet_sheet(dt: list[tuple[int, int]], corners: set[int], r: float) -> lis
                     edges.append(c)
         if len(edges) != len(sel):
             o.remove(vols, recursive=True)
-            raise GeometryError("Fillet of a sheet: the selected corners were not found")
+            raise GeometryError(f"{kind} of a sheet: the selected corners were not found")
         try:
-            filleted = o.fillet([t for _, t in vols], edges, [r])
+            if kind == "Fillet":
+                filleted = o.fillet([t for _, t in vols], edges, [r])
+            else:
+                # each edge runs along the extrusion, so both its faces are side faces: equal distances
+                side = [gmsh.model.getAdjacencies(1, c)[0][0] for c in edges]
+                filleted = o.chamfer([t for _, t in vols], edges, side, [r])
         except Exception as e:  # noqa: BLE001
             o.remove(vols, recursive=True)
-            raise GeometryError(f"Fillet failed, the radius is probably too large for the selected corners ({e})")
+            raise GeometryError(f"{kind} failed, the {what} is probably too large for the selected corners ({e})")
         o.synchronize()
         p0 = np.asarray(o.getCenterOfMass(2, f))
         keep = []
@@ -1185,7 +1214,7 @@ def _fillet_sheet(dt: list[tuple[int, int]], corners: set[int], r: float) -> lis
                 keep.append(s_)
         if len(keep) != 1:
             o.remove(filleted, recursive=True)
-            raise GeometryError("Fillet of a sheet failed")
+            raise GeometryError(f"{kind} of a sheet failed")
         new = o.copy([(2, keep[0])])
         o.remove(filleted, recursive=True)
         done.append((2, f))
