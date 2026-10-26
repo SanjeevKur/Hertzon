@@ -1052,6 +1052,7 @@ class EquationsTab(QWidget):
         self._used_by()
         self.status.setText(f"Saved {name}")
         self.win.msgs.add("info", f"Fields Calculator: saved {name} = {text}")
+        self.win.redraw_equation_plots([name])
         if self.for_plot and self.info is not None and self.info.field:
             self.for_plot = False
             self.banner.setVisible(False)
@@ -1093,9 +1094,13 @@ class EquationsTab(QWidget):
             self.insert_text(dlg.text())
 
     def functions_dialog(self, select: str | None = None) -> None:
+        before = list(self.doc.design.field_funcs)
         dlg = FunctionsDialog(self, select)
         dlg.exec()
         self.refresh()
+        changed = set(before) ^ set(self.doc.design.field_funcs)
+        if changed:
+            self.win.redraw_equation_plots([f.split("(", 1)[0].strip() for f in changed])
 
 
 class ComponentDialog(QDialog):

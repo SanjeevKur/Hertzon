@@ -4161,6 +4161,32 @@ class MainWindow(QMainWindow):
         self.doc.dirty = True
         self.doc.changed.emit("fields")
         self.msgs.add("info", f"Imported {n} equations and functions from {path}")
+        if replace:
+            self.redraw_equation_plots()
+
+    def redraw_equation_plots(self, names: list[str] | None = None) -> None:
+        """An equation or function changed: the field plots on screen that use it are drawn again with the
+        new formula. names None: all plots of equations."""
+        from .calc_bridge import dependents
+        des = self.des
+        eqs = {e.name for e in des.field_exprs}
+        if names is None:
+            used = eqs
+        else:
+            used, todo = set(), list(names)
+            while todo:                          # the changed names and everything that uses them
+                n = todo.pop()
+                if n not in used:
+                    used.add(n)
+                    todo += [d.removesuffix("()") for d in dependents(des, n)]
+        shown = [p.name for p in des.field_plots if p.quantity in used and p.quantity in eqs
+                 and p.name in self.view.overlay_actors]
+        if not shown:
+            return
+        if any(n in self.anim_bar.names for n in shown):
+            self.anim_bar.close_player()         # its frames show the old formula
+        for n in shown:
+            self.show_field_plot(n, focus=False)
 
     def equation_functions(self, select: str | None = None) -> None:
         self.fields_calculator()

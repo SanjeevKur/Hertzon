@@ -351,3 +351,28 @@ def test_plot_fields_menu_lists_field_equations():
     assert [a.text() for a in eq.actions() if a.text()] == ["p_loss", "New Equation..."]
     win.doc.dirty = False
     win.close()
+
+
+def test_changed_equation_redraws_its_plots():
+    """Saving an equation draws its field plots on screen again, and the plots of equations that use it."""
+    from PySide6.QtWidgets import QApplication
+    app = QApplication.instance() or QApplication([])  # noqa: F841
+    from hertzon.gui.main_window import MainWindow
+    from hertzon.model.design import FieldExpression, FieldPlot, Project
+    win = MainWindow(Project())
+    win.des.field_exprs += [FieldExpression("w", "|E|^2"), FieldExpression("w2", "2*w"),
+                            FieldExpression("h", "|H|")]
+    win.des.field_plots += [FieldPlot(n, q, "Setup1 : LastAdaptive")
+                            for n, q in [("W", "w"), ("W2", "w2"), ("H", "h"), ("Off", "w")]]
+    for n in ("W", "W2", "H"):
+        win.view.overlay_actors[n] = []
+    drawn = []
+    win.show_field_plot = lambda name, focus=True: drawn.append((name, focus))
+    win.redraw_equation_plots(["w"])
+    assert drawn == [("W", False), ("W2", False)]       # "Off" is not on screen, "h" does not use w
+    drawn.clear()
+    win.redraw_equation_plots()
+    assert [n for n, _ in drawn] == ["W", "W2", "H"]
+    win.view.overlay_actors.clear()
+    win.doc.dirty = False
+    win.close()
