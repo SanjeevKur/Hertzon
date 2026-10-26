@@ -166,7 +166,8 @@ def _formula_env():
     "int_vol(Box, 0.5*omega*eps0*eps_r*tand*|E|^2)", "int_line(Line1, E)", "circ(Loop, H)", "max(Box, |E|)",
     "avg(Port1, mag(E))", "at(P1, E)", "E × H", "re(E·conj(H))", "sqrt(eps_r)/2", "curl(E)",
     "curl E + j*omega*mu0*mu_r*H", "x(E, Global)", "10mm*f/c0", "1e-3*|E|^2", "P_in*2", "-(x+y)", "(x+y)^2/z",
-    "flux(face(Box, 3), re(S))", "max(cut_xy(2mm), |E|)", "dB(|E|)", "45deg", "int_surf(Box, |Js|^2)"])
+    "flux(face(Box, 3), re(S))", "max(cut_xy(2mm), |E|)", "dB(|E|)", "45deg", "int_surf(Box, |Js|^2)",
+    "dB(S(2,1))", "1-|S(1,1)|^2", "re(Z(1,1))", "VSWR(1)"])
 def test_formula_editor_round_trip(src):
     """Text -> typeset formula -> text gives the same expression (same formula, kind and unit)."""
     from hertzon.post.calc import latex as TX
@@ -351,3 +352,107 @@ def test_plot_fields_menu_lists_field_equations():
     assert [a.text() for a in eq.actions() if a.text()] == ["p_loss", "New Equation..."]
     win.doc.dirty = False
     win.close()
+
+
+def test_changed_equation_redraws_its_plots():
+    """Saving an equation draws its field plots on screen again, and the plots of equations that use it."""
+    from PySide6.QtWidgets import QApplication
+    app = QApplication.instance() or QApplication([])  # noqa: F841
+    from hertzon.gui.main_window import MainWindow
+    from hertzon.model.design import FieldExpression, FieldPlot, Project
+    win = MainWindow(Project())
+    win.des.field_exprs += [FieldExpression("w", "|E|^2"), FieldExpression("w2", "2*w"),
+                            FieldExpression("h", "|H|")]
+    win.des.field_plots += [FieldPlot(n, q, "Setup1 : LastAdaptive")
+                            for n, q in [("W", "w"), ("W2", "w2"), ("H", "h"), ("Off", "w")]]
+    for n in ("W", "W2", "H"):
+        win.view.overlay_actors[n] = []
+    drawn = []
+    win.show_field_plot = lambda name, focus=True: drawn.append((name, focus))
+    win.redraw_equation_plots(["w"])
+    assert drawn == [("W", False), ("W2", False)]       # "Off" is not on screen, "h" does not use w
+    drawn.clear()
+    win.redraw_equation_plots()
+    assert [n for n, _ in drawn] == ["W", "W2", "H"]
+    win.view.overlay_actors.clear()
+    win.doc.dirty = False
+    win.close()
+
+
+def test_equations_of_s_parameters():
+    """S(i,j), Y, Z and VSWR in an equation: a value from the network data alone (no fields needed), next
+    to S, the Poynting vector."""
+    from hertzon.gui.calc_bridge import NetSource
+    env = L.Env(geometry={"Port1": L.GeoInfo(frozenset({2}))})
+    assert L.analyze("1-|S(1,1)|^2", env).uses == {"net"}
+    assert L.analyze("flux(Port1, re(S))", env).uses == {"fields"}
+    assert L.analyze("flux(Port1, re(S))/(1-|S(1,1)|^2)", env).uses == {"fields", "net"}
+    assert UN.label(L.analyze("Z(1,1)", env).unit) == UN.label(UN.U(V=1, A=-1))
+    with pytest.raises(L.CalcError, match="port as a number"):
+        L.analyze("S(1.5, 1)", env)
+    S = np.array([[[0.5, 0.1j], [0.1j, 0.0]], [[0.2, 0.9], [0.9, 0.2]]], complex)
+    data = {"freq": np.array([1e9, 2e9]), "S": S, "z0": np.array([50.0, 50.0])}
+    ev = Evaluator(env, NetSource(data, 1))
+    assert ev.value("1-|S(1,1)|^2").value == pytest.approx(0.96)
+    assert ev.value("VSWR(1)").value == pytest.approx(1.2 / 0.8)
+    assert ev.value("Z(1,1)").value == pytest.approx(50 * np.linalg.solve(np.eye(2) - S[1], np.eye(2) + S[1])[0, 0])
+    with pytest.raises(L.CalcError, match="Fields report"):
+        ev.value("max(Port1, |E|)")
+
+
+def test_reports_of_equations():
+    """Results: equations of the fields go into Fields reports, equations of S parameters into the solution
+    data reports (category Equations)."""
+    from PySide6.QtWidgets import QApplication
+    app = QApplication.instance() or QApplication([])  # noqa: F841
+    from hertzon.gui import calc_bridge as CB
+    from hertzon.gui.main_window import MainWindow
+    from hertzon.gui.reports import ReportWindow, is_fields_report
+    from hertzon.model.design import FieldExpression, Project
+    win = MainWindow(Project())
+    d = win.des
+    d.add_object("CreateBox", "Box", Position="0,0,0", XSize="1", YSize="1", ZSize="1")
+    win.doc.rebuild()
+    d.field_exprs += [FieldExpression("Pin", "flux(Box, re(S))"), FieldExpression("RL", "-dB(S(1,1))"),
+                      FieldExpression("magE", "|E|")]
+    assert CB.value_names(win.doc, fields=True) == ["Pin"]
+    assert CB.value_names(win.doc, fields=False) == ["RL"]
+    win.field_report("RL")
+    r = d.reports[-1]
+    assert r.traces == ["RL"] and not is_fields_report(win.doc, r)
+    w = ReportWindow(win.doc, r)
+    assert [w.cat.itemText(i) for i in range(w.cat.count())][-1] == "Equations"
+    assert w.cat.currentText() == "Equations" and [w.qty.itemText(i) for i in range(w.qty.count())] == ["RL"]
+    win.field_report()
+    r = d.reports[-1]
+    assert r.name.startswith("Fields Plot") and r.traces == ["Pin"] and is_fields_report(win.doc, r)
+    w = ReportWindow(win.doc, r)
+    assert [w.cat.itemText(i) for i in range(w.cat.count())] == ["Equations"]
+    assert [w.qty.itemText(i) for i in range(w.qty.count())] == ["Pin"]
+    win.doc.dirty = False
+    win.close()
+
+
+def test_s_parameter_equation_in_a_report(tmp_path):
+    """An equation of S parameters is drawn at every frequency of the solution, without fields."""
+    from pathlib import Path
+    from PySide6.QtWidgets import QApplication
+    app = QApplication.instance() or QApplication([])  # noqa: F841
+    from hertzon.gui.doc import Document, result_dir
+    from hertzon.gui.reports import ReportWindow
+    from hertzon.model.design import FieldExpression, Project, Report
+    from hertzon.solver.results import ResultStore
+    proj = Project.load(Path(__file__).parent.parent / "examples" / "PatchAntenna.hzn")
+    proj.save(tmp_path / "p.hzn")
+    doc = Document(proj)
+    st = ResultStore(result_dir(doc, "Setup1"))
+    ports = [{"name": "1", "number": 1, "kind": "Lumped Port"}]
+    st.write_json("ports.json", ports)
+    S = np.array([0.5, 0.1, 0.5j]).reshape(3, 1, 1)
+    st.save_sparams("Sweep", np.array([1e9, 2e9, 3e9]), S, np.array([50.0]), ports)
+    doc.design.field_exprs.append(FieldExpression("RL", "-dB(S(1,1))"))
+    r = Report("R", "Rectangular", "Setup1 : Sweep", ["RL", "RL + dB(S(1,1))"])
+    w = ReportWindow(doc, r)
+    x, y = w._trace_xy("RL")
+    assert list(x) == [1, 2, 3] and y == pytest.approx(-20 * np.log10([0.5, 0.1, 0.5]))
+    assert w._trace_xy("RL + dB(S(1,1))")[1] == pytest.approx([0, 0, 0], abs=1e-9)

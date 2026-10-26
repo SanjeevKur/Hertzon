@@ -25,8 +25,10 @@ the GitHub release notes.
   solver's elements with their quadrature, curved elements included. Equations and user functions are saved
   with the design and listed in the project tree under Equations (open, plot, add to a report, rename,
   delete, and export to or import from a file for other designs); a library has power, loss, energy, Q, voltage and current. A named field can be
-  plotted like E or H (Plot Fields > Quantity), and a named value can be shown over frequency in a report
-  (category Fields).
+  plotted like E or H (Plot Fields > Quantity). A value computed from the fields is shown over frequency in a
+  Fields report (Results > Create Fields Report). Equations can also use the network data, `S(2,1)`, `Y(1,1)`,
+  `Z(1,1)` and `VSWR(1)`, for example `RL = -dB(S(1,1))`; an equation of these alone needs no fields and is
+  shown in the solution data reports under the category Equations, at every frequency of the solution.
 - **Volume field plots**: Plot on "(selection, inside solids)" (or "Inside the selected solids" in the plot
   attributes) shows a scalar field through a solid such as a substrate as coloured dots instead of on its
   surface; vectors keep their arrows inside solids. Works for the built-in quantities and for named
@@ -46,6 +48,8 @@ the GitHub release notes.
   examples/benchmark/scaling/results.
 
 ### Fixed
+- **Field plots of a changed equation**: saving an equation (or a function it uses) draws its field plots
+  on screen again with the new formula; before, they kept the old field until cleared and plotted again.
 - **Selection rectangle left in the 3D view**: when the mouse release of a box selection did not reach the
   3D view (for example after switching tabs), the rectangle stayed on screen. It now goes with the next move
   or click in the view.

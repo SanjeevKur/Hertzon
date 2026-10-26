@@ -3868,7 +3868,7 @@ class MainWindow(QMainWindow):
         ff = bool(d.spheres) and (ports or pw)
         return {"modal": ports and stype == "Modal", "terminal": ports and stype == "Terminal",
                 "farfield": ff, "antenna": bool(d.spheres) and ports, "rcs": bool(d.spheres) and pw,
-                "near": bool(d.setups) and stype != "Eigenmode"}
+                "near": bool(d.setups) and stype != "Eigenmode", "fields": bool(d.setups)}
 
     def _fill_report_menu(self, m) -> None:
         """Results > Create ... Report, only the categories this design can produce."""
@@ -3889,6 +3889,9 @@ class MainWindow(QMainWindow):
             sub("Create Modal Solution Data Report", plots)
         if av["terminal"]:
             sub("Create Terminal Solution Data Report", plots)
+        if av["fields"]:
+            sub("Create Fields Report", [("Rectangular Plot", lambda: self.field_report()),
+                                         ("Data Table", lambda: self.field_report(kind="Data Table"))])
         if av["farfield"]:
             sub("Create Far Fields Report", [("Radiation Pattern", lambda: self.create_report("Radiation Pattern")),
                                              ("Rectangular Plot", lambda: self.create_report(
@@ -3919,7 +3922,8 @@ class MainWindow(QMainWindow):
     def _fill_results_menu(self, m) -> None:
         self._fill_report_menu(m)
 
-    def create_report(self, kind: str, quiet: bool = False, props: dict | None = None) -> None:
+    def create_report(self, kind: str, quiet: bool = False, props: dict | None = None,
+                      with_traces: list[str] | None = None) -> None:
         sols = solution_list(self.doc)
         sol = next((s for s in sols if not s.endswith("LastAdaptive") and "AdaptivePasses" not in s),
                    sols[0] if sols else
@@ -3964,7 +3968,7 @@ class MainWindow(QMainWindow):
         i = 1
         while f"{prefix} {i}" in names:
             i += 1
-        r = Report(f"{prefix} {i}", kind, sol, traces)
+        r = Report(f"{prefix} {i}", kind, sol, with_traces if with_traces is not None else traces)
         r.props.update(props or {})
         if kind in ("Rectangular", "Smith Chart", "Data Table") and not sols and self.doc.project.path:
             # nominal design not solved: show the variations of a solved parametric setup (families)
@@ -4161,21 +4165,56 @@ class MainWindow(QMainWindow):
         self.doc.dirty = True
         self.doc.changed.emit("fields")
         self.msgs.add("info", f"Imported {n} equations and functions from {path}")
+        if replace:
+            self.redraw_equation_plots()
+
+    def redraw_equation_plots(self, names: list[str] | None = None) -> None:
+        """An equation or function changed: the field plots on screen that use it are drawn again with the
+        new formula. names None: all plots of equations."""
+        from .calc_bridge import dependents
+        des = self.des
+        eqs = {e.name for e in des.field_exprs}
+        if names is None:
+            used = eqs
+        else:
+            used, todo = set(), list(names)
+            while todo:                          # the changed names and everything that uses them
+                n = todo.pop()
+                if n not in used:
+                    used.add(n)
+                    todo += [d.removesuffix("()") for d in dependents(des, n)]
+        shown = [p.name for p in des.field_plots if p.quantity in used and p.quantity in eqs
+                 and p.name in self.view.overlay_actors]
+        if not shown:
+            return
+        if any(n in self.anim_bar.names for n in shown):
+            self.anim_bar.close_player()         # its frames show the old formula
+        for n in shown:
+            self.show_field_plot(n, focus=False)
 
     def equation_functions(self, select: str | None = None) -> None:
         self.fields_calculator()
         self.calc_window.functions_dialog(select)
 
-    def field_report(self, name: str, solution: str = "", port: int = 1) -> None:
-        """A rectangular report of a value of the Fields Calculator over frequency."""
+    def field_report(self, name: str | None = None, solution: str = "", port: int = 1,
+                     kind: str = "Rectangular") -> None:
+        """A report of a value equation over frequency: a Fields report for one computed from the fields
+        (Results > Create Fields Report: name None, the first such equation), else a solution data report."""
+        from .calc_bridge import uses_fields, value_names
+        if name is not None and not uses_fields(self.doc, [name]):
+            self.create_report(kind, with_traces=[name])
+            return
+        if name is None:
+            name = next(iter(value_names(self.doc, fields=True)), None)
         sols = F.field_solutions(self.doc)
         # over frequency: a sweep with saved fields, else the given solution
         sol = next((s for s in sols if not s.endswith("LastAdaptive")), solution or (sols[0] if sols else ""))
+        prefix = "Fields Plot" if kind == "Rectangular" else "Fields Table"
         names = {r.name for r in self.des.reports}
         i = 1
-        while f"Fields Plot {i}" in names:
+        while f"{prefix} {i}" in names:
             i += 1
-        r = Report(f"Fields Plot {i}", "Rectangular", sol, [name], {"port": str(port)})
+        r = Report(f"{prefix} {i}", kind, sol, [name] if name else [], {"port": str(port), "fields": "1"})
         self.des.reports.append(r)
         self.doc.dirty = True
         self.doc.changed.emit("results")

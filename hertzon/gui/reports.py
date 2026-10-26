@@ -59,6 +59,16 @@ def ff_trace(tr: str) -> tuple[str, str]:
 NF_QUANTITIES = ["NearETotal", "NearEX", "NearEY", "NearEZ", "NearHTotal", "NearHX", "NearHY", "NearHZ"]
 
 
+def is_fields_report(doc, report: Report) -> bool:
+    """A Fields report (equations computed from the fields), also one made before reports had the flag."""
+    if report.kind not in ("Rectangular", "Data Table"):
+        return False
+    if report.props.get("fields"):
+        return True
+    from .calc_bridge import field_names_in, uses_fields
+    return bool(report.traces) and uses_fields(doc, field_names_in(doc.design, split_trace(report.traces[0])[0]))
+
+
 def solution_list(doc) -> list[str]:
     out = []
     if not doc.project.path:
@@ -519,13 +529,26 @@ class ReportWindow(QWidget):
                 e.editingFinished.connect(self._save_nf)
                 form.addRow(label, e)
                 self.nf[key] = e
+        elif is_fields_report(doc, report):
+            # Fields report: the equations computed from the fields, over the frequencies with saved fields
+            from .fields import field_solutions
+            sols = field_solutions(doc)
+            if sols:
+                self.sol.blockSignals(True)
+                self.sol.clear()
+                self.sol.addItems(sols)
+                self.sol.setCurrentText(report.solution if report.solution in sols else sols[0])
+                self.sol.blockSignals(False)
+                report.solution = self.sol.currentText()
+            self.cat.addItem("Equations")
+            self.func.addItems(FUNCS + ["<none>"])
         else:
             self.cat.addItems(CATEGORIES)
             if report.kind in ("Rectangular", "Data Table"):
-                self.cat.addItem("Fields")          # values of the Fields Calculator over frequency
+                self.cat.addItem("Equations")       # equations of S parameters (Fields Calculator)
                 from .calc_bridge import field_names_in
                 if report.traces and field_names_in(doc.design, report.traces[0]):
-                    self.cat.setCurrentText("Fields")
+                    self.cat.setCurrentText("Equations")
             self.func.addItems(FUNCS + ["<none>"])
             self.cat.currentTextChanged.connect(self._fill_qty)
         form.addRow("Category:", self.cat)
@@ -659,9 +682,9 @@ class ReportWindow(QWidget):
         self.qty.clear()
         n = self._ports()
         cat = self.cat.currentText()
-        if cat == "Fields":
+        if cat == "Equations":
             from .calc_bridge import value_names
-            self.qty.addItems(value_names(self.doc))
+            self.qty.addItems(value_names(self.doc, fields=is_fields_report(self.doc, self.report)))
             self.func.setCurrentText("<none>")       # values in their own unit (W, V, J, ...)
         elif cat == "VSWR":
             self.qty.addItems([f"VSWR({i})" for i in range(1, n + 1)])
