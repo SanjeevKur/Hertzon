@@ -6,6 +6,9 @@ the GitHub release notes.
 ## Unreleased
 
 ### Added
+- **Showcase project** `examples/Showcase_AllFeatures.hzn` (built by `examples/make_showcase.py`): one
+  project with six designs that uses nearly every modelling, setup and post-processing feature, for testing
+  the GUI, scripts and the MCP server against a single rich file.
 - **Update dialog**: when a new Hertzon version is out, a small dialog after the start shows its version and
   the release notes of every version since the installed one, with **Install**, **Skip this version** and
   **Later**. Install downloads the installer from the release (checksum checked), asks to save open changes,
@@ -75,6 +78,8 @@ the GitHub release notes.
   examples/benchmark/scaling/results.
 
 ### Fixed
+- Validation Check no longer reports a **Length Based On Edges** mesh operation as "has no assignment" (an
+  error that blocked the analysis): its edges count as its assignment.
 - **Coarse cylinders next to a helix**: a helix wire (or another swept pipe) in the model made every
   cylinder, sphere and round hole in the 3D view coarse (8 segments per turn), also in objects not touching
   the helix. The coarser display sizing now applies only to the pipe surface itself.

@@ -227,7 +227,7 @@ def validate(project: Project, design: Design, tess: dict | None = None, errors:
 
     # mesh operations
     for m in design.mesh_ops:
-        refs = {f.obj for f in m.faces} | set(m.objects)
+        refs = {f.obj for f in m.faces + m.edges} | set(m.objects)     # Length Based On Edges: edges only
         if refs - names:
             add("Mesh Operations", "error", f"'{m.name}' references missing objects")
         if not refs:

@@ -24,6 +24,8 @@ def test_examples_use_the_current_format_and_refinement(path):
     p = Project.load(path)
     for d in p.designs:
         for s in d.setups:
+            if s.eigen:
+                continue            # an eigenmode setup has no refinement method or curved element option
             assert s.props["RefinementMethod"] == "hzAURA (EMerge)", (d.name, s.name)
             assert s.props["CurvedElements"] == "True", (d.name, s.name)
         if any(e.kind == "Incident Plane Wave" for e in d.excitations) and d.settings["AutoOpen"] != "Off":
@@ -95,6 +97,8 @@ def test_projects_of_format_1_still_open(name):
     choices = next(x for x in schema.SETUP if x.name == "RefinementMethod").choices
     for d in old.designs:
         for s in d.setups:
+            if s.eigen:
+                continue            # an eigenmode setup has no refinement method or curved element option
             assert s.props["RefinementMethod"] in choices
         for o in d.objects:
             if o.history[0].kind == "CreateRectangle":
@@ -126,3 +130,14 @@ def test_benchmark_projects_use_the_current_format(path):
     if path.stem.endswith("_local"):
         assert methods == {"Local (Delaunay)"}
         assert path.with_name(path.name.replace("_local", "_aura")).exists()
+
+
+def test_showcase_builds_and_passes_the_validation_check():
+    """The feature showcase: every design builds and has no validation errors (edge mesh operations included)."""
+    p = Project.load(EX / "Showcase_AllFeatures.hzn")
+    assert len(p.designs) == 6
+    for d in p.designs:
+        _build(p, d)
+    a = p.design("A_PatchArray")
+    edge_op = a.assignment("Mesh_FeedEdges")
+    assert edge_op.edges and not edge_op.faces and not edge_op.objects
