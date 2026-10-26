@@ -9,7 +9,8 @@ the GitHub release notes.
 - **Fields Calculator** (Calculator in the Results ribbon): an Equations tab next to the 3D Modeler for
   equations of the stored fields. An equation is typed with its name in front (`P_in = flux(Port1, re(S))`)
   and saved under that name. The tab only defines equations and shows their type (scalar or vector, field
-  or value) and unit; saved equations are used in Plot Fields (fields) and in reports (values). While the tab is open the ribbon has an Equation page with fields, symbols, fractions, roots,
+  or value) and unit; saved equations are used in Plot Fields (fields) and in reports (values). While the
+  tab is open the ribbon has an Equation page with fields, symbols, fractions, roots,
   integrals, large operators, brackets, functions and the library. The formula is typed into a typeset
   formula editor as in a desktop office program: a command after a backslash turns into its symbol with
   Space (`\times` gives ×, `\curl` gives ∇×, `\iint` a surface integral). Text shows the same formula as one
@@ -29,7 +30,7 @@ the GitHub release notes.
 - **Volume field plots**: Plot on "(selection, inside solids)" (or "Inside the selected solids" in the plot
   attributes) shows a scalar field through a solid such as a substrate as coloured dots instead of on its
   surface; vectors keep their arrows inside solids. Works for the built-in quantities and for named
-  expressions of the Fields Calculator (also its live preview).
+  equations of the Fields Calculator.
 
 ### Changed
 - **Benchmarks**: the Solver Benchmark re-run on the 32-core workstation with 0.2.3 and hzAURA, compared with
