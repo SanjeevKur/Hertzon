@@ -6,6 +6,9 @@ the GitHub release notes.
 ## Unreleased
 
 ### Added
+- **Showcase project** `examples/Showcase_AllFeatures.hzn` (built by `examples/make_showcase.py`): one
+  project with six designs that uses nearly every modelling, setup and post-processing feature, for testing
+  the GUI, scripts and the MCP server against a single rich file.
 - **Update dialog**: when a new Hertzon version is out, a small dialog after the start shows its version and
   the release notes of every version since the installed one, with **Install**, **Skip this version** and
   **Later**. Install downloads the installer from the release (checksum checked), asks to save open changes,
@@ -89,6 +92,8 @@ the GitHub release notes.
   examples/benchmark/scaling/results.
 
 ### Fixed
+- Validation Check no longer reports a **Length Based On Edges** mesh operation as "has no assignment" (an
+  error that blocked the analysis): its edges count as its assignment.
 - **Wave port on a metal face found no modes**: a wave port on a face of a PEC solid, for example the
   bottom of a coax bore in a metal body, failed with "ModalPort could find no modes" (and "k=-2 must be
   greater than 0"), because the metal also zeroed the field on the port face. Such a solid now backs the
