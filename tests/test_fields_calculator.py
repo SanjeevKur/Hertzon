@@ -511,3 +511,27 @@ def test_plot_on_selection_picks_in_the_3d_view(monkeypatch):
     assert d.field_plots[-1].quantity == "Mesh" and d.field_plots[-1].objects == ["Box"]
     win.doc.dirty = False
     win.close()
+
+
+def test_report_axes_show_units():
+    """The y axis of a report, the radial axis of a polar plot and the table headers name the unit of what
+    is plotted."""
+    from PySide6.QtWidgets import QApplication
+    app = QApplication.instance() or QApplication([])  # noqa: F841
+    from hertzon.gui.doc import Document
+    from hertzon.gui.reports import trace_unit, unit_label, with_unit
+    from hertzon.model.design import FieldExpression, Project
+    doc = Document(Project())
+    doc.design.add_object("CreateBox", "Box", Position="0,0,0", XSize="1", YSize="1", ZSize="1")
+    doc.rebuild()
+    doc.design.field_exprs += [FieldExpression("Pin", "flux(Box, re(S))"), FieldExpression("RL", "-dB(S(1,1))")]
+    cases = {"dB(S(1,1))": "dB", "mag(Z(1,1))": "Ω", "re(Y(2,1))": "S", "ang_deg(S(2,1))": "deg",
+             "VSWR(1)": "", "GroupDelay(S(2,1))": "s", "Pin": "W", "Pin @ Setup1 : Sweep": "W", "2*Pin": "W",
+             "dB(Pin)": "dB", "RL": "dB", "dB(GainTotal)": "dB", "mag(rETotal)": "V", "dBsm(MonostaticRCSTotal)": "dBsm",
+             "MonostaticRCSTotal": "m²", "mag(NearETotal)": "V/m", "RadiatedPower": "W", "Pin + dB(S(1,1))": None,
+             "myvar": None}
+    for tr, u in cases.items():
+        assert trace_unit(doc, tr) == u, tr
+    assert unit_label(["dB", "dB"]) == "[dB]" and unit_label(["dB", "Ω", None]) == "[dB] / [Ω]"
+    assert unit_label(["", None]) == ""
+    assert with_unit(doc, "Pin") == "Pin [W]" and with_unit(doc, "VSWR(1)") == "VSWR(1)"

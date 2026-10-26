@@ -39,6 +39,10 @@ the GitHub release notes.
   the field is plotted on a cut plane.
 
 ### Changed
+- **Units on the plot axes**: the y axis of reports shows the unit of the traces (`[dB]`, `[Ω]`, `[W]`, the
+  unit of an equation), with the trace name when there is only one; the radial axis of a polar radiation
+  pattern shows its values with the unit (`-10 dB`). Data tables, the CSV export and the colour bar of the
+  3D polar plot name the unit too. A colour bar of a dimensionless field no longer shows empty brackets.
 - **Field plots on a selection: pick in the 3D view**: Plot on "(selection)" or "(selection, inside solids)"
   with nothing selected no longer makes an empty plot. After OK a box over the 3D view says what to pick
   (faces or objects, or the solids), shows what is selected and plots it with Plot. The same for Modify Plot
