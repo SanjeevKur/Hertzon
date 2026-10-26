@@ -1250,6 +1250,28 @@ def _bbox(dt) -> tuple[float, float, float, float, float, float]:
     return (*lo, *hi)  # type: ignore[return-value]
 
 
+def _place(dt, O, R) -> None:
+    """Moves dt from a coordinate system (origin O, axes R) to global. A rotation and a translation keep the
+    exact surfaces (planes, cylinders ...); a general affine transform would turn them into B-splines, on
+    which fillets and chamfers fail."""
+    o = _occ()
+    R = np.asarray(R, float)
+    if abs(np.linalg.det(R) - 1) > 1e-9:
+        from ..model import coordsys
+        o.affineTransform(dt, list(coordsys.matrix(O, R)[:3, :].ravel()))
+        return
+    ang = math.acos(max(-1.0, min(1.0, (np.trace(R) - 1) / 2)))
+    if ang > 1e-12:
+        if math.pi - ang > 1e-6:
+            axis = np.array([R[2, 1] - R[1, 2], R[0, 2] - R[2, 0], R[1, 0] - R[0, 1]])
+        else:                                   # half turn: the axis from the symmetric part
+            B = (R + np.eye(3)) / 2
+            axis = B[:, int(np.argmax(np.diag(B)))]
+        o.rotate(dt, 0, 0, 0, *(axis / np.linalg.norm(axis)), ang)
+    if np.linalg.norm(O) > 0:
+        o.translate(dt, *map(float, O))
+
+
 def _build_object(obj: GeoObject, ctx: BuildContext) -> list[tuple[int, int]]:
     if obj.name in ctx.stack:
         raise GeometryError(f"Circular boolean reference through '{obj.name}'")
@@ -1260,8 +1282,7 @@ def _build_object(obj: GeoObject, ctx: BuildContext) -> list[tuple[int, int]]:
             # Orientation: the creation command is given in this coordinate system
             from ..model import coordsys
             O, R = coordsys.frame(ctx.design, obj.orientation, ctx.ev)
-            M = coordsys.matrix(O, R)
-            _occ().affineTransform(dt, list(M[:3, :].ravel()))
+            _place(dt, O, R)
         for cmd in obj.history[1:]:
             if cmd.suppressed:
                 continue

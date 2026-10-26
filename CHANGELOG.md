@@ -92,6 +92,9 @@ the GitHub release notes.
   examples/benchmark/scaling/results.
 
 ### Fixed
+- **Fillet and chamfer on an object in a relative coordinate system** failed with "Could not compute
+  fillet": placing the object in its coordinate system turned its planes and cylinders into general
+  surfaces. It is now rotated and moved, so the surfaces stay exact.
 - Validation Check no longer reports a **Length Based On Edges** mesh operation as "has no assignment" (an
   error that blocked the analysis): its edges count as its assignment.
 - **Wave port on a metal face found no modes**: a wave port on a face of a PEC solid, for example the
