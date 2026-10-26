@@ -31,6 +31,10 @@ the GitHub release notes.
   attributes) shows a scalar field through a solid such as a substrate as coloured dots instead of on its
   surface; vectors keep their arrows inside solids. Works for the built-in quantities and for named
   equations of the Fields Calculator.
+- **Plot Fields with equations, also without a selection**: the Plot Fields menu (right click in the 3D view,
+  More in the Results ribbon) has an Equations entry with the field equations of the Fields Calculator and
+  New Equation. A right click on empty space in the 3D view offers Plot Fields too; without a selected object
+  the field is plotted on a cut plane.
 
 ### Changed
 - **Fillet of a sheet at its vertices**: a sheet (for example a patch) is now filleted by selecting its corner

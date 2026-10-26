@@ -335,3 +335,19 @@ def test_equations_tab_picks_the_geometry_in_the_3d_view():
     assert [(e.name, e.expr) for e in win.des.field_exprs] == [("We", "int_vol(Box, 0.25*eps0*eps_r*|E|^2)")]
     win.doc.dirty = False
     win.close()
+
+
+def test_plot_fields_menu_lists_field_equations():
+    """Plot Fields (right click in the 3D view, More in the ribbon) has the field equations of the design."""
+    from PySide6.QtWidgets import QApplication, QMenu
+    app = QApplication.instance() or QApplication([])  # noqa: F841
+    from hertzon.gui.main_window import MainWindow
+    from hertzon.model.design import FieldExpression, Project
+    win = MainWindow(Project())
+    win.des.field_exprs += [FieldExpression("p_loss", "0.5*|E|^2"), FieldExpression("P_in", "1")]
+    top = QMenu()
+    pf = win._plot_fields_menu(top)
+    eq = next(a.menu() for a in pf.actions() if a.text() == "Equations")
+    assert [a.text() for a in eq.actions() if a.text()] == ["p_loss", "New Equation..."]
+    win.doc.dirty = False
+    win.close()
